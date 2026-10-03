@@ -422,8 +422,7 @@ def build_newspaper_html(
                 slot_imgs.append("https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=800&q=80") # default fallback
         
         # Splitting content into paragraphs for the multi-column text flow
-        paragraphs = [p.strip() for p in content.split('
-') if p.strip()]
+        paragraphs = [p.strip() for p in content.split('\\n') if p.strip()]
         if not paragraphs:
             paragraphs = ["Coverage of this developing story..."]
             
