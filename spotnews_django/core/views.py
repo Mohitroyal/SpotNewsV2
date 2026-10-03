@@ -110,7 +110,7 @@ def admin_auth_users(request):
                     u.id, u.email, u.phone, p.role, u.created_at, u.raw_user_meta_data->>'full_name' as full_name, p.plan,
                     (SELECT COUNT(*) FROM clippings c WHERE c.user_id = u.id) as total_generations,
                     (SELECT COUNT(*) FROM clippings c WHERE c.user_id = u.id AND DATE(c.created_at AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Kolkata') = DATE(CURRENT_TIMESTAMP AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Kolkata')) as generations_today,
-                    u.last_sign_in_at, p.is_banned, p.banned_until
+                    u.last_sign_in_at
                 FROM auth.users u
                 LEFT JOIN profiles p ON p.id = u.id
                 ORDER BY u.created_at DESC NULLS LAST
@@ -130,8 +130,8 @@ def admin_auth_users(request):
                     "total_generations": r[7] or 0,
                     "generations_today": r[8] or 0,
                     "last_sign_in_at": str(r[9]) if r[9] else "",
-                    "is_banned": bool(r[10]),
-                    "banned_until": str(r[11]) if r[11] else ""
+                    "is_banned": False,
+                    "banned_until": ""
                 })
     except Exception as e:
         print(f"Error fetching auth.users: {e}")
