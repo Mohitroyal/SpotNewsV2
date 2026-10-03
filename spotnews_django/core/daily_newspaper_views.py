@@ -289,20 +289,20 @@ def generate_daily_newspaper(request):
         total_articles = len(articles)
         total_pages = max(1, (total_articles + 9) // 10)
 
-        # Create output directory inside Django static/editions
-        static_editions_dir = os.path.join(settings.BASE_DIR, 'static', 'editions')
-        os.makedirs(static_editions_dir, exist_ok=True)
+        # Create output directory inside Django media/editions
+        media_editions_dir = os.path.join(settings.BASE_DIR, 'media', 'editions')
+        os.makedirs(media_editions_dir, exist_ok=True)
 
         clean_pub_code = re.sub(r'[^a-zA-Z0-9_-]', '', publication_code)
         filename = f"{clean_pub_code}-{edition_date}-v{current_version}.pdf"
-        output_pdf_path = os.path.join(static_editions_dir, filename)
+        output_pdf_path = os.path.join(media_editions_dir, filename)
 
         # Render PDF via Playwright
         success = render_html_to_pdf(html_content, output_pdf_path)
         if not success:
             return JsonResponse({"detail": "Failed to generate PDF. The server environment may lack Chromium dependencies (Playwright failed). Check server logs."}, status=500)
             
-        pdf_url = request.build_absolute_uri(f"/static/editions/{filename}")
+        pdf_url = request.build_absolute_uri(f"/api/editions/{filename}")
 
         # Save snapshot to database table `daily_editions`
         new_id = f"edition-{int(time.time())}"
@@ -399,3 +399,14 @@ def list_daily_editions(request):
     except Exception as e:
         print(f"Error listing daily editions: {e}")
         return JsonResponse([], safe=False)
+
+def serve_edition_pdf(request, filename):
+    """
+    Serve the generated PDF edition directly from the media folder.
+    This solves the 404 issue caused by serving dynamic files from static folders in production.
+    """
+    from django.http import FileResponse, Http404
+    file_path = os.path.join(settings.BASE_DIR, 'media', 'editions', filename)
+    if os.path.exists(file_path):
+        return FileResponse(open(file_path, 'rb'), content_type='application/pdf')
+    raise Http404("Edition PDF not found")

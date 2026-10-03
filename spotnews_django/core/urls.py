@@ -6,7 +6,8 @@ from .daily_newspaper_views import (
     get_eligible_clippings,
     preview_daily_newspaper,
     generate_daily_newspaper,
-    list_daily_editions
+    list_daily_editions,
+    serve_edition_pdf
 )
 
 urlpatterns = [
@@ -29,4 +30,7 @@ urlpatterns = [
     path('v1/admin/daily-newspaper/generate/', generate_daily_newspaper),
     path('v1/admin/daily-newspaper/editions', list_daily_editions, name='daily_newspaper_editions'),
     path('v1/admin/daily-newspaper/editions/', list_daily_editions),
+
+    # Dedicated media server endpoint for the generated PDF
+    path('editions/<str:filename>', serve_edition_pdf, name='serve_edition_pdf'),
 ]
