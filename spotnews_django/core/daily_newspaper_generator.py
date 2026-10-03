@@ -51,6 +51,42 @@ def sanitize_text(text: str) -> str:
     text = text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace('"', "&quot;")
     return text.strip()
 
+def get_grid_span(index: int, total: int) -> str:
+    """
+    Determine the grid span based on the index to create a varied, 
+    newspaper-like masonry structure in a 4-column grid.
+    """
+    if total <= 2:
+        return "grid-column: span 4;"
+    
+    # 4-column layout patterns
+    if index == 0:
+        return "grid-column: span 4;" # Lead story spans all 4
+    elif index == 1:
+        return "grid-column: span 2;" # Second story spans 2
+    elif index == 2:
+        return "grid-column: span 2;" # Third story spans 2
+    elif index % 6 == 3:
+        return "grid-column: span 3;" # A large feature story
+    elif index % 6 == 4:
+        return "grid-column: span 1;" # A sidebar
+    else:
+        return "grid-column: span 1;" # Standard stories
+
+def get_headline_style(span_type: str, index: int) -> str:
+    """Return styling for headlines based on their size in the grid."""
+    colors = ["#D60000", "#003399", "#8B0055", "#006600", "#111111"]
+    color = colors[index % len(colors)]
+    
+    if "span 4" in span_type:
+        return f"font-size: 32px; font-weight: 900; color: {color}; line-height: 1.15; padding-bottom: 6px; border-bottom: 2px solid {color}; margin-bottom: 8px;"
+    elif "span 3" in span_type:
+        return f"font-size: 26px; font-weight: 800; color: {color}; line-height: 1.2; margin-bottom: 6px;"
+    elif "span 2" in span_type:
+        return f"font-size: 20px; font-weight: 800; color: {color}; line-height: 1.2; margin-bottom: 6px;"
+    else:
+        return f"font-size: 16px; font-weight: 700; color: {color}; line-height: 1.25; margin-bottom: 4px;"
+
 def build_newspaper_html(
     publication_name: str,
     logo_url: str,
@@ -62,24 +98,21 @@ def build_newspaper_html(
 ) -> str:
     """
     Generate clean, print-ready HTML string for A3 Portrait Daily Newspaper.
-    Follows dense Telugu broadsheet 4-column layout guidelines.
+    Follows dense Telugu broadsheet 4-column layout guidelines, closely matching
+    traditional print newspapers.
     """
     telugu_date_formatted = format_telugu_date(edition_date)
     
-    # Calculate page split: 10 articles per page
+    # Calculate page split: ~12 articles per page
     total_articles = len(articles)
-    articles_per_page = 10
+    articles_per_page = 12
     total_pages = max(1, (total_articles + articles_per_page - 1) // articles_per_page)
     
     # Reorder articles if lead_story_id is provided
     ordered_articles = list(articles)
     if lead_story_id:
         lead_idx = next((i for i, a in enumerate(ordered_articles) if str(a.get("id")) == str(lead_story_id)), None)
-        if lead_idx is not None and lead_idx != 3 and len(ordered_articles) >= 4:
-            # Swap lead story into index 3 (slot 4 of Page 1)
-            lead_item = ordered_articles.pop(lead_idx)
-            ordered_articles.insert(3, lead_item)
-        elif lead_idx is not None and len(ordered_articles) < 4:
+        if lead_idx is not None:
             lead_item = ordered_articles.pop(lead_idx)
             ordered_articles.insert(0, lead_item)
 
@@ -101,39 +134,37 @@ def build_newspaper_html(
         # Header construction
         if is_first_page:
             ad_html = ""
-            branding_width = "100%"
             if advertisement_config and advertisement_config.get("image_url"):
-                branding_width = "72%"
                 ad_html = f"""
-                <div class="masthead-ad" style="width: 28%; border-left: 2px solid #D60000; padding-left: 8px; display: flex; flex-direction: column; justify-content: center; align-items: center; background: #fffbe6;">
-                    <span style="font-size: 9px; font-weight: bold; color: #888; text-transform: uppercase;">ప్రాకటనం / ADVERTISEMENT</span>
-                    <img src="{advertisement_config['image_url']}" style="max-height: 75px; max-width: 100%; object-fit: contain; margin-top: 4px;" />
-                    <span style="font-size: 10px; font-weight: bold; color: #111; margin-top: 2px;">{sanitize_text(advertisement_config.get('title', ''))}</span>
+                <div style="width: 28%; padding-left: 10px; text-align: center;">
+                    <img src="{advertisement_config['image_url']}" style="max-height: 85px; max-width: 100%; border: 1px solid #ccc; padding: 2px;" />
                 </div>
                 """
             
             header_block = f"""
-            <div class="masthead-container" style="display: flex; width: 100%; height: 95px; background: #ffffff; border-top: 4px solid #D60000; border-bottom: 3px solid #FFCC00; padding: 4px 10px; box-sizing: border-box; justify-content: space-between; align-items: center;">
-                <div class="masthead-logo-wrap" style="width: {branding_width}; display: flex; align-items: center; justify-content: center; height: 100%;">
-                    <img src="{logo_url}" alt="{sanitize_text(publication_name)}" style="max-height: 85px; max-width: 95%; object-fit: contain;" />
+            <!-- Masthead -->
+            <div style="display: flex; justify-content: space-between; align-items: center; background: #ffffff; padding: 10px 0; border-bottom: 4px solid #D60000; margin-bottom: 4px;">
+                <div style="flex: 1; text-align: center;">
+                    <img src="{logo_url}" alt="{sanitize_text(publication_name)}" style="max-height: 100px; max-width: 100%; object-fit: contain;" />
                 </div>
                 {ad_html}
             </div>
             
-            <div class="info-strip" style="background: #006633; color: #ffffff; font-size: 11.5px; font-weight: bold; padding: 4px 12px; display: flex; justify-content: space-between; align-items: center; margin-top: 3px; border-bottom: 2px solid #000000;">
-                <div>సంపుటి : {edition_no} &nbsp;|&nbsp; సంచిక : {issue_no} &nbsp;|&nbsp; ఎడిటర్ : {sanitize_text(editor_name)}</div>
-                <div style="color: #FFEB3B;">పేజీలు : {total_pages} &nbsp;|&nbsp; వెల : {price}</div>
-                <div>{telugu_date_formatted}</div>
+            <!-- Meta Strip -->
+            <div style="display: flex; justify-content: space-between; align-items: center; background: #006600; color: #ffffff; font-size: 13px; font-weight: bold; padding: 5px 15px; margin-bottom: 12px; border-radius: 2px;">
+                <div>సంపుటి: {edition_no} &nbsp;|&nbsp; సంచిక: {issue_no} &nbsp;|&nbsp; ఎడిటర్: {sanitize_text(editor_name)}</div>
+                <div style="color: #FFEB3B;">పేజీలు: {total_pages} &nbsp;|&nbsp; వెల: {price}</div>
+                <div>{telugu_date_formatted} &nbsp;|&nbsp; {sanitize_text(location)}</div>
             </div>
             """
         else:
             header_block = f"""
-            <div class="continuation-header" style="display: flex; width: 100%; height: 45px; background: #ffffff; border-bottom: 2px solid #006633; padding: 4px 10px; box-sizing: border-box; justify-content: space-between; align-items: center; margin-bottom: 4px;">
-                <div style="display: flex; align-items: center; gap: 12px;">
-                    <img src="{logo_url}" alt="{sanitize_text(publication_name)}" style="max-height: 38px; object-fit: contain;" />
-                    <span style="font-size: 13px; font-weight: bold; color: #006633;">{sanitize_text(publication_name)} — దినపత్రిక</span>
+            <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 3px solid #006600; padding-bottom: 5px; margin-bottom: 12px;">
+                <div style="display: flex; align-items: center; gap: 10px;">
+                    <img src="{logo_url}" alt="{sanitize_text(publication_name)}" style="height: 40px; object-fit: contain;" />
+                    <span style="font-size: 16px; font-weight: 800; color: #006600;">{sanitize_text(publication_name)} — దినపత్రిక</span>
                 </div>
-                <div style="font-size: 11px; font-weight: bold; color: #333;">{telugu_date_formatted} &nbsp;|&nbsp; పేజీ {page_num} of {total_pages}</div>
+                <div style="font-size: 13px; font-weight: bold; color: #333;">{telugu_date_formatted} &nbsp;|&nbsp; పేజీ {page_num} of {total_pages}</div>
             </div>
             """
 
@@ -141,14 +172,8 @@ def build_newspaper_html(
         grid_items_html = []
         count_in_page = len(page_articles)
 
-        # Headline color hierarchy
-        headline_colors = ["#D60000", "#003399", "#8B0055", "#006600", "#111111", "#003399", "#D60000"]
-
         for idx, art in enumerate(page_articles):
-            slot_num = idx + 1
             headline = sanitize_text(art.get("headline") or art.get("title") or "ముఖ్యాంశం")
-            subheadline = sanitize_text(art.get("subheadline") or "")
-            kicker = sanitize_text(art.get("kicker") or "")
             content = sanitize_text(art.get("content") or art.get("summary") or "")
             reporter = sanitize_text(art.get("reporter_name") or art.get("byline") or "రిపోర్టర్")
             loc = sanitize_text(art.get("location") or art.get("district") or "")
@@ -158,98 +183,35 @@ def build_newspaper_html(
             if not imgs and art.get("image_url"):
                 imgs = [art.get("image_url")]
             
-            # Custom slot layout rules based on position in 10-article page
-            grid_style = "grid-column: span 1; grid-row: span 1;"
-            is_lead = False
-            is_feature = False
-            title_color = headline_colors[idx % len(headline_colors)]
-
-            if count_in_page == 10:
-                if slot_num in (1, 2):
-                    grid_style = "grid-column: span 2;"
-                elif slot_num == 3:
-                    grid_style = "grid-column: span 1;"
-                elif slot_num == 4:
-                    grid_style = "grid-column: span 2; background: #fffdf5; border: 2px solid #D60000;"
-                    is_lead = True
-                    title_color = "#D60000"
-                elif slot_num == 5:
-                    grid_style = "grid-column: span 1;"
-                elif slot_num in (6, 7):
-                    grid_style = "grid-column: span 1;"
-                elif slot_num == 8:
-                    grid_style = "grid-column: span 2;"
-                elif slot_num == 9:
-                    grid_style = "grid-column: span 3; background: #f5f9ff;"
-                    is_feature = True
-                    title_color = "#003399"
-                elif slot_num == 10:
-                    grid_style = "grid-column: span 1;"
-            else:
-                # Dynamic rebalancing for partially filled pages
-                if count_in_page == 1:
-                    grid_style = "grid-column: span 4;"
-                    is_lead = True
-                elif count_in_page == 2:
-                    grid_style = "grid-column: span 2;"
-                elif count_in_page == 3:
-                    grid_style = "grid-column: span 4;" if idx == 0 else "grid-column: span 2;"
-                elif count_in_page == 4:
-                    grid_style = "grid-column: span 2;"
-                elif count_in_page == 5:
-                    grid_style = "grid-column: span 2;" if idx < 2 else ("grid-column: span 2;" if idx == 2 else "grid-column: span 1;")
-                elif count_in_page in (6, 7, 8, 9):
-                    if idx == 0:
-                        grid_style = "grid-column: span 2;"
-                    elif idx == 1:
-                        grid_style = "grid-column: span 2;"
-                    elif idx == 2 and count_in_page >= 7:
-                        grid_style = "grid-column: span 2;"
-                    else:
-                        grid_style = "grid-column: span 1;"
-
+            # Calculate span and styling
+            grid_style = get_grid_span(idx, count_in_page)
+            head_style = get_headline_style(grid_style, idx)
+            
             # Image markup
             img_html = ""
             if imgs and len(imgs) > 0:
                 first_img = imgs[0]
-                img_height = "180px" if is_lead else ("150px" if is_feature else "120px")
                 img_html = f"""
-                <div style="margin: 6px 0; text-align: center;">
-                    <img src="{first_img}" style="width: 100%; max-height: {img_height}; object-fit: cover; border: 1px solid #ddd; display: block;" />
+                <div style="margin-bottom: 8px; text-align: center;">
+                    <img src="{first_img}" style="width: 100%; max-height: 250px; object-fit: cover; border: 1px solid #ddd; padding: 2px;" />
                 </div>
                 """
 
-            # Kicker markup
-            kicker_html = f'<div style="font-size: 10px; font-weight: 800; color: #D60000; text-transform: uppercase; margin-bottom: 2px;">{kicker}</div>' if kicker else ""
-            subhead_html = f'<div style="font-size: 12px; font-weight: 700; color: #333; margin-top: 3px; line-height: 1.25;">{subheadline}</div>' if subheadline else ""
-
-            # Highlights list
-            highlights_html = ""
-            hl_list = art.get("highlight_list") or []
-            if hl_list:
-                items = "".join([f'<li style="margin-bottom: 2px;"><span style="color: #D60000; margin-right: 4px;">▶</span>{sanitize_text(h)}</li>' for h in hl_list])
-                highlights_html = f'<ul style="list-style: none; padding-left: 0; margin: 6px 0; font-size: 10.5px; font-weight: bold; background: #fff5f5; padding: 4px 6px; border-left: 3px solid #D60000;">{items}</ul>'
-
-            # Headline size
-            h_size = "22px" if is_lead else ("18px" if is_feature else ("15px" if "span 2" in grid_style or "span 3" in grid_style else "13.5px"))
-            h_weight = "900" if is_lead else "800"
-
+            # Text Columns inside Article
+            col_count = "3" if "span 4" in grid_style else ("2" if "span 3" in grid_style else "1")
+            
             byline_str = f"{loc} &nbsp;|&nbsp; {reporter}" if loc and reporter else (loc or reporter)
+            byline_html = f'<div style="font-size: 11px; font-weight: bold; color: #666; margin-bottom: 6px; padding-bottom: 4px; border-bottom: 1px solid #eee;">{byline_str}</div>'
 
             item_html = f"""
-            <div class="article-cell" style="{grid_style} border: 1px solid #b0b0b0; padding: 6px 8px; box-sizing: border-box; display: flex; flex-direction: column; overflow: hidden; background: #ffffff;">
-                {kicker_html}
-                <h2 style="font-size: {h_size}; font-weight: {h_weight}; color: {title_color}; margin: 0; line-height: 1.2; letter-spacing: -0.2px;">
+            <div class="article-cell" style="{grid_style} border: 1px solid #ccc; padding: 10px; background: #ffffff; break-inside: avoid; display: flex; flex-direction: column;">
+                <h2 style="{head_style}">
                     {headline}
                 </h2>
-                {subhead_html}
-                {img_html}
-                <div style="font-size: 9.5px; font-weight: bold; color: #666; margin: 3px 0 4px 0; border-bottom: 1px solid #eee; padding-bottom: 2px;">
-                    {byline_str}
-                </div>
-                {highlights_html}
-                <div style="font-size: 10.5px; line-height: 1.36; color: #111; text-align: justify; flex: 1;">
-                    {content}
+                {byline_html}
+                <div style="column-count: {col_count}; column-gap: 15px; text-align: justify; font-size: 12.5px; line-height: 1.5; color: #222;">
+                    {img_html}
+                    <p style="margin: 0; text-indent: 15px;">{content}</p>
                 </div>
             </div>
             """
@@ -265,7 +227,6 @@ def build_newspaper_html(
             </div>
             <div class="footer-strip">
                 <span>{sanitize_text(publication_name)} — TELUGU DAILY</span>
-                <span>{telugu_date_formatted}</span>
                 <span>PAGE {page_num} OF {total_pages}</span>
             </div>
         </div>
@@ -281,11 +242,11 @@ def build_newspaper_html(
     <title>{sanitize_text(publication_name)} - {edition_date}</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+Telugu:wght@400;600;700;800;900&family=Mandali&family=Cinzel:wght@700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+Telugu:wght@400;600;700;800;900&display=swap" rel="stylesheet">
     <style>
         @page {{
             size: 297mm 420mm; /* A3 Portrait */
-            margin: 8mm 10mm 10mm 10mm;
+            margin: 10mm;
         }}
         *, *::before, *::after {{
             box-sizing: border-box;
@@ -301,37 +262,42 @@ def build_newspaper_html(
         }}
         .page-container {{
             width: 277mm;
-            height: 402mm;
+            min-height: 400mm;
             box-sizing: border-box;
             page-break-after: always;
             page-break-inside: avoid;
             display: flex;
             flex-direction: column;
-            overflow: hidden;
             background: #ffffff;
             position: relative;
         }}
         .articles-grid {{
             display: grid;
             grid-template-columns: repeat(4, 1fr);
-            grid-template-rows: auto;
-            gap: 6px;
+            grid-auto-flow: dense;
+            gap: 12px;
             flex: 1;
-            margin-top: 4px;
-            box-sizing: border-box;
+        }}
+        .article-cell {{
+            box-shadow: 0 1px 3px rgba(0,0,0,0.05);
         }}
         .footer-strip {{
-            height: 20px;
-            border-top: 1.5px solid #000000;
+            height: 25px;
+            border-top: 2px solid #000000;
             display: flex;
             justify-content: space-between;
             align-items: center;
-            font-size: 9.5px;
+            font-size: 11px;
             font-weight: bold;
             color: #444;
-            padding: 0 4px;
-            margin-top: 4px;
+            padding: 0 10px;
+            margin-top: 15px;
             font-family: sans-serif;
+        }}
+        /* Ensure images inside columns don't break */
+        .article-cell img {{
+            break-inside: avoid;
+            page-break-inside: avoid;
         }}
     </style>
 </head>
