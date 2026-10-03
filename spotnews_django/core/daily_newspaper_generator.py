@@ -51,42 +51,6 @@ def sanitize_text(text: str) -> str:
     text = text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace('"', "&quot;")
     return text.strip()
 
-def get_grid_span(index: int, total: int) -> str:
-    """
-    Determine the grid span based on the index to create a varied, 
-    newspaper-like masonry structure in a 4-column grid.
-    """
-    if total <= 2:
-        return "grid-column: span 4;"
-    
-    # 4-column layout patterns
-    if index == 0:
-        return "grid-column: span 4;" # Lead story spans all 4
-    elif index == 1:
-        return "grid-column: span 2;" # Second story spans 2
-    elif index == 2:
-        return "grid-column: span 2;" # Third story spans 2
-    elif index % 6 == 3:
-        return "grid-column: span 3;" # A large feature story
-    elif index % 6 == 4:
-        return "grid-column: span 1;" # A sidebar
-    else:
-        return "grid-column: span 1;" # Standard stories
-
-def get_headline_style(span_type: str, index: int) -> str:
-    """Return styling for headlines based on their size in the grid."""
-    colors = ["#D60000", "#003399", "#8B0055", "#006600", "#111111"]
-    color = colors[index % len(colors)]
-    
-    if "span 4" in span_type:
-        return f"font-size: 32px; font-weight: 900; color: {color}; line-height: 1.15; padding-bottom: 6px; border-bottom: 2px solid {color}; margin-bottom: 8px;"
-    elif "span 3" in span_type:
-        return f"font-size: 26px; font-weight: 800; color: {color}; line-height: 1.2; margin-bottom: 6px;"
-    elif "span 2" in span_type:
-        return f"font-size: 20px; font-weight: 800; color: {color}; line-height: 1.2; margin-bottom: 6px;"
-    else:
-        return f"font-size: 16px; font-weight: 700; color: {color}; line-height: 1.25; margin-bottom: 4px;"
-
 def build_newspaper_html(
     publication_name: str,
     logo_url: str,
@@ -98,8 +62,7 @@ def build_newspaper_html(
 ) -> str:
     """
     Generate clean, print-ready HTML string for A3 Portrait Daily Newspaper.
-    Follows dense Telugu broadsheet 4-column layout guidelines, closely matching
-    traditional print newspapers.
+    Uses CSS Multi-column layout for perfect text/image flowing with no whitespaces.
     """
     telugu_date_formatted = format_telugu_date(edition_date)
     
@@ -123,6 +86,7 @@ def build_newspaper_html(
     location = edition_info.get("location", "హైదరాబాద్ / ఆంధ్రప్రదేశ్ & తెలంగాణ") if edition_info else "హైదరాబాద్ / ఆంధ్రప్రదేశ్ & తెలంగాణ"
 
     pages_html = []
+    headline_colors = ["#D60000", "#003399", "#8B0055", "#006600", "#111111"]
 
     for page_num in range(1, total_pages + 1):
         start_idx = (page_num - 1) * articles_per_page
@@ -168,62 +132,66 @@ def build_newspaper_html(
             </div>
             """
 
-        # Build grid slots for articles
-        grid_items_html = []
-        count_in_page = len(page_articles)
-
+        items_html = []
         for idx, art in enumerate(page_articles):
             headline = sanitize_text(art.get("headline") or art.get("title") or "ముఖ్యాంశం")
             content = sanitize_text(art.get("content") or art.get("summary") or "")
             reporter = sanitize_text(art.get("reporter_name") or art.get("byline") or "రిపోర్టర్")
             loc = sanitize_text(art.get("location") or art.get("district") or "")
             
-            # Photos
             imgs = art.get("image_urls") or []
             if not imgs and art.get("image_url"):
                 imgs = [art.get("image_url")]
             
-            # Calculate span and styling
-            grid_style = get_grid_span(idx, count_in_page)
-            head_style = get_headline_style(grid_style, idx)
+            # The very first article of the very first page can be a full-width lead story
+            is_lead = (is_first_page and idx == 0)
             
-            # Image markup
+            color = headline_colors[idx % len(headline_colors)]
+            
+            if is_lead:
+                span_style = "column-span: all; margin-bottom: 15px; border-bottom: 2px solid #D60000; padding-bottom: 10px;"
+                head_style = f"font-size: 36px; font-weight: 900; color: {color}; line-height: 1.15; margin-bottom: 8px; text-align: center;"
+                # Inner columns for lead story text
+                content_style = "column-count: 3; column-gap: 20px; font-size: 13.5px; line-height: 1.55; text-align: justify; color: #111;"
+                img_style = "width: 100%; max-height: 350px; object-fit: cover; break-inside: avoid; -webkit-column-break-inside: avoid; page-break-inside: avoid;"
+            else:
+                span_style = "break-inside: avoid; -webkit-column-break-inside: avoid; page-break-inside: avoid; margin-bottom: 15px; border-top: 2px solid #ccc; padding-top: 10px;"
+                head_style = f"font-size: 18px; font-weight: 800; color: {color}; line-height: 1.25; margin-bottom: 6px;"
+                content_style = "font-size: 12px; line-height: 1.45; text-align: justify; color: #111;"
+                img_style = "width: 100%; max-height: 200px; object-fit: cover; margin-bottom: 6px; break-inside: avoid; -webkit-column-break-inside: avoid; page-break-inside: avoid;"
+
             img_html = ""
             if imgs and len(imgs) > 0:
                 first_img = imgs[0]
                 img_html = f"""
-                <div style="margin-bottom: 8px; text-align: center;">
-                    <img src="{first_img}" style="width: 100%; max-height: 250px; object-fit: cover; border: 1px solid #ddd; padding: 2px;" />
+                <div style="text-align: center; margin-bottom: 6px; break-inside: avoid; page-break-inside: avoid; -webkit-column-break-inside: avoid;">
+                    <img src="{first_img}" style="{img_style}" />
                 </div>
                 """
 
-            # Text Columns inside Article
-            col_count = "3" if "span 4" in grid_style else ("2" if "span 3" in grid_style else "1")
-            
             byline_str = f"{loc} &nbsp;|&nbsp; {reporter}" if loc and reporter else (loc or reporter)
             byline_html = f'<div style="font-size: 11px; font-weight: bold; color: #666; margin-bottom: 6px; padding-bottom: 4px; border-bottom: 1px solid #eee;">{byline_str}</div>'
 
             item_html = f"""
-            <div class="article-cell" style="{grid_style} border: 1px solid #ccc; padding: 10px; background: #ffffff; break-inside: avoid; display: flex; flex-direction: column;">
+            <div class="article-cell" style="{span_style}">
                 <h2 style="{head_style}">
                     {headline}
                 </h2>
                 {byline_html}
-                <div style="column-count: {col_count}; column-gap: 15px; text-align: justify; font-size: 12.5px; line-height: 1.5; color: #222;">
+                <div style="{content_style}">
                     {img_html}
                     <p style="margin: 0; text-indent: 15px;">{content}</p>
                 </div>
             </div>
             """
-            grid_items_html.append(item_html)
+            items_html.append(item_html)
 
-        grid_content = "".join(grid_items_html)
-
+        # The body of the page uses CSS multi-columns (4 columns) to auto-flow and fill whitespace perfectly.
         page_markup = f"""
         <div class="page-container">
             {header_block}
-            <div class="articles-grid">
-                {grid_content}
+            <div class="articles-flow" style="column-count: 4; column-gap: 15px; flex: 1;">
+                {"".join(items_html)}
             </div>
             <div class="footer-strip">
                 <span>{sanitize_text(publication_name)} — TELUGU DAILY</span>
@@ -271,16 +239,6 @@ def build_newspaper_html(
             background: #ffffff;
             position: relative;
         }}
-        .articles-grid {{
-            display: grid;
-            grid-template-columns: repeat(4, 1fr);
-            grid-auto-flow: dense;
-            gap: 12px;
-            flex: 1;
-        }}
-        .article-cell {{
-            box-shadow: 0 1px 3px rgba(0,0,0,0.05);
-        }}
         .footer-strip {{
             height: 25px;
             border-top: 2px solid #000000;
@@ -293,11 +251,6 @@ def build_newspaper_html(
             padding: 0 10px;
             margin-top: 15px;
             font-family: sans-serif;
-        }}
-        /* Ensure images inside columns don't break */
-        .article-cell img {{
-            break-inside: avoid;
-            page-break-inside: avoid;
         }}
     </style>
 </head>
