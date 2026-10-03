@@ -94,7 +94,7 @@ def get_eligible_clippings(request):
             query = """
                 SELECT 
                     c.id, c.headline, c.summary, c.content, c.kicker, c.subheadline,
-                    c.image_url, c.image_urls, c.highlight_list, c.created_at, c.published_at,
+                    c.image_url, c.image_urls, c.highlight_list, c.created_at,
                     c.user_id, p.full_name as reporter_name, c.state, c.district, c.location
                 FROM clippings c
                 LEFT JOIN profiles p ON c.user_id = p.id
@@ -102,12 +102,11 @@ def get_eligible_clippings(request):
                   AND (c.status IS NULL OR c.status NOT IN ('draft', 'rejected', 'deleted'))
                   AND (
                     DATE(c.created_at AT TIME ZONE 'Asia/Kolkata') = %s
-                    OR DATE(c.published_at AT TIME ZONE 'Asia/Kolkata') = %s
                     OR DATE(c.created_at) = %s
                   )
                 ORDER BY c.created_at DESC
             """
-            cursor.execute(query, [date_str, date_str, date_str])
+            cursor.execute(query, [date_str, date_str])
             rows = cursor.fetchall()
             
             # If no results found for exact date, fetch recent published feed items as fallback
@@ -115,7 +114,7 @@ def get_eligible_clippings(request):
                 fallback_query = """
                     SELECT 
                         c.id, c.headline, c.summary, c.content, c.kicker, c.subheadline,
-                        c.image_url, c.image_urls, c.highlight_list, c.created_at, c.published_at,
+                        c.image_url, c.image_urls, c.highlight_list, c.created_at,
                         c.user_id, p.full_name as reporter_name, c.state, c.district, c.location
                     FROM clippings c
                     LEFT JOIN profiles p ON c.user_id = p.id
