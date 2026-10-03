@@ -74,13 +74,13 @@ def admin_stats(request):
             row = cursor.fetchone()
             if row: total_gens = row[0]
 
-            # Generations Today
-            cursor.execute("SELECT COUNT(*) FROM clippings WHERE DATE(created_at) = CURRENT_DATE")
+            # Generations Today (IST)
+            cursor.execute("SELECT COUNT(*) FROM clippings WHERE DATE(created_at AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Kolkata') = DATE(CURRENT_TIMESTAMP AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Kolkata')")
             row = cursor.fetchone()
             if row: gens_today = row[0]
             
-            # Active Users Today (unique users who created clippings today)
-            cursor.execute("SELECT COUNT(DISTINCT user_id) FROM clippings WHERE DATE(created_at) = CURRENT_DATE")
+            # Active Users Today (IST)
+            cursor.execute("SELECT COUNT(DISTINCT user_id) FROM clippings WHERE DATE(created_at AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Kolkata') = DATE(CURRENT_TIMESTAMP AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Kolkata')")
             row = cursor.fetchone()
             if row: active_users_today = row[0]
     except Exception as e:
@@ -109,7 +109,7 @@ def admin_auth_users(request):
                 SELECT 
                     u.id, u.email, u.phone, p.role, u.created_at, u.raw_user_meta_data->>'full_name' as full_name, p.plan,
                     (SELECT COUNT(*) FROM clippings c WHERE c.user_id = u.id) as total_generations,
-                    (SELECT COUNT(*) FROM clippings c WHERE c.user_id = u.id AND DATE(c.created_at) = CURRENT_DATE) as generations_today,
+                    (SELECT COUNT(*) FROM clippings c WHERE c.user_id = u.id AND DATE(c.created_at AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Kolkata') = DATE(CURRENT_TIMESTAMP AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Kolkata')) as generations_today,
                     u.last_sign_in_at, p.is_banned, p.banned_until
                 FROM auth.users u
                 LEFT JOIN profiles p ON p.id = u.id
