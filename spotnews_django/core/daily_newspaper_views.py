@@ -300,14 +300,9 @@ def generate_daily_newspaper(request):
         # Render PDF via Playwright
         success = render_html_to_pdf(html_content, output_pdf_path)
         if not success:
-            # Fallback: Save print-ready HTML broadsheet if Playwright binary is not available
-            html_filename = f"{clean_pub_code}-{edition_date}-v{current_version}.html"
-            html_path = os.path.join(static_editions_dir, html_filename)
-            with open(html_path, "w", encoding="utf-8") as f:
-                f.write(html_content)
-            pdf_url = request.build_absolute_uri(f"/static/editions/{html_filename}")
-        else:
-            pdf_url = request.build_absolute_uri(f"/static/editions/{filename}")
+            return JsonResponse({"detail": "Failed to generate PDF. The server environment may lack Chromium dependencies (Playwright failed). Check server logs."}, status=500)
+            
+        pdf_url = request.build_absolute_uri(f"/static/editions/{filename}")
 
         # Save snapshot to database table `daily_editions`
         new_id = f"edition-{int(time.time())}"

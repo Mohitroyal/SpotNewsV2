@@ -219,12 +219,11 @@ def render_html_to_pdf(html_content: str, output_path: str) -> bool:
                     "--no-sandbox",
                     "--disable-setuid-sandbox",
                     "--disable-dev-shm-usage",
-                    "--disable-gpu",
-                    "--single-process"
+                    "--disable-gpu"
                 ]
             )
             page = browser.new_page()
-            page.set_content(html_content, wait_until="networkidle", timeout=120000)
+            page.set_content(html_content, wait_until="domcontentloaded", timeout=120000)
             page.wait_for_timeout(3000)
             page.pdf(
                 path=output_path,
