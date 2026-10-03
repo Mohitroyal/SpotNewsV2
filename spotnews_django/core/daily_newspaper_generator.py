@@ -1,5 +1,5 @@
 import os
-os.environ.setdefault("PLAYWRIGHT_BROWSERS_PATH", "0")
+os.environ["PLAYWRIGHT_BROWSERS_PATH"] = "0"
 import re
 import json
 import logging
