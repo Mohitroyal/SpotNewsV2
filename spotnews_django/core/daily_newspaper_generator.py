@@ -55,292 +55,479 @@ def build_newspaper_html(
     publication_name: str,
     logo_url: str,
     edition_date: str,
-    articles: List[Dict[str, Any]],
-    lead_story_id: Optional[str] = None,
-    advertisement_config: Optional[Dict[str, Any]] = None,
-    edition_info: Optional[Dict[str, Any]] = None
+    articles: list,
+    lead_story_id=None,
+    advertisement_config=None,
+    edition_info=None
 ) -> str:
-    """
-    Generate clean, print-ready HTML string for A3 Portrait Daily Newspaper.
-    Follows dense Telugu broadsheet 4-column layout guidelines.
-    """
     telugu_date_formatted = format_telugu_date(edition_date)
     
-    # Calculate page split: 10 articles per page
-    total_articles = len(articles)
-    articles_per_page = 10
-    total_pages = max(1, (total_articles + articles_per_page - 1) // articles_per_page)
-    
-    # Reorder articles if lead_story_id is provided
-    ordered_articles = list(articles)
-    if lead_story_id:
-        lead_idx = next((i for i, a in enumerate(ordered_articles) if str(a.get("id")) == str(lead_story_id)), None)
-        if lead_idx is not None and lead_idx != 3 and len(ordered_articles) >= 4:
-            # Swap lead story into index 3 (slot 4 of Page 1)
-            lead_item = ordered_articles.pop(lead_idx)
-            ordered_articles.insert(3, lead_item)
-        elif lead_idx is not None and len(ordered_articles) < 4:
-            lead_item = ordered_articles.pop(lead_idx)
-            ordered_articles.insert(0, lead_item)
-
-    edition_no = edition_info.get("edition_no", "01") if edition_info else "01"
-    issue_no = edition_info.get("issue_no", "266") if edition_info else "266"
-    editor_name = edition_info.get("editor_name", "స్పాట్ న్యూస్") if edition_info else "స్పాట్ న్యూస్"
-    price = edition_info.get("price", "రూ. 1.50/-") if edition_info else "రూ. 1.50/-"
-    location = edition_info.get("location", "హైదరాబాద్ / ఆంధ్రప్రదేశ్ & తెలంగాణ") if edition_info else "హైదరాబాద్ / ఆంధ్రప్రదేశ్ & తెలంగాణ"
-
-    pages_html = []
-
-    for page_num in range(1, total_pages + 1):
-        start_idx = (page_num - 1) * articles_per_page
-        end_idx = min(start_idx + articles_per_page, total_articles)
-        page_articles = ordered_articles[start_idx:end_idx]
-        
-        is_first_page = (page_num == 1)
-        
-        # Header construction
-        if is_first_page:
-            ad_html = ""
-            branding_width = "100%"
-            if advertisement_config and advertisement_config.get("image_url"):
-                branding_width = "72%"
-                ad_html = f"""
-                <div class="masthead-ad" style="width: 28%; border-left: 2px solid #D60000; padding-left: 8px; display: flex; flex-direction: column; justify-content: center; align-items: center; background: #fffbe6;">
-                    <span style="font-size: 9px; font-weight: bold; color: #888; text-transform: uppercase;">ప్రాకటనం / ADVERTISEMENT</span>
-                    <img src="{advertisement_config['image_url']}" style="max-height: 75px; max-width: 100%; object-fit: contain; margin-top: 4px;" />
-                    <span style="font-size: 10px; font-weight: bold; color: #111; margin-top: 2px;">{sanitize_text(advertisement_config.get('title', ''))}</span>
-                </div>
-                """
-            
-            header_block = f"""
-            <div class="masthead-container" style="display: flex; width: 100%; height: 95px; background: #ffffff; border-top: 4px solid #D60000; border-bottom: 3px solid #FFCC00; padding: 4px 10px; box-sizing: border-box; justify-content: space-between; align-items: center;">
-                <div class="masthead-logo-wrap" style="width: {branding_width}; display: flex; align-items: center; justify-content: center; height: 100%;">
-                    <img src="{logo_url}" alt="{sanitize_text(publication_name)}" style="max-height: 85px; max-width: 95%; object-fit: contain;" />
-                </div>
-                {ad_html}
-            </div>
-            
-            <div class="info-strip" style="background: #006633; color: #ffffff; font-size: 11.5px; font-weight: bold; padding: 4px 12px; display: flex; justify-content: space-between; align-items: center; margin-top: 3px; border-bottom: 2px solid #000000;">
-                <div>సంపుటి : {edition_no} &nbsp;|&nbsp; సంచిక : {issue_no} &nbsp;|&nbsp; ఎడిటర్ : {sanitize_text(editor_name)}</div>
-                <div style="color: #FFEB3B;">పేజీలు : {total_pages} &nbsp;|&nbsp; వెల : {price}</div>
-                <div>{telugu_date_formatted}</div>
-            </div>
-            """
-        else:
-            header_block = f"""
-            <div class="continuation-header" style="display: flex; width: 100%; height: 45px; background: #ffffff; border-bottom: 2px solid #006633; padding: 4px 10px; box-sizing: border-box; justify-content: space-between; align-items: center; margin-bottom: 4px;">
-                <div style="display: flex; align-items: center; gap: 12px;">
-                    <img src="{logo_url}" alt="{sanitize_text(publication_name)}" style="max-height: 38px; object-fit: contain;" />
-                    <span style="font-size: 13px; font-weight: bold; color: #006633;">{sanitize_text(publication_name)} — దినపత్రిక</span>
-                </div>
-                <div style="font-size: 11px; font-weight: bold; color: #333;">{telugu_date_formatted} &nbsp;|&nbsp; పేజీ {page_num} of {total_pages}</div>
-            </div>
-            """
-
-        # Build grid slots for articles
-        grid_items_html = []
-        count_in_page = len(page_articles)
-
-        # Headline color hierarchy
-        headline_colors = ["#D60000", "#003399", "#8B0055", "#006600", "#111111", "#003399", "#D60000"]
-
-        for idx, art in enumerate(page_articles):
-            slot_num = idx + 1
-            headline = sanitize_text(art.get("headline") or art.get("title") or "ముఖ్యాంశం")
-            subheadline = sanitize_text(art.get("subheadline") or "")
-            kicker = sanitize_text(art.get("kicker") or "")
-            content = sanitize_text(art.get("content") or art.get("summary") or "")
-            reporter = sanitize_text(art.get("reporter_name") or art.get("byline") or "రిపోర్టర్")
-            loc = sanitize_text(art.get("location") or art.get("district") or "")
-            
-            # Photos
-            imgs = art.get("image_urls") or []
-            if not imgs and art.get("image_url"):
-                imgs = [art.get("image_url")]
-            
-            # Custom slot layout rules based on position in 10-article page
-            grid_style = "grid-column: span 1; grid-row: span 1;"
-            is_lead = False
-            is_feature = False
-            title_color = headline_colors[idx % len(headline_colors)]
-
-            if count_in_page == 10:
-                if slot_num in (1, 2):
-                    grid_style = "grid-column: span 2;"
-                elif slot_num == 3:
-                    grid_style = "grid-column: span 1;"
-                elif slot_num == 4:
-                    grid_style = "grid-column: span 2; background: #fffdf5; border: 2px solid #D60000;"
-                    is_lead = True
-                    title_color = "#D60000"
-                elif slot_num == 5:
-                    grid_style = "grid-column: span 1;"
-                elif slot_num in (6, 7):
-                    grid_style = "grid-column: span 1;"
-                elif slot_num == 8:
-                    grid_style = "grid-column: span 2;"
-                elif slot_num == 9:
-                    grid_style = "grid-column: span 3; background: #f5f9ff;"
-                    is_feature = True
-                    title_color = "#003399"
-                elif slot_num == 10:
-                    grid_style = "grid-column: span 1;"
-            else:
-                # Dynamic rebalancing for partially filled pages
-                if count_in_page == 1:
-                    grid_style = "grid-column: span 4;"
-                    is_lead = True
-                elif count_in_page == 2:
-                    grid_style = "grid-column: span 2;"
-                elif count_in_page == 3:
-                    grid_style = "grid-column: span 4;" if idx == 0 else "grid-column: span 2;"
-                elif count_in_page == 4:
-                    grid_style = "grid-column: span 2;"
-                elif count_in_page == 5:
-                    grid_style = "grid-column: span 2;" if idx < 2 else ("grid-column: span 2;" if idx == 2 else "grid-column: span 1;")
-                elif count_in_page in (6, 7, 8, 9):
-                    if idx == 0:
-                        grid_style = "grid-column: span 2;"
-                    elif idx == 1:
-                        grid_style = "grid-column: span 2;"
-                    elif idx == 2 and count_in_page >= 7:
-                        grid_style = "grid-column: span 2;"
-                    else:
-                        grid_style = "grid-column: span 1;"
-
-            # Image markup
-            img_html = ""
-            if imgs and len(imgs) > 0:
-                first_img = imgs[0]
-                img_height = "180px" if is_lead else ("150px" if is_feature else "120px")
-                img_html = f"""
-                <div style="margin: 6px 0; text-align: center;">
-                    <img src="{first_img}" style="width: 100%; max-height: {img_height}; object-fit: cover; border: 1px solid #ddd; display: block;" />
-                </div>
-                """
-
-            # Kicker markup
-            kicker_html = f'<div style="font-size: 10px; font-weight: 800; color: #D60000; text-transform: uppercase; margin-bottom: 2px;">{kicker}</div>' if kicker else ""
-            subhead_html = f'<div style="font-size: 12px; font-weight: 700; color: #333; margin-top: 3px; line-height: 1.25;">{subheadline}</div>' if subheadline else ""
-
-            # Highlights list
-            highlights_html = ""
-            hl_list = art.get("highlight_list") or []
-            if hl_list:
-                items = "".join([f'<li style="margin-bottom: 2px;"><span style="color: #D60000; margin-right: 4px;">▶</span>{sanitize_text(h)}</li>' for h in hl_list])
-                highlights_html = f'<ul style="list-style: none; padding-left: 0; margin: 6px 0; font-size: 10.5px; font-weight: bold; background: #fff5f5; padding: 4px 6px; border-left: 3px solid #D60000;">{items}</ul>'
-
-            # Headline size
-            h_size = "22px" if is_lead else ("18px" if is_feature else ("15px" if "span 2" in grid_style or "span 3" in grid_style else "13.5px"))
-            h_weight = "900" if is_lead else "800"
-
-            byline_str = f"{loc} &nbsp;|&nbsp; {reporter}" if loc and reporter else (loc or reporter)
-
-            item_html = f"""
-            <div class="article-cell" style="{grid_style} border: 1px solid #b0b0b0; padding: 6px 8px; box-sizing: border-box; display: flex; flex-direction: column; overflow: hidden; background: #ffffff;">
-                {kicker_html}
-                <h2 style="font-size: {h_size}; font-weight: {h_weight}; color: {title_color}; margin: 0; line-height: 1.2; letter-spacing: -0.2px;">
-                    {headline}
-                </h2>
-                {subhead_html}
-                {img_html}
-                <div style="font-size: 9.5px; font-weight: bold; color: #666; margin: 3px 0 4px 0; border-bottom: 1px solid #eee; padding-bottom: 2px;">
-                    {byline_str}
-                </div>
-                {highlights_html}
-                <div style="font-size: 10.5px; line-height: 1.36; color: #111; text-align: justify; flex: 1;">
-                    {content}
-                </div>
-            </div>
-            """
-            grid_items_html.append(item_html)
-
-        grid_content = "".join(grid_items_html)
-
-        page_markup = f"""
-        <div class="page-container">
-            {header_block}
-            <div class="articles-grid">
-                {grid_content}
-            </div>
-            <div class="footer-strip">
-                <span>{sanitize_text(publication_name)} — TELUGU DAILY</span>
-                <span>{telugu_date_formatted}</span>
-                <span>PAGE {page_num} OF {total_pages}</span>
-            </div>
-        </div>
-        """
-        pages_html.append(page_markup)
-
-    full_body = "".join(pages_html)
-
-    html = f"""<!DOCTYPE html>
+    html_parts = []
+    html_parts.append("""<!DOCTYPE html>
 <html lang="te">
 <head>
     <meta charset="UTF-8">
-    <title>{sanitize_text(publication_name)} - {edition_date}</title>
+    <title>""" + sanitize_text(publication_name) + """ - """ + edition_date + """</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+Telugu:wght@400;600;700;800;900&family=Mandali&family=Cinzel:wght@700&display=swap" rel="stylesheet">
-    <style>
-        @page {{
-            size: 297mm 420mm; /* A3 Portrait */
-            margin: 8mm 10mm 10mm 10mm;
-        }}
-        *, *::before, *::after {{
-            box-sizing: border-box;
-            margin: 0;
+    <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,700;0,900;1,700&family=Old+Standard+TT:ital,wght@0,400;0,700;1,400&family=Cinzel:wght@700;900&family=Noto+Serif+Devanagari:wght@400;700&family=Noto+Serif+Telugu:wght@400;700&display=swap" rel="stylesheet">
+    <style>""" + """
+        /* ─── DESIGN TOKENS ─────────────────────────────────────── */
+        :root {
+            --bg:         #FFFFFF;
+            --paper:      #FFFFFF;
+            --ink:        #000000;
+            --accent:     #0a192f;
+            --gold:       #b38f32;
+            --rule:       #0a192f;
+            --muted:      #475569;
+            --divider:    #cbd5e1;
+            --col-gap:    22px;
+            --container-w: 1060px;
+            --container-pad: 34px;
+        }
+
+        /* ─── RESET ─────────────────────────────────────────────── */
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+        body {
+            background: var(--bg);
+            color: var(--ink);
+            font-family: 'Old Standard TT', serif;
             padding: 0;
-        }}
-        html, body {{
-            background: #ffffff;
-            color: #000000;
-            font-family: 'Noto Serif Telugu', serif;
-            -webkit-print-color-adjust: exact;
-            print-color-adjust: exact;
-        }}
-        .page-container {{
-            width: 277mm;
-            height: 402mm;
-            box-sizing: border-box;
-            page-break-after: always;
-            page-break-inside: avoid;
+            display: flex;
+            justify-content: center;
+            align-items: flex-start;
+            min-height: 100vh;
+        }
+
+        /* ─── NEWSPAPER CONTAINER ───────────────────────────────── */
+        .newspaper-container {
+            width: var(--container-w);
+            background: var(--paper);
+            border: 2px solid #CFE8FF;
+            box-shadow: 0 10px 40px rgba(10,25,47,0.08);
+            padding: var(--container-pad);
             display: flex;
             flex-direction: column;
-            overflow: hidden;
-            background: #ffffff;
-            position: relative;
-        }}
-        .articles-grid {{
+            gap: 0;
+        }
+
+        /* ─── MASTHEAD / HEADER ─────────────────────────────────── */
+        .header-section {
+            width: 100%;
+            text-align: center;
+            margin-bottom: 10px;
+        }
+        .header-section svg {
+            width: 100%;
+            height: auto;
+            max-height: 120px;
+            display: block;
+        }
+
+        /* ─── META BAR ──────────────────────────────────────────── */
+        .meta-bar {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            flex-direction: column;
+            gap: 3px;
+            border-top: 1.5px solid var(--rule);
+            border-bottom: 1.5px solid var(--rule);
+            padding: 5px 12px;
+            font-family: 'Cinzel', serif;
+            font-size: 11.5px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 1.6px;
+            color: var(--accent);
+            margin-bottom: 0;
+        }
+
+        /* ─── HEADLINE BLOCK ────────────────────────────────────── */
+        .headline-block, .headline-section {
+            text-align: center;
+            margin: 22px 0 14px !important;
+            background-color: #FFF4CC !important;
+            padding: 15px !important;
+            border: 2px solid #D60000 !important;
+            border-left: 2px solid #D60000 !important; /* override injected left-border */
+        }
+        .headline {
+            font-family: 'Playfair Display', serif;
+            font-size: 50px;
+            font-weight: 900;
+            line-height: 1.12;
+            letter-spacing: -1px;
+            color: #111111;
+            display: block;
+        }
+
+        /* ─── SUBHEADLINE ───────────────────────────────────────── */
+        .subheadline-block {
+            text-align: center;
+            border-bottom: 0.5px solid var(--divider);
+            padding-bottom: 14px;
+            margin-bottom: 18px;
+        }
+        .subheadline {
+            font-family: 'Old Standard TT', serif;
+            font-size: 18px;
+            font-style: italic;
+            color: var(--muted);
+            line-height: 1.45;
+        }
+
+        /* ═══════════════════════════════════════════════════════════
+           TOP SECTION: 65% hero image | 35% article text
+           ─ Pure CSS grid. No absolute positioning. No overlap.
+           ═══════════════════════════════════════════════════════════ */
+        .top-section {
             display: grid;
-            grid-template-columns: repeat(4, 1fr);
-            grid-template-rows: auto;
-            gap: 6px;
-            flex: 1;
-            margin-top: 4px;
-            box-sizing: border-box;
-        }}
-        .footer-strip {{
-            height: 20px;
-            border-top: 1.5px solid #000000;
+            grid-template-columns: 65% 35%;
+            gap: var(--col-gap);
+            margin-bottom: 20px;
+        }
+
+        /* Hero image column */
+        .hero-col {
+            /* 65% of container width */
+        }
+        .hero-image-frame {
+            border: 1px solid var(--divider);
+            padding: 5px;
+            width: 100%;
+            height: 380px;          /* fixed slot height */
+        }
+        .hero-image-frame img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            display: block;
+            filter: sepia(25%) grayscale(15%) contrast(103%);
+        }
+        .hero-caption {
+            font-size: 12px;
+            font-style: italic;
+            color: var(--muted);
+            margin-top: 7px;
+            line-height: 1.4;
+            text-align: center;
+        }
+
+        /* Right text column */
+        .right-text-col {
+            /* 35% of container width */
+            overflow: hidden;       /* text NEVER spills outside */
+        }
+        .byline-bar {
+            font-family: 'Cinzel', serif;
+            font-size: 10.5px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 1.3px;
+            color: var(--accent);
+            border-bottom: 0.5px solid var(--divider);
+            padding-bottom: 4px;
+            margin-bottom: 11px;
+        }
+        .right-text-col .paragraph {
+            font-size: 14.5px;
+            line-height: 1.62;
+            color: #1e293b;
+            margin-bottom: 14px;
+            text-align: justify;
+            text-indent: 0;
+            word-wrap: break-word;
+            overflow-wrap: break-word;
+        }
+        .right-text-col .paragraph.has-dropcap::first-letter {
+            float: left;
+            font-family: 'Cinzel', 'Playfair Display', serif;
+            font-size: 52px;
+            line-height: 40px;
+            padding-top: 3px;
+            padding-right: 5px;
+            font-weight: 900;
+            color: var(--accent);
+        }
+        .dateline { font-weight: 700; }
+
+        /* ═══════════════════════════════════════════════════════════
+           MIDDLE SECTION: Diagonal secondary images in fixed slots
+           Slots A-D are predefined. No JS movement allowed.
+           ═══════════════════════════════════════════════════════════ */
+        .middle-section {
+            margin-bottom: 20px;
+        }
+        .middle-section-label {
+            font-family: 'Cinzel', serif;
+            font-size: 10px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            color: var(--gold);
+            border-top: 1px solid var(--gold);
+            border-bottom: 1px solid var(--gold);
+            padding: 4px 0;
+            margin-bottom: 14px;
+            text-align: center;
+        }
+
+        /*
+         * The diagonal gallery uses a container with a fixed height
+         * and position:relative. Each slot is position:absolute with
+         * FIXED left/top coordinates — no dynamic calculation.
+         * Slot widths are fixed percentages. Height is fixed px.
+         */
+        .diagonal-gallery {
+            position: relative;
+            width: 100%;
+            height: 740px;          /* tall enough to contain all 4 slots */
+            overflow: visible;
+        }
+
+        /* SLOT DEFINITIONS — fixed, never recalculated */
+        .slot {
+            position: absolute;
+            width: 28%;             /* each image tile width */
+        }
+
+        /* Slot A: top-left */
+        .slot-a {
+            left: 0%;
+            top: 0px;
+        }
+        /* Slot B: shifted right + down */
+        .slot-b {
+            left: 15%;
+            top: 180px;
+        }
+        /* Slot C: further right + down */
+        .slot-c {
+            left: 30%;
+            top: 360px;
+        }
+        /* Slot D: furthest right + down */
+        .slot-d {
+            left: 45%;
+            top: 540px;
+        }
+
+        .slot-frame {
+            border: 1px solid var(--divider);
+            padding: 5px;
+            background: var(--paper);
+        }
+        .slot-frame img {
+            width: 100%;
+            height: 160px;
+            object-fit: cover;
+            display: block;
+            filter: sepia(25%) grayscale(15%) contrast(103%);
+        }
+        .slot-caption {
+            font-size: 11px;
+            font-style: italic;
+            color: var(--muted);
+            margin-top: 5px;
+            line-height: 1.35;
+            text-align: center;
+        }
+
+        /* ═══════════════════════════════════════════════════════════
+           BOTTOM TEXT SECTION: 3-column newspaper text flow
+           Text is in independent container blocks, never wrapping
+           around irregular image boundaries.
+           ═══════════════════════════════════════════════════════════ */
+        .bottom-text-section {
+            margin-top: 16px;
+            border-top: 1.5px solid var(--rule);
+            padding-top: 16px;
+        }
+        .article-content {
+            columns: 3;
+            column-gap: var(--col-gap);
+            column-rule: 0.5px solid var(--divider);
+            text-align: justify;
+            font-size: 14.5px;
+            line-height: 1.62;
+            color: #1e293b;
+        }
+        .article-content .paragraph {
+            margin-top: 0;
+            margin-bottom: 14px;
+            text-indent: 17px;
+            break-inside: avoid;
+        }
+        .article-content .paragraph:first-of-type {
+            text-indent: 0;
+        }
+        .article-content .paragraph.has-dropcap::first-letter {
+            float: left;
+            font-family: 'Cinzel', 'Playfair Display', serif;
+            font-size: 52px;
+            line-height: 40px;
+            padding-top: 3px;
+            padding-right: 5px;
+            font-weight: 900;
+            color: var(--accent);
+        }
+
+        /* ─── FOOTER ────────────────────────────────────────────── */
+        .footer-section {
             display: flex;
             justify-content: space-between;
             align-items: center;
-            font-size: 9.5px;
-            font-weight: bold;
-            color: #444;
-            padding: 0 4px;
-            margin-top: 4px;
-            font-family: sans-serif;
-        }}
-    </style>
+            border-top: 1.5px solid var(--rule);
+            padding-top: 10px;
+            margin-top: 24px;
+            font-family: 'Cinzel', serif;
+            font-size: 10px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 1.5px;
+            color: #64748b;
+        }
+    
+        @media print {
+            @page { size: auto; margin: 0; }
+            body { background: #fff !important; }
+            .newspaper-container { border: none !important; box-shadow: none !important; }
+        }
+        .newspaper-container { page-break-after: always; page-break-inside: avoid; margin-bottom: 0; border: none; box-shadow: none; }
+""" + """</style>
 </head>
 <body>
-    {full_body}
+""")
+
+    for page_num, art in enumerate(articles, 1):
+        headline = sanitize_text(art.get("headline") or art.get("title") or "ముఖ్యాంశం")
+        subheadline = sanitize_text(art.get("subheadline") or "")
+        content = sanitize_text(art.get("content") or art.get("summary") or "")
+        reporter = sanitize_text(art.get("reporter_name") or art.get("byline") or "Special Correspondent")
+        loc = sanitize_text(art.get("location") or art.get("district") or "Hyderabad")
+        
+        imgs = art.get("image_urls") or []
+        if not imgs and art.get("image_url"):
+            imgs = [art.get("image_url")]
+            
+        hero_img = imgs[0] if imgs else "https://images.unsplash.com/photo-1504711434969-e33886168f5c?auto=format&fit=crop&w=800&q=80"
+        
+        slot_imgs = []
+        for i in range(1, 5):
+            if len(imgs) > i:
+                slot_imgs.append(imgs[i])
+            else:
+                slot_imgs.append("https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=800&q=80") # default fallback
+        
+        # Splitting content into paragraphs for the multi-column text flow
+        paragraphs = [p.strip() for p in content.split('
+') if p.strip()]
+        if not paragraphs:
+            paragraphs = ["Coverage of this developing story..."]
+            
+        # Top right text
+        top_text_html = ""
+        bottom_text_html = ""
+        
+        if len(paragraphs) > 0:
+            top_text_html += f'<p class="paragraph has-dropcap"><span class="dateline">{loc} —</span> {paragraphs[0]}</p>'
+        if len(paragraphs) > 1:
+            top_text_html += f'<p class="paragraph">{paragraphs[1]}</p>'
+        if len(paragraphs) > 2:
+            top_text_html += f'<p class="paragraph">{paragraphs[2]}</p>'
+            
+        # Rest goes to bottom text section
+        for p in paragraphs[3:]:
+            bottom_text_html += f'<p class="paragraph">{p}</p>'
+            
+        if not bottom_text_html:
+            bottom_text_html = f'<p class="paragraph has-dropcap">Further updates will be reported as the situation develops.</p>'
+            
+        html_parts.append(f"""
+<div class="newspaper-container">
+    <!-- ── HEADER / MASTHEAD ─────────────────────────────────── -->
+    <header class="header-section" style="padding: 10px 0; background: #fff;">
+        <img src="{logo_url}" alt="Logo" style="max-height: 120px; object-fit: contain; width: auto;" />
+    </header>
+
+    <!-- ── META BAR ──────────────────────────────────────────── -->
+    <div class="meta-bar">
+        <span>{sanitize_text(publication_name)} &mdash; {telugu_date_formatted}</span>
+        <span>Page {page_num} of {len(articles)}</span>
+    </div>
+
+    <!-- ── HEADLINE ──────────────────────────────────────────── -->
+    <div class="headline-block">
+        <h1 class="headline">{headline}</h1>
+    </div>
+
+    <!-- ── SUBHEADLINE ───────────────────────────────────────── -->
+    <div class="subheadline-block">
+        <h2 class="subheadline">{subheadline}</h2>
+    </div>
+
+    <div class="top-section">
+        <div class="hero-col">
+            <div class="hero-image-frame">
+                <img id="hero-img" src="{hero_img}" alt="Hero" loading="eager">
+            </div>
+            <p class="hero-caption">Photo from the scene <em>(Photo: {reporter})</em></p>
+        </div>
+        <div class="right-text-col">
+            <div class="byline-bar">By {reporter} &nbsp;|&nbsp; {loc}</div>
+            {top_text_html}
+        </div>
+    </div>
+
+    <div class="middle-section">
+        <div class="middle-section-label">&#9670; Developing Story — Photo Gallery &#9670;</div>
+        <div class="diagonal-gallery" id="diagonal-gallery">
+            <div class="slot slot-a">
+                <div class="slot-frame">
+                    <img src="{slot_imgs[0]}" alt="Slot A" loading="eager">
+                </div>
+            </div>
+            <div class="slot slot-b">
+                <div class="slot-frame">
+                    <img src="{slot_imgs[1]}" alt="Slot B" loading="eager">
+                </div>
+            </div>
+            <div class="slot slot-c">
+                <div class="slot-frame">
+                    <img src="{slot_imgs[2]}" alt="Slot C" loading="eager">
+                </div>
+            </div>
+            <div class="slot slot-d">
+                <div class="slot-frame">
+                    <img src="{slot_imgs[3]}" alt="Slot D" loading="eager">
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="bottom-text-section">
+        <div class="article-content">
+            {bottom_text_html}
+        </div>
+    </div>
+
+    <footer class="footer-section">
+        <div>Page {page_num} &bull; {sanitize_text(publication_name)}</div>
+        <div>&copy; 2026 {sanitize_text(publication_name)}</div>
+    </footer>
+</div>
+""")
+
+    html_parts.append("""
+<script>
+window.__LAYOUT_DONE__ = true;
+</script>
 </body>
 </html>
-"""
-    return html
+""")
+    return "".join(html_parts)
 
 def render_html_to_pdf(html_content: str, output_path: str) -> bool:
     """Render HTML string to A3 PDF file using Playwright Chromium."""
