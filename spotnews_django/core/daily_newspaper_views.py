@@ -408,5 +408,5 @@ def serve_edition_pdf(request, filename):
     from django.http import FileResponse, Http404
     file_path = os.path.join(settings.BASE_DIR, 'media', 'editions', filename)
     if os.path.exists(file_path):
-        return FileResponse(open(file_path, 'rb'), content_type='application/pdf')
+        return FileResponse(open(file_path, 'rb'), content_type='application/pdf', as_attachment=True, filename=filename)
     raise Http404("Edition PDF not found")
