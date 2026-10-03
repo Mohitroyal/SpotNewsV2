@@ -3,6 +3,7 @@
 set -o errexit
 
 pip install -r requirements.txt
-playwright install chromium
-playwright install-deps chromium || true
+export PLAYWRIGHT_BROWSERS_PATH=0
+playwright install
+playwright install-deps || true
 python manage.py collectstatic --no-input
