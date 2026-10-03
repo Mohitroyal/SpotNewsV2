@@ -93,9 +93,9 @@ def get_eligible_clippings(request):
             # Query clippings published on specified date
             query = """
                 SELECT 
-                    c.id, c.headline, c.content, c.kicker, c.subheadline,
-                    c.image_url, c.image_urls, c.highlight_list, c.created_at,
-                    c.user_id, p.full_name as reporter_name, c.state, c.district, c.location
+                    c.id, c.headline, c.article_content,
+                    c.image_url, c.image_urls, c.created_at,
+                    c.user_id, p.full_name as reporter_name, c.state, c.district
                 FROM clippings c
                 LEFT JOIN profiles p ON c.user_id = p.id
                 WHERE (c.is_posted = true OR c.is_posted IS NULL OR c.status IN ('completed', 'published', 'posted'))
@@ -113,9 +113,9 @@ def get_eligible_clippings(request):
             if not rows:
                 fallback_query = """
                     SELECT 
-                        c.id, c.headline, c.content, c.kicker, c.subheadline,
-                        c.image_url, c.image_urls, c.highlight_list, c.created_at,
-                        c.user_id, p.full_name as reporter_name, c.state, c.district, c.location
+                        c.id, c.headline, c.article_content,
+                        c.image_url, c.image_urls, c.created_at,
+                        c.user_id, p.full_name as reporter_name, c.state, c.district
                     FROM clippings c
                     LEFT JOIN profiles p ON c.user_id = p.id
                     WHERE (c.is_posted = true OR c.is_posted IS NULL OR c.status IN ('completed', 'published', 'posted'))
@@ -128,42 +128,33 @@ def get_eligible_clippings(request):
 
             articles = []
             for r in rows:
-                raw_imgs = r[6]
+                raw_imgs = r[4]
                 if isinstance(raw_imgs, str):
                     try:
                         raw_imgs = json.loads(raw_imgs)
                     except:
                         raw_imgs = [raw_imgs]
-                elif not raw_imgs and r[5]:
-                    raw_imgs = [r[5]]
+                elif not raw_imgs and r[3]:
+                    raw_imgs = [r[3]]
                 elif not raw_imgs:
                     raw_imgs = []
-
-                raw_hl = r[7]
-                if isinstance(raw_hl, str):
-                    try:
-                        raw_hl = json.loads(raw_hl)
-                    except:
-                        raw_hl = [raw_hl]
-                elif not raw_hl:
-                    raw_hl = []
 
                 articles.append({
                     "id": str(r[0]),
                     "headline": r[1] or "Untitled Article",
                     "summary": r[2][:100] if r[2] else "",
                     "content": r[2] or "",
-                    "kicker": r[3] or "",
-                    "subheadline": r[4] or "",
-                    "image_url": r[5] or (raw_imgs[0] if raw_imgs else ""),
+                    "kicker": "",
+                    "subheadline": "",
+                    "image_url": r[3] or (raw_imgs[0] if raw_imgs else ""),
                     "image_urls": raw_imgs,
-                    "highlight_list": raw_hl,
-                    "created_at": str(r[8]) if r[8] else "",
-                    "user_id": str(r[9]) if r[9] else "",
-                    "reporter_name": r[10] or "News Craft Reporter",
-                    "state": r[11] or "",
-                    "district": r[12] or "",
-                    "location": r[13] or r[12] or "హైదరాబాద్"
+                    "highlight_list": [],
+                    "created_at": str(r[5]) if r[5] else "",
+                    "user_id": str(r[6]) if r[6] else "",
+                    "reporter_name": r[7] or "News Craft Reporter",
+                    "state": r[8] or "",
+                    "district": r[9] or "",
+                    "location": r[9] or "హైదరాబాద్"
                 })
 
             return JsonResponse({
