@@ -108,60 +108,106 @@ def build_newspaper_html(
     """
 
     headline_colors = ["#D60000", "#003399", "#8B0055", "#006600", "#111111"]
-    items_html = []
+    
+    PAGE1_CAPACITY = 6500
+    PAGE_CAPACITY = 9500
+    
+    current_weight = 0
+    current_page_articles = []
+    chunked_pages = []
 
     for idx, art in enumerate(ordered_articles):
         headline = sanitize_text(art.get("headline") or art.get("title") or "ముఖ్యాంశం")
         content = sanitize_text(art.get("content") or art.get("summary") or "")
-        reporter = sanitize_text(art.get("reporter_name") or art.get("byline") or "రిపోర్టర్")
-        loc = sanitize_text(art.get("location") or art.get("district") or "")
-        
         imgs = art.get("image_urls") or []
         if not imgs and art.get("image_url"):
             imgs = [art.get("image_url")]
+            
+        img_cost = 800 if imgs else 0
+        weight = len(content) + (len(headline) * 3) + img_cost
         
-        is_lead = (idx == 0)
-        color = headline_colors[idx % len(headline_colors)]
+        capacity = PAGE1_CAPACITY if len(chunked_pages) == 0 else PAGE_CAPACITY
         
-        if is_lead:
-            span_style = "column-span: all; margin-bottom: 15px; border-bottom: 2px solid #D60000; padding-bottom: 10px;"
-            head_style = f"font-size: 36px; font-weight: 900; color: {color}; line-height: 1.15; margin-bottom: 8px; text-align: center;"
-            content_style = "column-count: 3; column-gap: 20px; font-size: 13.5px; line-height: 1.55; text-align: justify; color: #111;"
-            img_style = "width: 100%; max-height: 350px; object-fit: cover; break-inside: avoid; -webkit-column-break-inside: avoid; page-break-inside: avoid;"
-        else:
-            span_style = "break-inside: avoid; -webkit-column-break-inside: avoid; page-break-inside: avoid; margin-bottom: 15px; border-top: 2px solid #ccc; padding-top: 10px;"
-            head_style = f"font-size: 18px; font-weight: 800; color: {color}; line-height: 1.25; margin-bottom: 6px;"
-            content_style = "font-size: 12px; line-height: 1.45; text-align: justify; color: #111;"
-            img_style = "width: 100%; max-height: 200px; object-fit: cover; margin-bottom: 6px; break-inside: avoid; -webkit-column-break-inside: avoid; page-break-inside: avoid;"
+        if current_weight + weight > capacity and len(current_page_articles) > 0:
+            chunked_pages.append(current_page_articles)
+            current_page_articles = []
+            current_weight = 0
+            
+        current_page_articles.append((art, idx))
+        current_weight += weight
+        
+    if current_page_articles:
+        chunked_pages.append(current_page_articles)
 
-        img_html = ""
-        if imgs and len(imgs) > 0:
-            first_img = imgs[0]
-            img_html = f"""
-            <div style="text-align: center; margin-bottom: 6px; break-inside: avoid; page-break-inside: avoid; -webkit-column-break-inside: avoid;">
-                <img src="{first_img}" style="{img_style}" />
+    pages_html = []
+    for page_idx, page_group in enumerate(chunked_pages):
+        is_first_page = (page_idx == 0)
+        articles_html = []
+        
+        for local_idx, (art, original_idx) in enumerate(page_group):
+            headline = sanitize_text(art.get("headline") or art.get("title") or "ముఖ్యాంశం")
+            content = sanitize_text(art.get("content") or art.get("summary") or "")
+            reporter = sanitize_text(art.get("reporter_name") or art.get("byline") or "రిపోర్టర్")
+            loc = sanitize_text(art.get("location") or art.get("district") or "")
+            
+            imgs = art.get("image_urls") or []
+            if not imgs and art.get("image_url"):
+                imgs = [art.get("image_url")]
+            
+            is_lead = (is_first_page and local_idx == 0)
+            color = headline_colors[original_idx % len(headline_colors)]
+            
+            if is_lead:
+                span_style = "column-span: all; margin-bottom: 15px; border-bottom: 2px solid #D60000; padding-bottom: 10px;"
+                head_style = f"font-size: 36px; font-weight: 900; color: {color}; line-height: 1.15; margin-bottom: 8px; text-align: center;"
+                content_style = "column-count: 3; column-gap: 20px; font-size: 13.5px; line-height: 1.55; text-align: justify; color: #111;"
+                img_style = "width: 100%; max-height: 350px; object-fit: cover; break-inside: avoid; -webkit-column-break-inside: avoid; page-break-inside: avoid;"
+            else:
+                span_style = "break-inside: avoid; -webkit-column-break-inside: avoid; page-break-inside: avoid; margin-bottom: 15px; border-top: 2px solid #ccc; padding-top: 10px;"
+                head_style = f"font-size: 18px; font-weight: 800; color: {color}; line-height: 1.25; margin-bottom: 6px;"
+                content_style = "font-size: 12px; line-height: 1.45; text-align: justify; color: #111;"
+                img_style = "width: 100%; max-height: 200px; object-fit: cover; margin-bottom: 6px; break-inside: avoid; -webkit-column-break-inside: avoid; page-break-inside: avoid;"
+
+            img_html = ""
+            if imgs and len(imgs) > 0:
+                first_img = imgs[0]
+                img_html = f"""
+                <div style="text-align: center; margin-bottom: 6px; break-inside: avoid; page-break-inside: avoid; -webkit-column-break-inside: avoid;">
+                    <img src="{first_img}" style="{img_style}" />
+                </div>
+                """
+
+            byline_str = f"{loc} &nbsp;|&nbsp; {reporter}" if loc and reporter else (loc or reporter)
+            byline_html = f'<div style="font-size: 11px; font-weight: bold; color: #666; margin-bottom: 6px; padding-bottom: 4px; border-bottom: 1px solid #eee;">{byline_str}</div>'
+
+            item_html = f"""
+            <div class="article-cell" style="{span_style}">
+                <h2 style="{head_style}">
+                    {headline}
+                </h2>
+                {byline_html}
+                <div style="{content_style}">
+                    {img_html}
+                    <p style="margin: 0; text-indent: 15px;">{content}</p>
+                </div>
             </div>
             """
-
-        byline_str = f"{loc} &nbsp;|&nbsp; {reporter}" if loc and reporter else (loc or reporter)
-        byline_html = f'<div style="font-size: 11px; font-weight: bold; color: #666; margin-bottom: 6px; padding-bottom: 4px; border-bottom: 1px solid #eee;">{byline_str}</div>'
-
-        item_html = f"""
-        <div class="article-cell" style="{span_style}">
-            <h2 style="{head_style}">
-                {headline}
-            </h2>
-            {byline_html}
-            <div style="{content_style}">
-                {img_html}
-                <p style="margin: 0; text-indent: 15px;">{content}</p>
+            articles_html.append(item_html)
+            
+        masthead = masthead_block if is_first_page else ""
+        col_height = "calc(100% - 140px)" if is_first_page else "100%"
+        
+        page_html = f"""
+        <div class="pdf-page" style="width: 297mm; height: 420mm; overflow: hidden; padding: 15mm 10mm; background: white; margin: 0 auto; box-sizing: border-box; page-break-after: always; position: relative;">
+            {masthead}
+            <div style="column-count: 4; column-gap: 15px; height: {col_height}; column-fill: balance;">
+                {"".join(articles_html)}
             </div>
         </div>
         """
-        items_html.append(item_html)
+        pages_html.append(page_html)
 
     # Return the raw HTML structure.
-    # Playwright will handle pagination natively!
     html = f"""<!DOCTYPE html>
 <html lang="te">
 <head>
@@ -184,15 +230,13 @@ def build_newspaper_html(
     </style>
 </head>
 <body>
-    <div style="padding: 0;">
-        {masthead_block}
-        <div style="column-count: 4; column-gap: 15px;">
-            {"".join(items_html)}
-        </div>
+    <div style="padding: 0; width: 297mm;">
+        {"".join(pages_html)}
     </div>
 </body>
 </html>
 """
+    return html
     return html
 
 def render_html_to_pdf(html_content: str, output_path: str) -> bool:
