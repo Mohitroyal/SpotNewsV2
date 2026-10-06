@@ -71,19 +71,105 @@ export const generationService = {
    */
   async generate(config: GenerationConfig): Promise<ApiResponse<Generation>> {
     log("Generation Started", `template=${config.templateId} lang=${config.language} images=${(config as any).imageUrls?.length ?? 0}`);
-    const res = await api.post("/generate/", config, {
-      timeout: 0, // No timeout — generation can take several minutes
-    });
-    log("Generation Response Received", `status=${res.status}`);
-    return res.data;
+    
+    try {
+      const { data: userData } = await supabase.auth.getUser();
+      const userId = userData.user?.id;
+
+      if (!userId) {
+        throw new Error("User not authenticated");
+      }
+
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("full_name")
+        .eq("id", userId)
+        .single();
+        
+      const reporterName = config.reporterName || profile?.full_name || 'Reporter';
+
+      const rowToInsert = {
+        user_id: userId,
+        headline: config.headline,
+        content: config.articleContent,
+        image_url: config.imageUrls?.[0] || config.imageUrl || null,
+        image_urls: config.imageUrls || [],
+        video_url: config.videoUrl || null,
+        reporter_name: reporterName,
+        status: "completed", 
+        // Note: Without the backend screenshot, we just mark it completed immediately
+      };
+
+      const { data, error } = await supabase
+        .from("clippings")
+        .insert(rowToInsert)
+        .select()
+        .single();
+
+      if (error) {
+        throw error;
+      }
+
+      const generation: Generation = {
+        id: data.id,
+        userId: data.user_id,
+        config: config,
+        status: "completed",
+        createdAt: data.created_at,
+      };
+
+      return { success: true, data: generation, message: "Created successfully" };
+
+    } catch (e: any) {
+      log("Generation Failed", e.message);
+      throw e;
+    }
   },
 
   async getAll(page = 1, pageSize = 10): Promise<PaginatedResponse<Generation>> {
-    const res = await api.get("/generate/", {
-      params: { page, pageSize },
-      timeout: 15_000,
-    });
-    return res.data;
+    const { data: userData } = await supabase.auth.getUser();
+    if (!userData.user) throw new Error("Not authenticated");
+
+    const start = (page - 1) * pageSize;
+    const end = start + pageSize - 1;
+
+    const { data, count, error } = await supabase
+      .from("clippings")
+      .select("*", { count: 'exact' })
+      .eq("user_id", userData.user.id)
+      .order("created_at", { ascending: false })
+      .range(start, end);
+
+    if (error) throw error;
+
+    const generations: Generation[] = (data || []).map(row => ({
+      id: row.id,
+      userId: row.user_id,
+      config: {
+        headline: row.headline,
+        articleContent: row.content,
+        imageUrls: row.image_urls || (row.image_url ? [row.image_url] : []),
+        videoUrl: row.video_url,
+        reporterName: row.reporter_name,
+        // Fill other required fields with defaults
+        language: "en",
+        tone: "formal",
+        templateId: "classic-split",
+        publicationName: "Spot News 24x7",
+        publicationDate: new Date(row.created_at).toLocaleDateString(),
+        layoutColumns: 1
+      },
+      status: row.status as any,
+      createdAt: row.created_at,
+    }));
+
+    return {
+      data: generations,
+      total: count || 0,
+      page,
+      pageSize,
+      totalPages: Math.ceil((count || 0) / pageSize)
+    };
   },
 
   /**
@@ -91,13 +177,40 @@ export const generationService = {
    * Short 15-second timeout per poll — if it fails we retry next interval.
    */
   async getById(id: string): Promise<ApiResponse<Generation>> {
-    const res = await api.get(`/generate/${id}`, { timeout: 15_000 });
-    return res.data;
+    return this.getByIdPublic(id);
   },
 
   async getByIdPublic(id: string): Promise<ApiResponse<Generation>> {
-    const res = await api.get(`/generate/${id}/public`, { timeout: 15_000 });
-    return res.data;
+    const { data, error } = await supabase
+      .from("clippings")
+      .select("*")
+      .eq("id", id)
+      .single();
+
+    if (error) throw error;
+
+    const generation: Generation = {
+      id: data.id,
+      userId: data.user_id,
+      config: {
+        headline: data.headline,
+        articleContent: data.content,
+        imageUrls: data.image_urls || (data.image_url ? [data.image_url] : []),
+        videoUrl: data.video_url,
+        reporterName: data.reporter_name,
+        // Defaults
+        language: "en",
+        tone: "formal",
+        templateId: "classic-split",
+        publicationName: "Spot News 24x7",
+        publicationDate: new Date(data.created_at).toLocaleDateString(),
+        layoutColumns: 1
+      },
+      status: data.status as any,
+      createdAt: data.created_at,
+    };
+
+    return { success: true, data: generation, message: "Fetched successfully" };
   },
 
   async delete(id: string): Promise<ApiResponse<void>> {

@@ -63,8 +63,9 @@ export interface GenerationConfig {
   borderColour?: string;
   headingBgColour?: string;
   showInnerBorders?: boolean;
+  reporterName?: string;
+  reporterImage?: string;
 }
-
 export interface Generation {
   id: string;
   userId: string;
