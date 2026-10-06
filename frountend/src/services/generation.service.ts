@@ -91,7 +91,7 @@ export const generationService = {
       const rowToInsert = {
         user_id: userId,
         headline: config.headline,
-        content: config.articleContent,
+        article_content: config.articleContent,
         image_url: config.imageUrls?.[0] || config.imageUrl || null,
         image_urls: config.imageUrls || [],
         video_url: config.videoUrl || null,
@@ -147,7 +147,7 @@ export const generationService = {
       userId: row.user_id,
       config: {
         headline: row.headline,
-        articleContent: row.content,
+        articleContent: row.article_content,
         imageUrls: row.image_urls || (row.image_url ? [row.image_url] : []),
         videoUrl: row.video_url,
         reporterName: row.reporter_name,
@@ -194,7 +194,7 @@ export const generationService = {
       userId: data.user_id,
       config: {
         headline: data.headline,
-        articleContent: data.content,
+        articleContent: data.article_content,
         imageUrls: data.image_urls || (data.image_url ? [data.image_url] : []),
         videoUrl: data.video_url,
         reporterName: data.reporter_name,
