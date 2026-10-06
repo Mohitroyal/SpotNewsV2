@@ -1,0 +1,12 @@
+[
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "com.newscraft.mobile",
+      "sha256_cert_fingerprints": [
+        "D0:58:CB:F2:37:EC:0A:DA:66:A6:68:52:21:BA:6D:7B:C5:61:2C:D3:6D:2C:A7:A2:22:EE:CD:AB:32:E3:86:5C"
+      ]
+    }
+  }
+]

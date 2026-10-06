@@ -1,0 +1,463 @@
+import { BrowserRouter as Router, Routes, Route, Navigate, Link, useNavigate } from 'react-router-dom';
+import { useState, useEffect } from 'react';
+import { Settings, Plus, Newspaper, Globe } from 'lucide-react';
+// import { useTranslation } from './lib/i18n';
+import mastheadLogo from './assets/rti_express_logo.png';
+import watermarkLogo from './assets/rti_express_watermark.png';
+import { SplashScreen } from './screens/SplashScreen';
+import { LoginScreen } from './screens/LoginScreen';
+import { SignupScreen } from './screens/SignupScreen';
+import { DashboardScreen } from './screens/DashboardScreen';
+import { GenerateScreen } from './screens/GenerateScreen';
+import { TemplatesScreen } from './screens/TemplatesScreen';
+import { NewsScreen } from './screens/NewsScreen';
+import { SettingsScreen } from './screens/SettingsScreen';
+import { ProfileSettingsScreen } from './screens/ProfileSettingsScreen';
+import { PreviewScreen } from './screens/PreviewScreen';
+import { LoginOtpScreen } from './screens/LoginOtpScreen';
+import { VerifyOtpScreen } from './screens/VerifyOtpScreen';
+import { CreatePasswordScreen } from './screens/CreatePasswordScreen';
+import { ForgotPasswordScreen } from './screens/ForgotPasswordScreen';
+import { AdminScreen } from './screens/AdminScreen';
+import { FeedScreen } from './screens/FeedScreen';
+import { StatsScreen } from './screens/StatsScreen';
+import { useAuthStore, useUIStore, getReporterPhoto, getReporterName } from './store';
+import { supabase } from './lib/supabase';
+import { App as CapacitorApp } from '@capacitor/app';
+import { Browser } from '@capacitor/browser';
+
+import { ErrorBoundary } from './ErrorBoundary';
+
+// Mobile Layout with Bottom Navigation
+const MainLayout = ({ children }: { children: React.ReactNode }) => {
+  // const { t } = useTranslation();
+  const { user } = useAuthStore();
+  const isFullScreenFeed = useUIStore((state) => state.isFullScreenFeed);
+  const userAvatar = getReporterPhoto(user?.email) || user?.avatarUrl || (user as any)?.user_metadata?.avatar_url || (user as any)?.user_metadata?.picture || (user as any)?.avatar_url;
+  const userName = getReporterName(user?.email) || (user as any)?.user_metadata?.full_name || (user as any)?.user_metadata?.name || user?.full_name || user?.firstName || 'Reporter';
+  const userInitials = userName.split(' ').filter(Boolean).map((n: string) => n[0]).join('').substring(0, 2).toUpperCase() || 'RP';
+
+  const headerBg = '#015BB3';
+
+  return (
+    <div className="flex flex-col h-screen bg-[#EEF3F8] transition-colors duration-300 relative font-sans">
+
+      {/* ══ RTI Express background watermark ══ */}
+      <div
+        aria-hidden="true"
+        style={{
+          position: 'fixed',
+          top: '50%',
+          left: '50%',
+          transform: 'translate(-50%, -50%) rotate(-30deg)',
+          zIndex: 0,
+          pointerEvents: 'none',
+          width: '100vw',
+          maxWidth: '500px',
+          opacity: 0.1,
+          mixBlendMode: 'multiply'
+        }}
+      >
+        <img
+          src={watermarkLogo}
+          alt=""
+          draggable={false}
+          style={{
+            width: '100%',
+            height: 'auto',
+            display: 'block',
+            userSelect: 'none',
+            WebkitUserSelect: 'none'
+          }}
+        />
+      </div>
+
+
+      {/* Main Content Area — masthead scrolls with content on all devices */}
+      <main
+        className="flex-1 flex flex-col overflow-y-auto pb-[92px]"
+        style={{
+          position: 'relative',
+          zIndex: 3,
+          WebkitOverflowScrolling: 'touch',
+          overscrollBehavior: 'contain'
+        }}
+      >
+        {/* ── Masthead (scrolls with page) ── */}
+        {!isFullScreenFeed && (<header className="w-full flex flex-col pt-safe" style={{ background: '#EAF2FB' }}>
+          <div style={{ background: headerBg, paddingBottom: '12px' }}>
+            {/* ── Main Header Content ── */}
+            <div className="w-full flex items-start justify-between px-3.5 pt-3.5 pb-2 gap-2">
+              {/* Left Column: Logo + Title + Date below */}
+              <div className="flex flex-col gap-1 shrink-0">
+                <div className="flex items-center gap-2">
+                  {/* Logo box */}
+                  <div className="rounded-[8px] flex items-center justify-center h-[46px] overflow-hidden bg-white p-1 border border-[#0B56A6]/20 shrink-0">
+                    <img src={mastheadLogo} alt="Spot News Logo" className="h-full w-auto object-contain" style={{ maxWidth: '92px', borderRadius: '4px' }} />
+                  </div>
+                  <div className="flex flex-col justify-center">
+                    <span className="font-bold text-white text-[23px] leading-[1.15] tracking-wide" style={{ fontFamily: "'Georgia', serif" }}>
+                      Spot News<br/>24x7
+                    </span>
+                  </div>
+                </div>
+
+                {/* Date text (italic serif font) */}
+                <span className="text-white/90 text-[11.5px] tracking-wide font-medium font-serif italic pt-1 whitespace-nowrap">
+                  {new Date().toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
+                </span>
+              </div>
+
+              {/* Right Column: Profile Avatar -> Reporter Name UP */}
+              <div className="flex flex-col items-end text-right pt-0.5 shrink-0">
+                <Link to="/settings" className="flex flex-col items-center gap-0.5 active:scale-95 transition-transform" title="Reporter Profile">
+                  {userAvatar ? (
+                    <img
+                      src={userAvatar}
+                      alt="Reporter Profile"
+                      className="w-11 h-11 rounded-full object-cover border-2 border-[#CC1E1E] shadow-sm bg-white"
+                    />
+                  ) : (
+                    <div className="w-11 h-11 rounded-full bg-[#1e3a5f] border-2 border-[#CC1E1E] flex items-center justify-center text-white font-bold text-sm shadow-sm">
+                      {userInitials}
+                    </div>
+                  )}
+                  <div className="flex flex-col items-center leading-tight text-center mt-1">
+                    <span className="text-white/80 text-[8.5px] uppercase tracking-wider font-extrabold">REPORTER:</span>
+                    <span className="text-white text-[9.5px] uppercase tracking-wider font-extrabold">{userName}</span>
+                  </div>
+                </Link>
+              </div>
+            </div>
+          </div>
+
+          {/* ── Smooth Wave Divider Transition ── */}
+          <div style={{ width: '100%', overflow: 'hidden', lineHeight: 0, background: '#EAF2FB', position: 'relative' }}>
+            <svg
+              viewBox="0 0 1440 240"
+              preserveAspectRatio="none"
+              style={{ position: 'relative', display: 'block', width: '100%', height: '52px' }}
+            >
+              <path
+                d="M0,0 L1440,0 L1440,100 C1100,240 500,10 0,170 Z"
+                fill={headerBg}
+              />
+            </svg>
+
+            {/* Wanted reporters in the middle inside the wave in red */}
+            <div
+              style={{
+                position: 'absolute',
+                top: '2px',
+                left: 0,
+                width: '100%',
+                display: 'flex',
+                justifyContent: 'center',
+                alignItems: 'center',
+                zIndex: 2,
+                lineHeight: 1,
+                pointerEvents: 'auto'
+              }}
+            >
+              <a
+                href="tel:7668886666"
+                style={{
+                  color: '#FF3838',
+                  fontSize: '13px',
+                  fontWeight: 900,
+                  letterSpacing: '0.1px',
+                  fontFamily: "'Inter', sans-serif",
+                  textDecoration: 'none',
+                  display: 'inline-block',
+                  textShadow: '0 1px 2px rgba(0,0,0,0.5)'
+                }}
+              >
+                Wanted reporters:-7668886666
+              </a>
+            </div>
+          </div>
+        </header>)}
+
+        <ErrorBoundary>
+          {children}
+        </ErrorBoundary>
+      </main>
+
+
+      {!isFullScreenFeed && (<nav className="fixed bottom-0 left-0 right-0 w-full pb-safe flex items-center justify-around h-[68px] z-30 shadow-md border-t border-[#E2EDF8]" style={{ background: '#FFFFFF' }}>
+        {/* 1. e-paper Tab */}
+        <a
+          href="https://www.fouziyapublications.com/"
+          target="_blank"
+          rel="noopener noreferrer"
+          onClick={async (e) => {
+            e.preventDefault();
+            try {
+              await Browser.open({ url: 'https://www.fouziyapublications.com/' });
+            } catch {
+              window.open('https://www.fouziyapublications.com/', '_blank');
+            }
+          }}
+          className="flex flex-col items-center justify-center flex-1 h-full pt-1 active:scale-95 transition-transform no-underline"
+          style={{ textDecoration: 'none' }}
+        >
+          <Newspaper className="w-6 h-6" style={{ color: '#0C447C' }} />
+          <span className="text-[11px] font-bold mt-1" style={{ color: '#0C447C' }}>
+            e-paper
+          </span>
+        </a>
+
+        {user?.role === 'reporter' ? (
+          <>
+            {/* 2. News Tab (Reporters) */}
+            <Link to="/" className="flex flex-col items-center justify-center flex-1 h-full pt-1 active:scale-95 transition-transform">
+              <Globe className="w-6 h-6" style={{ color: '#0C447C' }} />
+              <span className="text-[11px] font-bold mt-1" style={{ color: '#0C447C' }}>News</span>
+            </Link>
+
+            {/* 3. Center Raised Button (Create for reporters) */}
+            <Link to="/generate" className="flex flex-col items-center justify-center flex-1 relative h-full active:scale-95 transition-transform">
+              <div className="absolute -top-5 w-[54px] h-[54px] rounded-full flex items-center justify-center" style={{ background: '#FFFFFF', border: '2.5px solid #CC1E1E', padding: '3px', boxShadow: '0 4px 12px rgba(204,30,30,0.22)' }}>
+                <div className="w-full h-full rounded-full flex items-center justify-center" style={{ background: '#CC1E1E' }}>
+                  <Plus className="w-7 h-7 text-white" strokeWidth={2.8} />
+                </div>
+              </div>
+              <span className="text-[11px] font-bold mt-[26px]" style={{ color: '#CC1E1E' }}>Create</span>
+            </Link>
+
+            {/* 4. Stats Tab (Reporters) */}
+            <Link to="/stats" className="flex flex-col items-center justify-center flex-1 h-full pt-1 active:scale-95 transition-transform">
+              <svg className="w-6 h-6" style={{ color: '#0C447C' }} fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" /></svg>
+              <span className="text-[11px] font-bold mt-1" style={{ color: '#0C447C' }}>Stats</span>
+            </Link>
+          </>
+        ) : (
+          /* 2. Center Raised Button (News for users) */
+          <Link to="/" className="flex flex-col items-center justify-center flex-1 relative h-full active:scale-95 transition-transform">
+            <div className="absolute -top-5 w-[54px] h-[54px] rounded-full flex items-center justify-center" style={{ background: '#FFFFFF', border: '2.5px solid #0C447C', padding: '3px', boxShadow: '0 4px 12px rgba(12,68,124,0.22)' }}>
+              <div className="w-full h-full rounded-full flex items-center justify-center" style={{ background: '#0C447C' }}>
+                <Globe className="w-7 h-7 text-white" strokeWidth={2.5} />
+              </div>
+            </div>
+            <span className="text-[11px] font-bold mt-[26px]" style={{ color: '#0C447C' }}>News</span>
+          </Link>
+        )}
+
+        {/* 5. Settings Tab */}
+        <Link to="/settings" className="flex flex-col items-center justify-center flex-1 h-full pt-1 active:scale-95 transition-transform">
+          <Settings className="w-6 h-6" style={{ color: '#0C447C' }} />
+          <span className="text-[11px] font-bold mt-1" style={{ color: '#0C447C' }}>
+            Settings
+          </span>
+        </Link>
+      </nav>)}
+    </div>
+  );
+};
+
+import { GoogleAuth } from '@codetrix-studio/capacitor-google-auth';
+
+function AppUrlListener() {
+  const navigate = useNavigate();
+  useEffect(() => {
+    const handleUrlOpen = (ev: Event) => {
+      const customEv = ev as CustomEvent;
+      const type = customEv.detail?.type;
+      if (type === 'recovery') {
+        navigate('/reset-password');
+      }
+    };
+    window.addEventListener('appUrlOpenRoute', handleUrlOpen);
+    return () => window.removeEventListener('appUrlOpenRoute', handleUrlOpen);
+  }, [navigate]);
+  return null;
+}
+
+function App() {
+  const [isInitializing, setIsInitializing] = useState(true);
+  const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
+  const user = useAuthStore((state) => state.user);
+  const login = useAuthStore((state) => state.login);
+  const updateUser = useAuthStore((state) => state.updateUser);
+  const setPendingCropImageSrc = useUIStore((state) => state.setPendingCropImageSrc);
+
+
+  useEffect(() => {
+    // Initialize Google Auth plugin (Web only, native handles it via config/strings.xml)
+    const isWeb = true;
+    if (isWeb) {
+      try {
+        GoogleAuth.initialize({
+          clientId: '831106920430-h8h1nj7a5j2iirgki34ve8ariuj8uroi.apps.googleusercontent.com',
+          scopes: ['profile', 'email'],
+          grantOfflineAccess: true,
+        });
+      } catch (e) {
+        console.warn("GoogleAuth initialize error:", e);
+      }
+    }
+
+    // Listen for deep links (e.g. Supabase OAuth callback)
+    CapacitorApp.addListener('appUrlOpen', async (event) => {
+      if (event.url.includes('access_token')) {
+        await Browser.close().catch(() => { });
+        const urlObj = new URL(event.url);
+        // Supabase passes tokens in the hash like #access_token=...&refresh_token=...
+        const hashStr = urlObj.hash.startsWith('#') ? urlObj.hash.substring(1) : urlObj.hash;
+        const params = new URLSearchParams(hashStr);
+        const access_token = params.get('access_token');
+        const refresh_token = params.get('refresh_token');
+        const type = urlObj.searchParams.get('type') || params.get('type');
+
+        if (access_token && refresh_token) {
+          const { data } = await supabase.auth.setSession({
+            access_token,
+            refresh_token,
+          });
+          if (data.session) {
+            login(data.session.user as any, data.session.access_token);
+            if (type === 'recovery') {
+              window.dispatchEvent(new CustomEvent('appUrlOpenRoute', { detail: { type: 'recovery' } }));
+            }
+          }
+        }
+      }
+    });
+
+    // Listen for appRestoredResult to handle Android background killing during camera/gallery intents
+    CapacitorApp.addListener('appRestoredResult', (data: any) => {
+      console.log('App restored result:', data);
+      if (data && data.pluginId === 'Camera' && data.methodName === 'pickImages') {
+        if (data.data && data.data.photos && data.data.photos.length > 0) {
+          const webPath = data.data.photos[0].webPath;
+          if (webPath) {
+            setPendingCropImageSrc(webPath);
+          }
+        }
+      }
+    });
+
+    const { data: authListener } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (session) {
+        const email = session.user?.email;
+        const savedName = getReporterName(email);
+        const savedPhoto = getReporterPhoto(email);
+        const userObj = {
+          ...session.user,
+          full_name: savedName || (session.user as any)?.user_metadata?.full_name || (session.user as any)?.user_metadata?.name || (session.user as any)?.full_name || '',
+          firstName: savedName || (session.user as any)?.user_metadata?.full_name || '',
+          avatarUrl: savedPhoto || (session.user as any)?.user_metadata?.avatar_url || (session.user as any)?.user_metadata?.picture || '',
+        };
+        
+        // Publish refreshed credentials immediately; profile lookup must not
+        // leave API requests using the previous (possibly expired) token.
+        login(userObj as any, session.access_token);
+        const fetchRole = async () => {
+          try {
+            const { data, error } = await supabase
+              .from('profiles')
+              .select('role')
+              .eq('id', session.user.id)
+              .single();
+            if (!error && data?.role && useAuthStore.getState().user?.id === session.user.id) {
+              updateUser({ role: data.role });
+            }
+          } catch (e) {
+            console.error(e);
+          }
+        };
+        fetchRole();
+      }
+    });
+
+    // Initial splash screen dismiss timer (runs once on cold start only)
+    const timer = setTimeout(() => setIsInitializing(false), 1200);
+    return () => {
+      clearTimeout(timer);
+      authListener.subscription.unsubscribe();
+      CapacitorApp.removeAllListeners();
+    };
+  }, []);
+
+  if (isInitializing) return <SplashScreen />;
+
+  return (
+    <Router>
+      <AppUrlListener />
+      <Routes>
+        <Route
+          path="/login"
+          element={!isAuthenticated ? <LoginScreen /> : <Navigate to="/" />}
+        />
+        <Route
+          path="/login/otp"
+          element={!isAuthenticated ? <LoginOtpScreen /> : <Navigate to="/" />}
+        />
+        <Route
+          path="/login/verify"
+          element={!isAuthenticated ? <VerifyOtpScreen /> : <Navigate to="/" />}
+        />
+        <Route
+          path="/signup"
+          element={!isAuthenticated ? <SignupScreen /> : <Navigate to="/" />}
+        />
+        <Route
+          path="/create-password"
+          element={<CreatePasswordScreen />}
+        />
+        <Route
+          path="/reset-password"
+          element={<CreatePasswordScreen />}
+        />
+        <Route
+          path="/forgot-password"
+          element={<ForgotPasswordScreen />}
+        />
+
+        {/* ── Admin Route (standalone, only for verified admins) ── */}
+        <Route
+          path="/admin"
+          element={
+            !isAuthenticated ? (
+              <Navigate to="/login" replace />
+            ) : (
+              <AdminScreen />
+            )
+          }
+        />
+
+        <Route
+          path="/preview/:id"
+          element={isAuthenticated ? <PreviewScreen /> : <Navigate to="/login" />}
+        />
+
+        <Route
+          path="/*"
+          element={
+            isAuthenticated ? (
+              <MainLayout>
+                <Routes>
+                  <Route path="/" element={<FeedScreen />} />
+                  <Route path="/stats" element={user?.role === 'reporter' ? <StatsScreen /> : <Navigate to="/" />} />
+                  <Route path="/dashboard" element={<DashboardScreen />} />
+                  <Route path="/generate" element={user?.role === 'reporter' ? <GenerateScreen /> : <Navigate to="/" />} />
+                  <Route path="/templates" element={<TemplatesScreen />} />
+                  <Route path="/news" element={<NewsScreen />} />
+                  <Route path="/history" element={<NewsScreen />} />
+                  <Route path="/settings" element={<SettingsScreen />} />
+                  <Route path="/settings/profile" element={<ProfileSettingsScreen />} />
+                  <Route path="*" element={<Navigate to="/" />} />
+                </Routes>
+              </MainLayout>
+            ) : (
+              <Navigate to="/login" />
+            )
+          }
+        />
+      </Routes>
+    </Router>
+  );
+}
+
+export default App;
+
