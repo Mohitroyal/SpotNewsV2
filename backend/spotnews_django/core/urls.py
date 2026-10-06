@@ -10,6 +10,8 @@ from .daily_newspaper_views import (
     serve_edition_pdf
 )
 
+from .clipping_views import create_clipping, list_clippings
+
 urlpatterns = [
     path('health', health_check, name='health_check'),
     path('health/msg91', health_msg91, name='health_msg91'),
@@ -33,4 +35,9 @@ urlpatterns = [
 
     # Dedicated media server endpoint for the generated PDF
     path('editions/<str:filename>', serve_edition_pdf, name='serve_edition_pdf'),
+    
+    # Fast-API style Individual Clipping Generation Endpoints
+    path('v1/generate', create_clipping, name='create_clipping'),
+    path('v1/generate/', list_clippings, name='list_clippings'),
 ]
+

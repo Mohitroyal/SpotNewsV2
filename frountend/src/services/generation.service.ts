@@ -73,55 +73,23 @@ export const generationService = {
     log("Generation Started", `template=${config.templateId} lang=${config.language} images=${(config as any).imageUrls?.length ?? 0}`);
     
     try {
-      const { data: userData } = await supabase.auth.getUser();
-      const userId = userData.user?.id;
-
-      if (!userId) {
-        throw new Error("User not authenticated");
-      }
-
-      const { data: profile } = await supabase
-        .from("profiles")
-        .select("full_name")
-        .eq("id", userId)
-        .single();
-        
-      const reporterName = config.reporterName || profile?.full_name || 'Reporter';
-
-      const rowToInsert = {
-        user_id: userId,
+      // Send the clipping configuration directly to the Django backend endpoint
+      const res = await api.post(`/v1/generate`, {
         headline: config.headline,
         article_content: config.articleContent,
         image_url: config.imageUrls?.[0] || config.imageUrl || null,
         image_urls: config.imageUrls || [],
-        custom_layout: {
-          videoUrl: config.videoUrl,
-          reporterName: reporterName
-        },
-        status: "completed", 
-        // Note: Without the backend screenshot, we just mark it completed immediately
-      };
-
-      const { data, error } = await supabase
-        .from("clippings")
-        .insert(rowToInsert)
-        .select()
-        .single();
-
-      if (error) {
-        throw error;
-      }
-
-      const generation: Generation = {
-        id: data.id,
-        userId: data.user_id,
-        config: config,
-        status: "completed",
-        createdAt: data.created_at,
-      };
-
-      return { success: true, data: generation, message: "Created successfully" };
-
+        template_id: config.templateId,
+        language: config.language,
+        layout_columns: config.layoutColumns,
+        publication_name: config.publicationName,
+        reporter_name: config.reporterName,
+        // Include any other required fields for the backend
+      }, {
+        timeout: 0 // No timeout, wait for processing to start
+      });
+      
+      return res.data;
     } catch (e: any) {
       log("Generation Failed", e.message);
       throw e;
