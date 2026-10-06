@@ -94,8 +94,10 @@ export const generationService = {
         article_content: config.articleContent,
         image_url: config.imageUrls?.[0] || config.imageUrl || null,
         image_urls: config.imageUrls || [],
-        video_url: config.videoUrl || null,
-        reporter_name: reporterName,
+        custom_layout: {
+          videoUrl: config.videoUrl,
+          reporterName: reporterName
+        },
         status: "completed", 
         // Note: Without the backend screenshot, we just mark it completed immediately
       };
@@ -149,8 +151,8 @@ export const generationService = {
         headline: row.headline,
         articleContent: row.article_content,
         imageUrls: row.image_urls || (row.image_url ? [row.image_url] : []),
-        videoUrl: row.video_url,
-        reporterName: row.reporter_name,
+        videoUrl: row.custom_layout?.videoUrl,
+        reporterName: row.custom_layout?.reporterName,
         // Fill other required fields with defaults
         language: "en",
         tone: "formal",
@@ -196,8 +198,8 @@ export const generationService = {
         headline: data.headline,
         articleContent: data.article_content,
         imageUrls: data.image_urls || (data.image_url ? [data.image_url] : []),
-        videoUrl: data.video_url,
-        reporterName: data.reporter_name,
+        videoUrl: data.custom_layout?.videoUrl,
+        reporterName: data.custom_layout?.reporterName,
         // Defaults
         language: "en",
         tone: "formal",
