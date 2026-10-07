@@ -1,7 +1,7 @@
 import os
 import shutil
 from supabase import create_client, Client
-from app.core.config import settings
+from django.conf import settings
 
 
 def _supabase_public_url(destination_path: str) -> str:
@@ -10,8 +10,8 @@ def _supabase_public_url(destination_path: str) -> str:
     Pattern: https://<project>.supabase.co/storage/v1/object/public/<bucket>/<path>
     This is the only URL format that Playwright can load externally.
     """
-    base = (settings.SUPABASE_URL or "https://placeholder-project.supabase.co").rstrip("/")
-    bucket = settings.SUPABASE_STORAGE_BUCKET or "newscraft"
+    base = (getattr(settings, 'SUPABASE_URL', None) or "https://placeholder-project.supabase.co").rstrip("/")
+    bucket = getattr(settings, 'SUPABASE_STORAGE_BUCKET', "newscraft")
     return f"{base}/storage/v1/object/public/{bucket}/{destination_path}"
 
 
@@ -30,7 +30,7 @@ def _rewrite_to_absolute(url: str) -> str:
         return url
 
     # Relative path — make it absolute
-    if settings.SUPABASE_URL:
+    if getattr(settings, 'SUPABASE_URL', None):
         # Try to map /static/uploads/<filename> → Supabase uploads/<filename>
         if "/static/uploads/" in url:
             filename = url.split("/static/uploads/")[-1]
@@ -42,13 +42,15 @@ def _rewrite_to_absolute(url: str) -> str:
 
 class StorageService:
     def __init__(self):
-        if settings.SUPABASE_URL and settings.SUPABASE_SERVICE_ROLE_KEY:
+        supabase_url = getattr(settings, 'SUPABASE_URL', None)
+        supabase_key = getattr(settings, 'SUPABASE_SERVICE_ROLE_KEY', None)
+        if supabase_url and supabase_key:
             self.supabase: Client = create_client(
-                settings.SUPABASE_URL, settings.SUPABASE_SERVICE_ROLE_KEY
+                supabase_url, supabase_key
             )
         else:
             self.supabase = None
-        self.bucket = settings.SUPABASE_STORAGE_BUCKET
+        self.bucket = getattr(settings, 'SUPABASE_STORAGE_BUCKET', "newscraft")
 
     def validate_storage(self):
         """
