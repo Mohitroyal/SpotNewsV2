@@ -7,10 +7,13 @@ from django.db import connection
 from django.views.decorators.csrf import csrf_exempt
 from .views import check_jwt
 
+from django.core.files.storage import FileSystemStorage
+import os
+
 # Import services once adapted for Django
 # from .services.grok_service import grok_service
 # from .services.render_service import render_service
-# from .services.storage_service import storage_service
+from .services.storage_service import storage_service
 
 def run_clipping_generation_background(clipping_id, data, user_id):
     """
@@ -193,5 +196,49 @@ def list_clippings(request):
         })
         
     except Exception as e:
-        print(f"Error fetching clippings: {e}")
         return JsonResponse({"detail": str(e)}, status=500)
+
+@csrf_exempt
+def upload_image(request):
+    """
+    POST /api/v1/uploads/image
+    Upload an image for a clipping or profile logo
+    """
+    is_valid, error_response = check_jwt(request)
+    if not is_valid:
+        return error_response
+
+    if request.method != 'POST':
+        return JsonResponse({"detail": "Method not allowed"}, status=405)
+
+    if 'file' not in request.FILES:
+        return JsonResponse({"detail": "No file uploaded"}, status=400)
+
+    upload_file = request.FILES['file']
+    
+    # 50 MB limit
+    if upload_file.size > 50 * 1024 * 1024:
+        return JsonResponse({"detail": "File exceeds maximum allowed size of 50MB."}, status=413)
+
+    fs = FileSystemStorage()
+    filename = fs.save(f"temp_{uuid.uuid4().hex}_{upload_file.name}", upload_file)
+    file_path = fs.path(filename)
+
+    try:
+        ext = os.path.splitext(upload_file.name)[1].lower() or '.jpg'
+        dest_path = f"uploads/{uuid.uuid4().hex}{ext}"
+        
+        url = storage_service.upload_file(file_path, dest_path, upload_file.content_type)
+        return JsonResponse({
+            "success": True,
+            "url": url,
+            "data": {"url": url},
+            "message": "Image uploaded successfully"
+        })
+    except Exception as e:
+        print(f"Error uploading image: {e}")
+        return JsonResponse({"detail": str(e)}, status=500)
+    finally:
+        if os.path.exists(file_path):
+            os.remove(file_path)
+
