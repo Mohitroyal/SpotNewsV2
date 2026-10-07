@@ -10,9 +10,11 @@ from .views import check_jwt
 from django.core.files.storage import FileSystemStorage
 import os
 
+import asyncio
+
 # Import services once adapted for Django
-# from .services.grok_service import grok_service
-# from .services.render_service import render_service
+from .services.grok_service import grok_service
+from .services.render_service import render_service
 from .services.storage_service import storage_service
 
 def run_clipping_generation_background(clipping_id, data, user_id):
@@ -23,31 +25,75 @@ def run_clipping_generation_background(clipping_id, data, user_id):
     try:
         print(f"[BACKGROUND] Started clipping generation for {clipping_id}")
         
-        # 1. Image Processing (if required)
-        
-        # 2. Text Translation & Formatting via Grok
-        # formatted_data = grok_service.format_article(...)
-        
-        # 3. HTML Rendering via Jinja2
-        # html = render_service.render_html(...)
-        
-        # 4. Screenshot / PDF Generation via Playwright
-        # render_service.generate_clipping_assets(...)
+        async def _generate():
+            content = data.get("article_content", "")
+            language = data.get("language", "te")
+            image_urls = data.get("image_urls", [])
+            image_url = data.get("image_url", "")
+            image_count = len(image_urls) if image_urls else (1 if image_url else 0)
+            
+            # 2. Text Translation & Formatting via Grok
+            formatted_data = await grok_service.format_article(content, language, image_count)
+            
+            render_data = {
+                **formatted_data,
+                "id": clipping_id,
+                "article_content": content,
+                "headline": data.get("headline") or formatted_data.get("headline"),
+                "publication_name": data.get("publication_name", "Newsflow"),
+                "publication_date": data.get("publication_date", ""),
+                "image_url": image_url,
+                "image_urls": image_urls,
+                "language": language,
+                "layout_columns": data.get("layout_columns", "auto"),
+                "font_family": data.get("font_family", "playfair"),
+                "logo_id": data.get("logo_id", data.get("template_id", "classic")),
+                "is_premium": False,
+                "show_watermark": data.get("show_watermark", True),
+                "image_layout": data.get("image_layout", "default"),
+                "heading_bg": data.get("heading_bg", None),
+                "border_color": data.get("border_color", None),
+                "primary_color": data.get("primary_color", None),
+            }
+            
+            # 3. HTML Rendering via Jinja2
+            template_id = data.get("template_id", "classic")
+            html = await render_service.render_html(render_data, f"{template_id}.html")
+            
+            # 4. Screenshot / PDF Generation via Playwright
+            temp_png = f"temp_{clipping_id}.png"
+            temp_pdf = f"temp_{clipping_id}.pdf"
+            await render_service.generate_clipping_assets(html, temp_png, temp_pdf)
+            
+            return temp_png, temp_pdf
+            
+        # Run async code inside the synchronous thread
+        temp_png, temp_pdf = asyncio.run(_generate())
         
         # 5. Upload to Supabase Storage
-        # png_url = storage_service.upload_file(...)
+        import time
+        timestamp = int(time.time())
+        png_url = storage_service.upload_file(temp_png, f"clippings/{clipping_id}_{timestamp}.png")
+        pdf_url = storage_service.upload_file(temp_pdf, f"clippings/{clipping_id}_{timestamp}.pdf")
+        
+        if os.path.exists(temp_png):
+            os.remove(temp_png)
+        if os.path.exists(temp_pdf):
+            os.remove(temp_pdf)
         
         # 6. Update Database Status to 'completed'
         with connection.cursor() as cursor:
             cursor.execute(
-                "UPDATE clippings SET status = %s, updated_at = NOW() WHERE id = %s",
-                ['completed', clipping_id]
+                "UPDATE clippings SET status = %s, updated_at = NOW(), png_url = %s, pdf_url = %s WHERE id = %s",
+                ['completed', png_url, pdf_url, clipping_id]
             )
             
         print(f"[BACKGROUND] Finished clipping generation for {clipping_id}")
         
     except Exception as e:
         print(f"[BACKGROUND ERROR] Error generating clipping {clipping_id}: {e}")
+        import traceback
+        traceback.print_exc()
         try:
             with connection.cursor() as cursor:
                 cursor.execute(

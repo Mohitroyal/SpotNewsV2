@@ -9,3 +9,6 @@ dj-database-url
 gunicorn
 whitenoise
 supabase
+psutil
+jinja2
+Pillow

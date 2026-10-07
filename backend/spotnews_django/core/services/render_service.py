@@ -9,7 +9,7 @@ from jinja2 import Environment, FileSystemLoader
 from playwright.async_api import async_playwright
 import asyncio
 from typing import Dict, Any, Optional
-from app.core.config import settings
+# Django-compatible: no FastAPI settings needed
 
 logger = logging.getLogger(__name__)
 
@@ -78,7 +78,10 @@ def _get_chromium_executable() -> Optional[str]:
 
 class RenderService:
     def __init__(self):
-        template_dir = os.path.join(os.path.dirname(__file__), "..", "renderer", "templates")
+        # Try Django templates path first, fallback to renderer path
+        template_dir = os.path.join(os.path.dirname(__file__), "..", "..", "templates", "templates")
+        if not os.path.isdir(template_dir):
+            template_dir = os.path.join(os.path.dirname(__file__), "..", "renderer", "templates")
         self.env = Environment(loader=FileSystemLoader(template_dir))
         # Prevent concurrent Chromium instances on a 512MB RAM free tier
         self.semaphore = asyncio.Semaphore(1)
@@ -130,7 +133,7 @@ class RenderService:
         # 2b. Auto-extract summary and key takeaways if missing
         if not data.get("summary") or not data.get("bullet_points") or not isinstance(data.get("bullet_points"), list) or len(data.get("bullet_points")) == 0:
             try:
-                from app.services.grok_service import grok_service
+                from core.services.grok_service import grok_service
                 full_sec_text = "\n\n".join(data["sections"])
                 clean_sum, clean_bps = grok_service._extract_summary_and_bullets(full_sec_text)
                 if not data.get("summary") or not str(data.get("summary")).strip():
@@ -168,7 +171,10 @@ class RenderService:
             valid_imgs = [image_url_raw.strip()]
 
         if not valid_imgs:
-            from app.renderer.default_image import get_default_image_data_url
+            try:
+                from core.renderer.default_image import get_default_image_data_url
+            except ImportError:
+                get_default_image_data_url = lambda: ""
             default_icon = get_default_image_data_url()
             data["image_url"] = default_icon
             data["image_urls"] = [default_icon] if default_icon else []
@@ -1956,12 +1962,16 @@ class RenderService:
                                 await route.continue_()
                                 return
                             try:
-                                from app.core.ssrf import validate_url_for_ssrf
-                                is_safe, reason = validate_url_for_ssrf(r_url)
-                                if not is_safe:
-                                    print(f"[SSRF BLOCKED] Chromium request to {r_url} blocked: {reason}")
-                                    await route.abort("blockedbyclient")
-                                    return
+                                try:
+                                    from core.ssrf import validate_url_for_ssrf
+                                except ImportError:
+                                    validate_url_for_ssrf = None
+                                if validate_url_for_ssrf:
+                                    is_safe, reason = validate_url_for_ssrf(r_url)
+                                    if not is_safe:
+                                        print(f"[SSRF BLOCKED] Chromium request to {r_url} blocked: {reason}")
+                                        await route.abort("blockedbyclient")
+                                        return
                             except Exception:
                                 pass
                             await route.continue_()
