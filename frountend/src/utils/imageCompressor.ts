@@ -1,8 +1,8 @@
 /**
  * Image Compressor Utility
  *
- * Automatically compresses oversized images (e.g. > 10MB or exceeding 4096px)
- * to a suitable size fitting strictly under the 10MB limit while maintaining
+ * Automatically compresses oversized images (e.g. > 50MB or exceeding 4096px)
+ * to a suitable size fitting strictly under the 50MB limit while maintaining
  * the highest visual quality possible.
  */
 
@@ -18,12 +18,12 @@ export interface CompressionResult {
 }
 
 /**
- * Compresses an image File or Blob to comfortably fit under the 10 MB limit
+ * Compresses an image File or Blob to comfortably fit under the 50 MB limit
  * and maximum dimensions (default 2560 px), preserving optimal visual quality.
  */
 export async function compressImageToFit(
   file: File | Blob,
-  maxSizeBytes: number = 45 * 1024 * 1024, // 45 MB target ensures it is well under 50 MB
+  maxSizeBytes: number = 50 * 1024 * 1024, // 50 MB target
   maxDimension: number = 8192
 ): Promise<CompressionResult> {
   return new Promise((resolve, reject) => {

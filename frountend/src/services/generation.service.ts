@@ -19,8 +19,8 @@ export async function compressImage(
   maxWidthPx = 3600,
   quality = 1.0
 ): Promise<File> {
-  // If file size is under 15MB, keep 100% full raw uncompressed quality
-  if (file.size < 15 * 1024 * 1024) {
+  // If file size is under 50MB, keep 100% full raw uncompressed quality
+  if (file.size < 50 * 1024 * 1024) {
     log("Raw Image Preserved", `${(file.size / 1024).toFixed(0)} KB - No compression applied`);
     return file;
   }

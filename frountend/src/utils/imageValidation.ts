@@ -2,7 +2,7 @@
  * Image Validation Utility
  *
  * Enforces strict constraints on image uploads in the frontend matching backend security rules:
- * 1. File Size Limit: Max 10 MB (10 * 1024 * 1024 bytes), Min > 0 bytes.
+ * 1. File Size Limit: Max 50 MB (50 * 1024 * 1024 bytes), Min > 0 bytes.
  * 2. Dimension Limit: Max 4096 px width / height.
  * 3. Resolution / Pixel Limit: Max 16,000,000 pixels (16 Megapixels, decompression bomb protection).
  * 4. Allowed Formats: JPEG, PNG, WEBP (image/jpeg, image/png, image/webp).
