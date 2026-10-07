@@ -8,3 +8,4 @@ playwright
 dj-database-url
 gunicorn
 whitenoise
+supabase
