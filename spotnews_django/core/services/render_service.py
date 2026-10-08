@@ -58,7 +58,10 @@ def _get_chromium_executable() -> Optional[str]:
     """
     browsers_path = os.getenv("PLAYWRIGHT_BROWSERS_PATH")
     if not browsers_path:
-        return None  # Local dev — let Playwright find it automatically
+        if os.path.isdir("/opt/render/project/playwright"):
+            browsers_path = "/opt/render/project/playwright"
+        else:
+            return None  # Local dev — let Playwright find it automatically
 
     patterns = [
         os.path.join(browsers_path, "chromium-*/chrome-linux/chrome"),
