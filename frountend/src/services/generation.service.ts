@@ -74,7 +74,7 @@ export const generationService = {
     
     try {
       // Send the clipping configuration directly to the Django backend endpoint
-      const res = await api.post(`/v1/generate`, {
+      const res = await api.post(`/api/v1/generate`, {
         headline: config.headline,
         article_content: config.articleContent,
         image_url: config.imageUrls?.[0] || config.imageUrl || null,
