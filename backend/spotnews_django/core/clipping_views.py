@@ -63,9 +63,9 @@ def run_clipping_generation_background(clipping_id, data, user_id):
             # 4. Screenshot / PDF Generation via Playwright
             temp_png = f"temp_{clipping_id}.png"
             temp_pdf = f"temp_{clipping_id}.pdf"
-            await render_service.generate_clipping_assets(html, temp_png, temp_pdf)
+            hero_box = await render_service.generate_clipping_assets(html, temp_png, temp_pdf)
             
-            return temp_png, temp_pdf
+            return temp_png, temp_pdf, hero_box
             
         # Run async code inside the synchronous thread
         temp_png, temp_pdf, hero_box = asyncio.run(_generate())
