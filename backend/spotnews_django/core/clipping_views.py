@@ -84,7 +84,7 @@ def run_clipping_generation_background(clipping_id, data, user_id):
         # 6. Update Database Status to 'completed'
         with connection.cursor() as cursor:
             cursor.execute(
-                "UPDATE clippings SET status = %s, updated_at = NOW(), png_url = %s, pdf_url = %s WHERE id = %s",
+                "UPDATE clippings SET status = %s, png_url = %s, pdf_url = %s WHERE id = %s",
                 ['completed', png_url, pdf_url, clipping_id]
             )
             
