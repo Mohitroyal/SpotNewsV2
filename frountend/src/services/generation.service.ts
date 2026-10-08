@@ -159,6 +159,13 @@ export const generationService = {
 
     if (error) throw error;
 
+    let customLayoutParsed = data.custom_layout || {};
+    if (typeof data.custom_layout === 'string') {
+      try {
+        customLayoutParsed = JSON.parse(data.custom_layout);
+      } catch (e) {}
+    }
+
     const generation: Generation = {
       id: data.id,
       userId: data.user_id,
@@ -166,8 +173,8 @@ export const generationService = {
         headline: data.headline,
         articleContent: data.article_content,
         imageUrls: data.image_urls || (data.image_url ? [data.image_url] : []),
-        videoUrl: data.custom_layout?.videoUrl,
-        reporterName: data.custom_layout?.reporterName,
+        videoUrl: customLayoutParsed?.videoUrl,
+        reporterName: customLayoutParsed?.reporterName,
         // Defaults
         language: "en",
         tone: "formal",
@@ -178,6 +185,9 @@ export const generationService = {
       },
       status: data.status as any,
       createdAt: data.created_at,
+      stage: customLayoutParsed?.stage,
+      progress: customLayoutParsed?.progress,
+      error: customLayoutParsed?.error,
     };
 
     return { success: true, data: generation, message: "Fetched successfully" };
