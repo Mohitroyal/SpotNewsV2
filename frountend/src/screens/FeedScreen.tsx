@@ -320,33 +320,51 @@ export const FeedScreen: React.FC = () => {
                     className="flex-1 w-full bg-black relative flex items-center justify-center overflow-hidden pb-[56px]"
                     onClick={toggleFullScreenFeed}
                   >
-                    {clip.png_url && (
-                      <div
-                        className="absolute inset-0 opacity-30 scale-110 blur-xl bg-cover bg-center"
-                        style={{ backgroundImage: `url(${clip.png_url})` }}
-                      />
-                    )}
-                    {clip.mp4_url ? (
-                      <video
-                        src={clip.mp4_url}
-                        controls
-                        playsInline
-                        loop
-                        className="w-full h-full object-contain relative z-10 bg-black"
-                      />
-                    ) : clip.png_url ? (
-                      <img
-                        src={clip.png_url}
-                        alt="News clipping"
-                        className="w-full h-full object-contain relative z-10"
-                      />
-                    ) : (
-                      <div className="flex flex-col items-center text-[#6B7A90] relative z-10">
-                        <Newspaper className="w-16 h-16 mb-2 opacity-50" />
-                        <span className="text-sm font-bold opacity-50">No Image Available</span>
-                      </div>
-                    )}
+                    {(() => {
+                      let parsedMp4Url = clip.mp4_url;
+                      if (!parsedMp4Url && clip.custom_layout) {
+                        try {
+                          const layout = typeof clip.custom_layout === 'string' ? JSON.parse(clip.custom_layout) : clip.custom_layout;
+                          parsedMp4Url = layout?.mp4_url;
+                        } catch (e) {}
+                      }
+                      
+                      if (parsedMp4Url) {
+                        return (
+                          <video
+                            src={parsedMp4Url}
+                            controls
+                            playsInline
+                            loop
+                            className="w-full h-full object-contain relative z-10 bg-black"
+                          />
+                        );
+                      } else if (clip.png_url) {
+                        return (
+                          <>
+                            <div
+                              className="absolute inset-0 opacity-30 scale-110 blur-xl bg-cover bg-center"
+                              style={{ backgroundImage: `url(${clip.png_url})` }}
+                            />
+                            <img
+                              src={clip.png_url}
+                              alt="News clipping"
+                              className="w-full h-full object-contain relative z-10"
+                            />
+                          </>
+                        );
+                      } else {
+                        return (
+                          <div className="flex flex-col items-center text-[#6B7A90] relative z-10">
+                            <Newspaper className="w-16 h-16 mb-2 opacity-50" />
+                            <span className="text-sm font-bold opacity-50">No Image Available</span>
+                          </div>
+                        );
+                      }
+                    })()}
                   </div>
+
+
 
                   {/* Bottom Action Bar */}
                   <div className="absolute bottom-0 left-0 right-0 bg-white border-t border-gray-200 z-20 h-[56px] flex items-center justify-between px-3">
