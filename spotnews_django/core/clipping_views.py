@@ -42,8 +42,8 @@ def run_clipping_generation_background(clipping_id, data, user_id):
                 "headline": data.get("headline") or formatted_data.get("headline"),
                 "publication_name": data.get("publication_name", "Newsflow"),
                 "publication_date": data.get("publication_date", ""),
-                "image_url": image_url,
                 "image_urls": image_urls,
+                "video_url": data.get("video_url"),
                 "language": language,
                 "layout_columns": data.get("layout_columns", "auto"),
                 "font_family": data.get("font_family", "playfair"),
@@ -78,6 +78,8 @@ def run_clipping_generation_background(clipping_id, data, user_id):
         
         mp4_url = None
         video_url = data.get("video_url")
+        print(f"[DEBUG VIDEO] video_url: {video_url}")
+        print(f"[DEBUG VIDEO] hero_box: {hero_box}")
         if video_url and hero_box:
             try:
                 import urllib.request

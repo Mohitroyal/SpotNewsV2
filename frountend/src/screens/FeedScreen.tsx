@@ -331,13 +331,34 @@ export const FeedScreen: React.FC = () => {
                       
                       if (parsedMp4Url) {
                         return (
-                          <video
-                            src={parsedMp4Url}
-                            controls
-                            playsInline
-                            loop
-                            className="w-full h-full object-contain relative z-10 bg-black"
-                          />
+                          <div 
+                            className="w-full h-full relative z-10 bg-black group"
+                            onClick={(e) => {
+                              const video = e.currentTarget.querySelector('video');
+                              if (video) {
+                                if (video.paused) {
+                                  video.play();
+                                  e.currentTarget.classList.add('is-playing');
+                                } else {
+                                  video.pause();
+                                  e.currentTarget.classList.remove('is-playing');
+                                }
+                              }
+                            }}
+                          >
+                            <video
+                              src={parsedMp4Url}
+                              playsInline
+                              loop
+                              className="w-full h-full object-contain"
+                            />
+                            {/* Play Button Overlay (hidden when playing) */}
+                            <div className="absolute inset-0 flex items-center justify-center pointer-events-none transition-opacity duration-300 group-[.is-playing]:opacity-0">
+                               <div className="w-16 h-16 bg-white/20 rounded-full flex items-center justify-center backdrop-blur-md border border-white/40 shadow-lg">
+                                   <div className="w-0 h-0 border-t-[12px] border-t-transparent border-l-[20px] border-l-white border-b-[12px] border-b-transparent ml-2"></div>
+                               </div>
+                            </div>
+                          </div>
                         );
                       } else if (clip.png_url) {
                         return (
