@@ -55,6 +55,7 @@ def _get_chromium_executable() -> Optional[str]:
     env-var path differs from the compile-time default.
 
     Returns None on localhost (Playwright will use its own default path).
+    """
     browsers_path = os.getenv("PLAYWRIGHT_BROWSERS_PATH")
     if not browsers_path:
         if os.path.isdir("/opt/render/project/.playwright"):
