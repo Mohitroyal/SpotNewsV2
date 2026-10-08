@@ -158,15 +158,15 @@ def build_newspaper_html(
             color = headline_colors[original_idx % len(headline_colors)]
             
             if is_lead:
-                span_style = "column-span: all; margin-bottom: 15px; border-bottom: 2px solid #D60000; padding-bottom: 10px;"
-                head_style = f"font-size: 36px; font-weight: 900; color: {color}; line-height: 1.15; margin-bottom: 8px; text-align: center;"
-                content_style = "column-count: 3; column-gap: 20px; font-size: 13.5px; line-height: 1.55; text-align: justify; color: #111;"
-                img_style = "width: 100%; max-height: 350px; object-fit: cover; break-inside: avoid; -webkit-column-break-inside: avoid; page-break-inside: avoid;"
+                span_style = "column-span: all; margin-bottom: 12px; border-bottom: 2px solid #D60000; padding-bottom: 8px;"
+                head_style = f"font-size: 34px; font-weight: 900; color: {color}; line-height: 1.15; margin-bottom: 6px; text-align: center;"
+                content_style = "column-count: 3; column-gap: 18px; font-size: 13px; line-height: 1.5; text-align: justify; color: #111;"
+                img_style = "width: 100%; max-height: 300px; object-fit: cover; break-inside: avoid; -webkit-column-break-inside: avoid; page-break-inside: avoid;"
             else:
-                span_style = "break-inside: avoid; -webkit-column-break-inside: avoid; page-break-inside: avoid; margin-bottom: 15px; border-top: 2px solid #ccc; padding-top: 10px;"
-                head_style = f"font-size: 18px; font-weight: 800; color: {color}; line-height: 1.25; margin-bottom: 6px;"
-                content_style = "font-size: 12px; line-height: 1.45; text-align: justify; color: #111;"
-                img_style = "width: 100%; max-height: 200px; object-fit: cover; margin-bottom: 6px; break-inside: avoid; -webkit-column-break-inside: avoid; page-break-inside: avoid;"
+                span_style = "break-inside: avoid; -webkit-column-break-inside: avoid; page-break-inside: avoid; margin-bottom: 10px; border-top: 2px solid #ccc; padding-top: 8px;"
+                head_style = f"font-size: 17px; font-weight: 800; color: {color}; line-height: 1.2; margin-bottom: 4px;"
+                content_style = "font-size: 12px; line-height: 1.4; text-align: justify; color: #111;"
+                img_style = "width: 100%; max-height: 180px; object-fit: cover; margin-bottom: 5px; break-inside: avoid; -webkit-column-break-inside: avoid; page-break-inside: avoid;"
 
             img_html = ""
             if imgs and len(imgs) > 0:
@@ -195,12 +195,14 @@ def build_newspaper_html(
             articles_html.append(item_html)
             
         masthead = masthead_block if is_first_page else ""
-        col_height = "calc(100% - 140px)" if is_first_page else "100%"
+        # For the last page, avoid page-break-after to prevent a trailing blank page
+        is_last_page = (page_idx == len(chunked_pages) - 1)
+        page_break = "" if is_last_page else "page-break-after: always;"
         
         page_html = f"""
-        <div class="pdf-page" style="width: 297mm; height: 420mm; overflow: hidden; padding: 15mm 10mm; background: white; margin: 0 auto; box-sizing: border-box; page-break-after: always; position: relative;">
+        <div class="pdf-page" style="width: 297mm; min-height: 420mm; padding: 8mm 10mm; background: white; margin: 0 auto; box-sizing: border-box; {page_break} position: relative;">
             {masthead}
-            <div style="column-count: 4; column-gap: 15px; height: {col_height}; column-fill: balance;">
+            <div style="column-count: 4; column-gap: 15px; column-fill: auto; height: {'calc(420mm - 170px)' if is_first_page else 'calc(420mm - 16mm)'}; orphans: 2; widows: 2;">
                 {"".join(articles_html)}
             </div>
         </div>
@@ -236,7 +238,6 @@ def build_newspaper_html(
 </body>
 </html>
 """
-    return html
     return html
 
 def render_html_to_pdf(html_content: str, output_path: str) -> bool:
@@ -281,7 +282,7 @@ def render_html_to_pdf(html_content: str, output_path: str) -> bool:
                 display_header_footer=True,
                 header_template=header_template,
                 footer_template=footer_template,
-                margin={"top": "15mm", "bottom": "15mm", "left": "10mm", "right": "10mm"}
+                margin={"top": "12mm", "bottom": "12mm", "left": "0mm", "right": "0mm"}
             )
             browser.close()
             return os.path.exists(output_path) and os.path.getsize(output_path) > 0

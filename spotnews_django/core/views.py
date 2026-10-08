@@ -64,8 +64,8 @@ def admin_stats(request):
     
     try:
         with connection.cursor() as cursor:
-            # Total Users (Profiles as primary source for user stats)
-            cursor.execute("SELECT COUNT(*) FROM profiles")
+            # Total Users
+            cursor.execute("SELECT COUNT(*) FROM auth.users")
             row = cursor.fetchone()
             if row: total_users = row[0]
 
