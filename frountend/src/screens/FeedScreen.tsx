@@ -326,7 +326,15 @@ export const FeedScreen: React.FC = () => {
                         style={{ backgroundImage: `url(${clip.png_url})` }}
                       />
                     )}
-                    {clip.png_url ? (
+                    {clip.mp4_url ? (
+                      <video
+                        src={clip.mp4_url}
+                        controls
+                        playsInline
+                        loop
+                        className="w-full h-full object-contain relative z-10 bg-black"
+                      />
+                    ) : clip.png_url ? (
                       <img
                         src={clip.png_url}
                         alt="News clipping"
