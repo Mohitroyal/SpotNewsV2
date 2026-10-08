@@ -4,6 +4,6 @@ set -o errexit
 
 pip install -r requirements.txt
 export PLAYWRIGHT_BROWSERS_PATH=$PWD/pw-browsers
-playwright install
-playwright install-deps || true
+playwright install chromium
+playwright install-deps chromium || true
 python manage.py collectstatic --no-input
