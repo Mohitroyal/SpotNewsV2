@@ -131,6 +131,8 @@ export const generationService = {
       },
       status: row.status as any,
       createdAt: row.created_at,
+      png_url: row.png_url,
+      pdf_url: row.pdf_url,
     }));
 
     return {
@@ -188,6 +190,8 @@ export const generationService = {
       stage: customLayoutParsed?.stage,
       progress: customLayoutParsed?.progress,
       error: customLayoutParsed?.error,
+      png_url: data.png_url,
+      pdf_url: data.pdf_url,
     };
 
     return { success: true, data: generation, message: "Fetched successfully" };
