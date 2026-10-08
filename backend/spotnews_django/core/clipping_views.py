@@ -100,10 +100,10 @@ def run_clipping_generation_background(clipping_id, data, user_id):
                     "-loop", "1", "-i", temp_png,
                     "-i", temp_video,
                     "-filter_complex",
-                    f"[1:v]scale={w}:{h}:force_original_aspect_ratio=increase,crop={w}:{h}[vid];[0:v][vid]overlay={x}:{y}",
+                    f"[1:v]scale={w}:{h}:force_original_aspect_ratio=increase,crop={w}:{h}[vid];[0:v][vid]overlay={x}:{y}[outv]",
+                    "-map", "[outv]", "-map", "1:a?",
                     "-c:v", "libx264",
                     "-c:a", "aac",
-                    "-map", "0:v", "-map", "1:a?",
                     "-shortest",
                     "-pix_fmt", "yuv420p",
                     temp_mp4
