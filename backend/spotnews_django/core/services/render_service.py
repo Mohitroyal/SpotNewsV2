@@ -58,12 +58,16 @@ def _get_chromium_executable() -> Optional[str]:
     """
     browsers_path = os.getenv("PLAYWRIGHT_BROWSERS_PATH")
     if not browsers_path:
-        return None  # Local dev — let Playwright find it automatically
+        if os.path.isdir("/opt/render/project/.playwright"):
+            browsers_path = "/opt/render/project/.playwright"
+        else:
+            return None  # Local dev — let Playwright find it automatically
 
     patterns = [
         os.path.join(browsers_path, "chromium-*/chrome-linux/chrome"),
         os.path.join(browsers_path, "chromium-*/chrome-linux/chromium"),  # fallback name
         os.path.join(browsers_path, "chromium-*/chrome"),
+        os.path.join(browsers_path, "chromium_headless_shell-*/chrome-headless-shell-linux64/chrome-headless-shell"),
     ]
     for pattern in patterns:
         matches = glob.glob(pattern)
@@ -2107,10 +2111,23 @@ class RenderService:
                                 finalCont.style.setProperty('height', finalHeight + 'px', 'important');
                                 finalCont.style.setProperty('max-height', finalHeight + 'px', 'important');
                                 
-                                return { width: Math.ceil(finalRect.width), height: finalHeight };
+                                let heroBox = null;
+                                const heroImg = document.querySelector('#compositor-canvas img') || document.querySelector('.featured-image img, .article-image img');
+                                if (heroImg) {
+                                    const rect = heroImg.getBoundingClientRect();
+                                    const contRect = finalCont.getBoundingClientRect();
+                                    heroBox = {
+                                        x: Math.round(rect.left - contRect.left),
+                                        y: Math.round(rect.top - contRect.top),
+                                        width: Math.round(rect.width),
+                                        height: Math.round(rect.height)
+                                    };
+                                }
+                                
+                                return { width: Math.ceil(finalRect.width), height: finalHeight, heroBox: heroBox };
                             }
 
-                            return { width: 1200, height: document.documentElement.scrollHeight };
+                            return { width: 1200, height: document.documentElement.scrollHeight, heroBox: null };
                         }""")
                         
                         await page.set_viewport_size({"width": max(2400, layout_info.get("width", 1060) + 100), "height": max(2400, layout_info.get("height", 1600) + 100)})
@@ -2133,7 +2150,7 @@ class RenderService:
                         except Exception:
                             pass
                         gc.collect()
-                        return
+                        return layout_info.get("heroBox")
                 except Exception as e:
                     if attempt == max_attempts - 1: raise
                 finally:

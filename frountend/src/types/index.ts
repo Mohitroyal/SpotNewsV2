@@ -72,6 +72,7 @@ export interface Generation {
   config: GenerationConfig;
   png_url?: string;
   pdf_url?: string;
+  mp4_url?: string;
   status: "pending" | "processing" | "rendering" | "completed" | "failed";
   createdAt: string;
   exportedAt?: string;

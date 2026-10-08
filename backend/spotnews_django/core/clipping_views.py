@@ -68,7 +68,7 @@ def run_clipping_generation_background(clipping_id, data, user_id):
             return temp_png, temp_pdf
             
         # Run async code inside the synchronous thread
-        temp_png, temp_pdf = asyncio.run(_generate())
+        temp_png, temp_pdf, hero_box = asyncio.run(_generate())
         
         # 5. Upload to Supabase Storage
         import time
@@ -76,6 +76,48 @@ def run_clipping_generation_background(clipping_id, data, user_id):
         png_url = storage_service.upload_file(temp_png, f"clippings/{clipping_id}_{timestamp}.png")
         pdf_url = storage_service.upload_file(temp_pdf, f"clippings/{clipping_id}_{timestamp}.pdf")
         
+        mp4_url = None
+        video_url = data.get("video_url")
+        if video_url and hero_box:
+            try:
+                import urllib.request
+                import subprocess
+                from imageio_ffmpeg import get_ffmpeg_exe
+                
+                temp_video = f"temp_{clipping_id}.mp4"
+                temp_mp4 = f"temp_out_{clipping_id}.mp4"
+                print(f"[BACKGROUND] Downloading video from {video_url}...")
+                urllib.request.urlretrieve(video_url, temp_video)
+                
+                x, y = int(hero_box['x']), int(hero_box['y'])
+                w, h = int(hero_box['width']), int(hero_box['height'])
+                
+                print(f"[BACKGROUND] Running FFmpeg overlay at {x},{y} ({w}x{h})")
+                ffmpeg_exe = get_ffmpeg_exe()
+                # Scale the video, crop it to exact width/height, then overlay on the looped PNG
+                cmd = [
+                    ffmpeg_exe, "-y",
+                    "-loop", "1", "-i", temp_png,
+                    "-i", temp_video,
+                    "-filter_complex",
+                    f"[1:v]scale={w}:{h}:force_original_aspect_ratio=increase,crop={w}:{h}[vid];[0:v][vid]overlay={x}:{y}",
+                    "-c:v", "libx264",
+                    "-c:a", "aac",
+                    "-map", "0:v", "-map", "1:a?",
+                    "-shortest",
+                    "-pix_fmt", "yuv420p",
+                    temp_mp4
+                ]
+                subprocess.run(cmd, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+                
+                mp4_url = storage_service.upload_file(temp_mp4, f"clippings/{clipping_id}_{timestamp}.mp4", "video/mp4")
+                if os.path.exists(temp_video): os.remove(temp_video)
+                if os.path.exists(temp_mp4): os.remove(temp_mp4)
+            except Exception as vid_err:
+                print(f"[BACKGROUND ERROR] Failed to generate MP4: {vid_err}")
+                import traceback
+                traceback.print_exc()
+
         if os.path.exists(temp_png):
             os.remove(temp_png)
         if os.path.exists(temp_pdf):
@@ -83,10 +125,24 @@ def run_clipping_generation_background(clipping_id, data, user_id):
         
         # 6. Update Database Status to 'completed'
         with connection.cursor() as cursor:
-            cursor.execute(
-                "UPDATE clippings SET status = %s, png_url = %s, pdf_url = %s WHERE id = %s",
-                ['completed', png_url, pdf_url, clipping_id]
-            )
+            # Need to update mp4_url if it exists. We might need to alter table if mp4_url column doesn't exist.
+            # Assuming mp4_url exists, since the frontend poll requested it.
+            try:
+                cursor.execute(
+                    "UPDATE clippings SET status = %s, png_url = %s, pdf_url = %s, mp4_url = %s WHERE id = %s",
+                    ['completed', png_url, pdf_url, mp4_url, clipping_id]
+                )
+            except Exception as db_err:
+                print(f"[BACKGROUND ERROR] Missing mp4_url column, updating custom_layout instead: {db_err}")
+                import json
+                cursor.execute("SELECT custom_layout FROM clippings WHERE id = %s", [clipping_id])
+                row = cursor.fetchone()
+                custom_layout = json.loads(row[0]) if row and row[0] else {}
+                custom_layout['mp4_url'] = mp4_url
+                cursor.execute(
+                    "UPDATE clippings SET status = %s, png_url = %s, pdf_url = %s, custom_layout = %s WHERE id = %s",
+                    ['completed', png_url, pdf_url, json.dumps(custom_layout), clipping_id]
+                )
             
         print(f"[BACKGROUND] Finished clipping generation for {clipping_id}")
         

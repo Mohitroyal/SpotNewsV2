@@ -79,6 +79,7 @@ export const generationService = {
         article_content: config.articleContent,
         image_url: config.imageUrls?.[0] || config.imageUrl || null,
         image_urls: config.imageUrls || [],
+        video_url: config.videoUrl || null,
         template_id: config.templateId,
         language: config.language,
         layout_columns: config.layoutColumns,
@@ -133,6 +134,7 @@ export const generationService = {
       createdAt: row.created_at,
       png_url: row.png_url,
       pdf_url: row.pdf_url,
+      mp4_url: row.mp4_url,
     }));
 
     return {
@@ -192,6 +194,7 @@ export const generationService = {
       error: customLayoutParsed?.error,
       png_url: data.png_url,
       pdf_url: data.pdf_url,
+      mp4_url: data.mp4_url || customLayoutParsed?.mp4_url,
     };
 
     return { success: true, data: generation, message: "Fetched successfully" };

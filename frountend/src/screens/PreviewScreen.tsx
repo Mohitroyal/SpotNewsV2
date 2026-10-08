@@ -528,9 +528,9 @@ export const PreviewScreen = () => {
 
              <div className="flex-1 w-full min-h-0 flex justify-center mb-5 bg-white border-[2px] border-[#cc2222] p-1 shadow-sm relative overflow-hidden group animate-in slide-in-from-bottom-4 duration-500 delay-100 fill-mode-both">
                {/* This box contains the actual clipping. No watermarks inside here! */}
-               {generation.config?.videoUrl ? (
+               {generation.mp4_url ? (
                  <video
-                    src={generation.config.videoUrl}
+                    src={generation.mp4_url}
                     controls
                     autoPlay
                     loop

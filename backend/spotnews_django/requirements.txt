@@ -12,3 +12,4 @@ supabase
 psutil
 jinja2
 Pillow
+imageio-ffmpeg
