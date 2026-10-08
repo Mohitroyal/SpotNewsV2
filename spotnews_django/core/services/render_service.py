@@ -64,6 +64,7 @@ def _get_chromium_executable() -> Optional[str]:
         os.path.join(browsers_path, "chromium-*/chrome-linux/chrome"),
         os.path.join(browsers_path, "chromium-*/chrome-linux/chromium"),  # fallback name
         os.path.join(browsers_path, "chromium-*/chrome"),
+        os.path.join(browsers_path, "chromium_headless_shell-*/chrome-headless-shell-linux64/chrome-headless-shell"),
     ]
     for pattern in patterns:
         matches = glob.glob(pattern)
