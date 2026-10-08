@@ -1,6 +1,5 @@
 import os
 from pathlib import Path
-os.environ["PLAYWRIGHT_BROWSERS_PATH"] = str(Path(__file__).resolve().parent.parent / "pw-browsers")
 import re
 import json
 import logging
@@ -260,7 +259,6 @@ def render_html_to_pdf(html_content: str, output_path: str) -> bool:
     try:
         import os
         from django.conf import settings
-        os.environ["PLAYWRIGHT_BROWSERS_PATH"] = os.path.join(str(settings.BASE_DIR), "pw-browsers")
         from playwright.sync_api import sync_playwright
         with sync_playwright() as p:
             browser = p.chromium.launch(
