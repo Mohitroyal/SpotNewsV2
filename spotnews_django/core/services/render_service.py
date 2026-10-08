@@ -178,7 +178,7 @@ class RenderService:
             try:
                 from core.renderer.default_image import get_default_image_data_url
             except ImportError:
-                get_default_image_data_url = lambda: ""
+                get_default_image_data_url = lambda: "https://via.placeholder.com/800x600.png?text=Video+Placeholder"
             default_icon = get_default_image_data_url()
             data["image_url"] = default_icon
             data["image_urls"] = [default_icon] if default_icon else []
