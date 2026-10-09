@@ -208,7 +208,7 @@ def create_clipping(request):
             cursor.execute("""
                 INSERT INTO clippings (
                     id, user_id, headline, article_content, language, template_id, status, created_at, custom_layout
-                ) VALUES (%s, %s, %s, %s, %s, %s, %s, NOW(), %s)
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s, NOW(), %s::jsonb)
             """, [clipping_id, user_id, headline, article_content, language, template_id, 'processing', json.dumps(custom_layout_data)])
             
         # Spawn background thread for processing (Django synchronous environment)
