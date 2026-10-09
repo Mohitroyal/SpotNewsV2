@@ -329,7 +329,54 @@ export const FeedScreen: React.FC = () => {
                         } catch (e) {}
                       }
                       
-                      if (parsedMp4Url) {
+                      if (parsedMp4Url && clip.png_url) {
+                        return (
+                          <div 
+                            className="w-full h-full relative z-10 bg-black group"
+                            onClick={(e) => {
+                              const video = e.currentTarget.querySelector('video');
+                              const thumbnail = e.currentTarget.querySelector('.thumbnail-container');
+                              if (video) {
+                                if (video.paused) {
+                                  video.play();
+                                  if (thumbnail) thumbnail.classList.add('hidden');
+                                  video.classList.remove('hidden');
+                                  e.currentTarget.classList.add('is-playing');
+                                } else {
+                                  video.pause();
+                                  if (thumbnail) thumbnail.classList.remove('hidden');
+                                  video.classList.add('hidden');
+                                  e.currentTarget.classList.remove('is-playing');
+                                }
+                              }
+                            }}
+                          >
+                            <video
+                              src={parsedMp4Url}
+                              playsInline
+                              loop
+                              className="w-full h-full object-contain hidden relative z-20"
+                            />
+                            <div className="thumbnail-container absolute inset-0 w-full h-full flex items-center justify-center">
+                              <div
+                                className="absolute inset-0 opacity-30 scale-110 blur-xl bg-cover bg-center"
+                                style={{ backgroundImage: `url(${clip.png_url})` }}
+                              />
+                              <img
+                                src={clip.png_url}
+                                alt="News clipping"
+                                className="w-full h-full object-contain relative z-10"
+                              />
+                              {/* Play Button Overlay */}
+                              <div className="absolute inset-0 flex items-center justify-center z-30 pointer-events-none">
+                                <div className="w-16 h-16 bg-black/50 rounded-full flex items-center justify-center backdrop-blur-md border border-white/40 shadow-[0_0_15px_rgba(0,0,0,0.5)]">
+                                  <div className="w-0 h-0 border-t-[12px] border-t-transparent border-l-[20px] border-l-white border-b-[12px] border-b-transparent ml-2"></div>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      } else if (parsedMp4Url) {
                         return (
                           <div 
                             className="w-full h-full relative z-10 bg-black group"

@@ -528,22 +528,72 @@ export const PreviewScreen = () => {
 
              <div className="flex-1 w-full min-h-0 flex justify-center mb-5 bg-white border-[2px] border-[#cc2222] p-1 shadow-sm relative overflow-hidden group animate-in slide-in-from-bottom-4 duration-500 delay-100 fill-mode-both">
                {/* This box contains the actual clipping. No watermarks inside here! */}
-               {generation.mp4_url ? (
-                 <video
-                    src={generation.mp4_url}
-                    controls
-                    autoPlay
-                    loop
-                    className="w-full h-full object-contain bg-white transition-transform duration-700 ease-out hover:scale-[1.02]"
-                 />
-               ) : (
-                 <img
-                    src={generation.png_url}
-                    alt="Newspaper Preview"
-                    className="w-full h-full object-contain bg-white transition-transform duration-700 ease-out hover:scale-[1.02]"
-                    style={{ imageRendering: 'crisp-edges' as any }}
-                  />
-               )}
+               {(() => {
+                 const videoSrc = generation.mp4_url || generation.config?.videoUrl;
+                 if (videoSrc && generation.png_url) {
+                   return (
+                     <div 
+                       className="w-full h-full relative z-10 bg-white group cursor-pointer"
+                       onClick={(e) => {
+                         const video = e.currentTarget.querySelector('video');
+                         const thumbnail = e.currentTarget.querySelector('.thumbnail-container');
+                         if (video) {
+                           if (video.paused) {
+                             video.play();
+                             if (thumbnail) thumbnail.classList.add('hidden');
+                             video.classList.remove('hidden');
+                           } else {
+                             video.pause();
+                             if (thumbnail) thumbnail.classList.remove('hidden');
+                             video.classList.add('hidden');
+                           }
+                         }
+                       }}
+                     >
+                       <video
+                         src={videoSrc}
+                         playsInline
+                         controls
+                         loop
+                         className="w-full h-full object-contain hidden relative z-20 bg-black transition-transform duration-700 ease-out hover:scale-[1.02]"
+                       />
+                       <div className="thumbnail-container absolute inset-0 w-full h-full flex items-center justify-center bg-white transition-transform duration-700 ease-out hover:scale-[1.02]">
+                         <img
+                           src={generation.png_url}
+                           alt="Newspaper Preview"
+                           className="w-full h-full object-contain relative z-10"
+                           style={{ imageRendering: 'crisp-edges' as any }}
+                         />
+                         {/* Play Button Overlay */}
+                         <div className="absolute inset-0 flex items-center justify-center z-30 pointer-events-none">
+                           <div className="w-16 h-16 bg-black/50 rounded-full flex items-center justify-center backdrop-blur-md border border-white/40 shadow-[0_0_15px_rgba(0,0,0,0.5)]">
+                             <div className="w-0 h-0 border-t-[12px] border-t-transparent border-l-[20px] border-l-white border-b-[12px] border-b-transparent ml-2"></div>
+                           </div>
+                         </div>
+                       </div>
+                     </div>
+                   );
+                 } else if (videoSrc) {
+                   return (
+                     <video
+                        src={videoSrc}
+                        controls
+                        autoPlay
+                        loop
+                        className="w-full h-full object-contain bg-white transition-transform duration-700 ease-out hover:scale-[1.02]"
+                     />
+                   );
+                 } else {
+                   return (
+                     <img
+                        src={generation.png_url}
+                        alt="Newspaper Preview"
+                        className="w-full h-full object-contain bg-white transition-transform duration-700 ease-out hover:scale-[1.02]"
+                        style={{ imageRendering: 'crisp-edges' as any }}
+                      />
+                   );
+                 }
+               })()}
              </div>
 
              <div className="w-full shrink-0 flex flex-col gap-2">

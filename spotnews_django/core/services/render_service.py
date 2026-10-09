@@ -175,6 +175,24 @@ class RenderService:
             valid_imgs = [image_url_raw.strip()]
 
         if not valid_imgs:
+            video_url = data.get("video_url")
+            if video_url:
+                try:
+                    import subprocess, base64
+                    from imageio_ffmpeg import get_ffmpeg_exe
+                    ffmpeg_exe = get_ffmpeg_exe()
+                    cmd = [
+                        ffmpeg_exe, "-ss", "00:00:00", "-i", video_url,
+                        "-vframes", "1", "-q:v", "2", "-f", "image2pipe", "-vcodec", "mjpeg", "pipe:1"
+                    ]
+                    proc = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=15)
+                    if proc.returncode == 0 and proc.stdout:
+                        b64 = base64.b64encode(proc.stdout).decode('utf-8')
+                        valid_imgs = [f"data:image/jpeg;base64,{b64}"]
+                except Exception as e:
+                    print(f"[BACKGROUND ERROR] Failed to extract video thumbnail: {e}")
+
+        if not valid_imgs:
             try:
                 from core.renderer.default_image import get_default_image_data_url
             except ImportError:
