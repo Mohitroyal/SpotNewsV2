@@ -189,7 +189,6 @@ def run_clipping_generation_background(clipping_id, data, user_id):
                 )
             except Exception as db_err:
                 print(f"[BACKGROUND ERROR] Missing mp4_url column, updating custom_layout instead: {db_err}")
-                import json
                 cursor.execute("SELECT custom_layout FROM clippings WHERE id = %s", [clipping_id])
                 row = cursor.fetchone()
                 custom_layout = {}
