@@ -96,7 +96,10 @@ def run_clipping_generation_background(clipping_id, data, user_id):
                 temp_video = f"temp_{clipping_id}.mp4"
                 temp_mp4 = f"temp_out_{clipping_id}.mp4"
                 print(f"[BACKGROUND] Downloading video from {video_url}...")
-                urllib.request.urlretrieve(video_url, temp_video)
+                req = urllib.request.Request(video_url, headers={'User-Agent': 'Mozilla/5.0'})
+                with urllib.request.urlopen(req, timeout=60) as response, open(temp_video, 'wb') as out_file:
+                    import shutil
+                    shutil.copyfileobj(response, out_file)
                 
                 x, y = int(hero_box['x']), int(hero_box['y'])
                 w, h = int(hero_box['width']), int(hero_box['height'])
@@ -113,12 +116,14 @@ def run_clipping_generation_background(clipping_id, data, user_id):
                     f"[1:v]scale={w}:{h}:force_original_aspect_ratio=increase,crop={w}:{h}[vid];[0:v][vid]overlay={x}:{y},pad=ceil(iw/2)*2:ceil(ih/2)*2[outv]",
                     "-map", "[outv]", "-map", "1:a?",
                     "-c:v", "libx264",
+                    "-preset", "ultrafast",
+                    "-threads", "2",
                     "-c:a", "aac",
                     "-shortest",
                     "-pix_fmt", "yuv420p",
                     temp_mp4
                 ]
-                subprocess.run(cmd, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+                subprocess.run(cmd, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=240)
                 
                 mp4_url = storage_service.upload_file(temp_mp4, f"clippings/{clipping_id}_{timestamp}.mp4", "video/mp4")
                 if os.path.exists(temp_video): os.remove(temp_video)
