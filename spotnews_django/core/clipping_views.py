@@ -40,6 +40,9 @@ def run_clipping_generation_background(clipping_id, data, user_id):
             image_count = len(image_urls) if image_urls else (1 if image_url else 0)
             
             # Insert helper to update stage
+            from asgiref.sync import sync_to_async
+            
+            @sync_to_async
             def update_stage(stage_msg, progress):
                 try:
                     with connection.cursor() as cursor:
@@ -51,10 +54,13 @@ def run_clipping_generation_background(clipping_id, data, user_id):
                         cl['stage'] = stage_msg
                         cl['progress'] = progress
                         cursor.execute("UPDATE clippings SET custom_layout = %s::jsonb WHERE id = %s", [json.dumps(cl), clipping_id])
+                        # connection.commit() is usually not needed inside an autocommit thread, but let's be safe:
+                        if not connection.in_atomic_block:
+                            connection.commit()
                 except Exception as e:
                     print(f"[DEBUG STAGE UPDATE] {e}")
                     
-            update_stage("Formatting Article with AI...", 15)
+            await update_stage("Formatting Article with AI...", 15)
             # 2. Text Translation & Formatting via Grok
             formatted_data = await grok_service.format_article(content, language, image_count)
             
@@ -105,6 +111,8 @@ def run_clipping_generation_background(clipping_id, data, user_id):
                     cl['stage'] = stage_msg
                     cl['progress'] = progress
                     cursor.execute("UPDATE clippings SET custom_layout = %s::jsonb WHERE id = %s", [json.dumps(cl), clipping_id])
+                    if not connection.in_atomic_block:
+                        connection.commit()
             except Exception as e:
                 print(f"[DEBUG STAGE UPDATE] {e}")
 
@@ -192,6 +200,8 @@ def run_clipping_generation_background(clipping_id, data, user_id):
                     "UPDATE clippings SET status = %s, png_url = %s, pdf_url = %s, custom_layout = %s::jsonb WHERE id = %s",
                     ['completed', png_url, pdf_url, json.dumps(custom_layout), clipping_id]
                 )
+            if not connection.in_atomic_block:
+                connection.commit()
             
         print(f"[BACKGROUND] Finished clipping generation for {clipping_id}")
         
@@ -205,6 +215,8 @@ def run_clipping_generation_background(clipping_id, data, user_id):
                     "UPDATE clippings SET status = %s, custom_layout = %s::jsonb WHERE id = %s",
                     ['failed', json.dumps({"error": str(e), "stage": "Processing Error"}), clipping_id]
                 )
+                if not connection.in_atomic_block:
+                    connection.commit()
         except Exception as db_err:
             print(f"Failed to update error status: {db_err}")
 
@@ -246,9 +258,10 @@ def create_clipping(request):
         
         # Insert into Database with 'processing' status
         custom_layout_data = {
+            **data,
             "videoUrl": data.get("video_url"),
             "reporterName": data.get("reporter_name"),
-            "imageUrls": data.get("image_urls")
+            "imageUrls": data.get("image_urls", [])
         }
         with connection.cursor() as cursor:
             cursor.execute("""
