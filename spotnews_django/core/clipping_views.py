@@ -198,7 +198,6 @@ def create_clipping(request):
         clipping_id = str(uuid.uuid4())
         
         # Insert into Database with 'processing' status
-        import json
         custom_layout_data = {
             "videoUrl": data.get("video_url"),
             "reporterName": data.get("reporter_name"),
