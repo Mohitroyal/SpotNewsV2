@@ -159,6 +159,8 @@ def run_clipping_generation_background(clipping_id, data, user_id):
                     "-preset", "ultrafast",
                     "-threads", "1",
                     "-max_muxing_queue_size", "1024",
+                    "-bufsize", "2M",
+                    "-maxrate", "2M",
                     "-c:a", "aac",
                     "-shortest",
                     "-pix_fmt", "yuv420p",

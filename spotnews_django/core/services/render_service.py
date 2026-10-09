@@ -2148,7 +2148,7 @@ class RenderService:
                             return { width: 1200, height: document.documentElement.scrollHeight, heroBox: null };
                         }""")
                         
-                        await page.set_viewport_size({"width": max(2400, layout_info.get("width", 1060) + 100), "height": max(2400, layout_info.get("height", 1600) + 100)})
+                        await page.set_viewport_size({"width": int(layout_info.get("width", 1060) + 50), "height": int(layout_info.get("height", 1600) + 50)})
 
                         final_h_px = None
                         if png_path:
