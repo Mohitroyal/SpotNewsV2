@@ -97,12 +97,13 @@ def run_clipping_generation_background(clipping_id, data, user_id):
                 print(f"[BACKGROUND] Running FFmpeg overlay at {x},{y} ({w}x{h})")
                 ffmpeg_exe = get_ffmpeg_exe()
                 # Scale the video, crop it to exact width/height, then overlay on the looped PNG
+                # Also pad the final output to even dimensions to satisfy libx264 yuv420p requirements
                 cmd = [
                     ffmpeg_exe, "-y",
                     "-loop", "1", "-i", temp_png,
                     "-i", temp_video,
                     "-filter_complex",
-                    f"[1:v]scale={w}:{h}:force_original_aspect_ratio=increase,crop={w}:{h}[vid];[0:v][vid]overlay={x}:{y}[outv]",
+                    f"[1:v]scale={w}:{h}:force_original_aspect_ratio=increase,crop={w}:{h}[vid];[0:v][vid]overlay={x}:{y},pad=ceil(iw/2)*2:ceil(ih/2)*2[outv]",
                     "-map", "[outv]", "-map", "1:a?",
                     "-c:v", "libx264",
                     "-c:a", "aac",
@@ -142,7 +143,7 @@ def run_clipping_generation_background(clipping_id, data, user_id):
                 custom_layout = json.loads(row[0]) if row and row[0] else {}
                 custom_layout['mp4_url'] = mp4_url
                 cursor.execute(
-                    "UPDATE clippings SET status = %s, png_url = %s, pdf_url = %s, custom_layout = %s WHERE id = %s",
+                    "UPDATE clippings SET status = %s, png_url = %s, pdf_url = %s, custom_layout = %s::jsonb WHERE id = %s",
                     ['completed', png_url, pdf_url, json.dumps(custom_layout), clipping_id]
                 )
             
@@ -155,7 +156,7 @@ def run_clipping_generation_background(clipping_id, data, user_id):
         try:
             with connection.cursor() as cursor:
                 cursor.execute(
-                    "UPDATE clippings SET status = %s, custom_layout = %s WHERE id = %s",
+                    "UPDATE clippings SET status = %s, custom_layout = %s::jsonb WHERE id = %s",
                     ['failed', json.dumps({"error": str(e), "stage": "Processing Error"}), clipping_id]
                 )
         except Exception as db_err:
