@@ -198,12 +198,18 @@ def create_clipping(request):
         clipping_id = str(uuid.uuid4())
         
         # Insert into Database with 'processing' status
+        import json
+        custom_layout_data = {
+            "videoUrl": data.get("video_url"),
+            "reporterName": data.get("reporter_name"),
+            "imageUrls": data.get("image_urls")
+        }
         with connection.cursor() as cursor:
             cursor.execute("""
                 INSERT INTO clippings (
-                    id, user_id, headline, article_content, language, template_id, status, created_at
-                ) VALUES (%s, %s, %s, %s, %s, %s, %s, NOW())
-            """, [clipping_id, user_id, headline, article_content, language, template_id, 'processing'])
+                    id, user_id, headline, article_content, language, template_id, status, created_at, custom_layout
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s, NOW(), %s)
+            """, [clipping_id, user_id, headline, article_content, language, template_id, 'processing', json.dumps(custom_layout_data)])
             
         # Spawn background thread for processing (Django synchronous environment)
         thread = threading.Thread(target=run_clipping_generation_background, args=(clipping_id, data, user_id))
