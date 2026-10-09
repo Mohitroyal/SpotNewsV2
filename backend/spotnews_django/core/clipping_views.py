@@ -101,7 +101,7 @@ def run_clipping_generation_background(clipping_id, data, user_id):
                     "-loop", "1", "-i", temp_png,
                     "-i", temp_video,
                     "-filter_complex",
-                    f"[1:v]scale={w}:{h}:force_original_aspect_ratio=increase,crop={w}:{h}[vid];[0:v][vid]overlay={x}:{y},pad=ceil(iw/2)*2:ceil(ih/2)*2[outv]",
+                    f"[1:v]scale={w}:{h}:force_original_aspect_ratio=increase,crop={w}:{h}[vid];[0:v][vid]overlay={x}:{y}:shortest=1,pad=ceil(iw/2)*2:ceil(ih/2)*2[outv]",
                     "-map", "[outv]", "-map", "1:a?",
                     "-c:v", "libx264",
                     "-c:a", "aac",
