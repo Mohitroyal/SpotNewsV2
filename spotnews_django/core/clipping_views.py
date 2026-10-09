@@ -184,7 +184,9 @@ def run_clipping_generation_background(clipping_id, data, user_id):
                 import json
                 cursor.execute("SELECT custom_layout FROM clippings WHERE id = %s", [clipping_id])
                 row = cursor.fetchone()
-                custom_layout = json.loads(row[0]) if row and row[0] else {}
+                custom_layout = {}
+                if row and row[0]:
+                    custom_layout = row[0] if isinstance(row[0], dict) else json.loads(row[0])
                 custom_layout['mp4_url'] = mp4_url
                 cursor.execute(
                     "UPDATE clippings SET status = %s, png_url = %s, pdf_url = %s, custom_layout = %s::jsonb WHERE id = %s",
