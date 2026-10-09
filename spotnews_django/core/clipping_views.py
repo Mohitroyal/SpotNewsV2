@@ -39,6 +39,20 @@ def run_clipping_generation_background(clipping_id, data, user_id):
 
             image_count = len(image_urls) if image_urls else (1 if image_url else 0)
             
+            # Insert helper to update stage
+            def update_stage(stage_msg, progress):
+                try:
+                    with connection.cursor() as cursor:
+                        cursor.execute("SELECT custom_layout FROM clippings WHERE id = %s", [clipping_id])
+                        row = cursor.fetchone()
+                        cl = json.loads(row[0]) if row and row[0] else {}
+                        cl['stage'] = stage_msg
+                        cl['progress'] = progress
+                        cursor.execute("UPDATE clippings SET custom_layout = %s::jsonb WHERE id = %s", [json.dumps(cl), clipping_id])
+                except:
+                    pass
+                    
+            update_stage("Formatting Article with AI...", 15)
             # 2. Text Translation & Formatting via Grok
             formatted_data = await grok_service.format_article(content, language, image_count)
             
@@ -78,6 +92,19 @@ def run_clipping_generation_background(clipping_id, data, user_id):
         temp_png, temp_pdf, hero_box = asyncio.run(_generate())
         
         # 5. Upload to Supabase Storage
+        def _update_stage_sync(stage_msg, progress):
+            try:
+                with connection.cursor() as cursor:
+                    cursor.execute("SELECT custom_layout FROM clippings WHERE id = %s", [clipping_id])
+                    row = cursor.fetchone()
+                    cl = json.loads(row[0]) if row and row[0] else {}
+                    cl['stage'] = stage_msg
+                    cl['progress'] = progress
+                    cursor.execute("UPDATE clippings SET custom_layout = %s::jsonb WHERE id = %s", [json.dumps(cl), clipping_id])
+            except:
+                pass
+
+        _update_stage_sync("Uploading images to storage...", 75)
         import time
         timestamp = int(time.time())
         png_url = storage_service.upload_file(temp_png, f"clippings/{clipping_id}_{timestamp}.png")
@@ -89,6 +116,7 @@ def run_clipping_generation_background(clipping_id, data, user_id):
         print(f"[DEBUG VIDEO] hero_box: {hero_box}")
         if video_url and hero_box:
             try:
+                _update_stage_sync("Generating Video (This takes 1-2 minutes)...", 90)
                 import urllib.request
                 import subprocess
                 from imageio_ffmpeg import get_ffmpeg_exe
