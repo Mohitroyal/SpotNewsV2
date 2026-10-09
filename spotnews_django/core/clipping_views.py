@@ -45,12 +45,14 @@ def run_clipping_generation_background(clipping_id, data, user_id):
                     with connection.cursor() as cursor:
                         cursor.execute("SELECT custom_layout FROM clippings WHERE id = %s", [clipping_id])
                         row = cursor.fetchone()
-                        cl = json.loads(row[0]) if row and row[0] else {}
+                        cl = {}
+                        if row and row[0]:
+                            cl = row[0] if isinstance(row[0], dict) else json.loads(row[0])
                         cl['stage'] = stage_msg
                         cl['progress'] = progress
                         cursor.execute("UPDATE clippings SET custom_layout = %s::jsonb WHERE id = %s", [json.dumps(cl), clipping_id])
-                except:
-                    pass
+                except Exception as e:
+                    print(f"[DEBUG STAGE UPDATE] {e}")
                     
             update_stage("Formatting Article with AI...", 15)
             # 2. Text Translation & Formatting via Grok
@@ -97,12 +99,14 @@ def run_clipping_generation_background(clipping_id, data, user_id):
                 with connection.cursor() as cursor:
                     cursor.execute("SELECT custom_layout FROM clippings WHERE id = %s", [clipping_id])
                     row = cursor.fetchone()
-                    cl = json.loads(row[0]) if row and row[0] else {}
+                    cl = {}
+                    if row and row[0]:
+                        cl = row[0] if isinstance(row[0], dict) else json.loads(row[0])
                     cl['stage'] = stage_msg
                     cl['progress'] = progress
                     cursor.execute("UPDATE clippings SET custom_layout = %s::jsonb WHERE id = %s", [json.dumps(cl), clipping_id])
-            except:
-                pass
+            except Exception as e:
+                print(f"[DEBUG STAGE UPDATE] {e}")
 
         _update_stage_sync("Uploading images to storage...", 75)
         import time
