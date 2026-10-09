@@ -30,6 +30,13 @@ def run_clipping_generation_background(clipping_id, data, user_id):
             language = data.get("language", "te")
             image_urls = data.get("image_urls", [])
             image_url = data.get("image_url", "")
+            
+            # If video exists but no images exist, inject a transparent 1x1 PNG
+            # This forces the template to render the hero-image-wrapper so we get hero_box coordinates
+            if data.get("video_url") and not image_urls and not image_url:
+                image_url = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII="
+                image_urls = [image_url]
+
             image_count = len(image_urls) if image_urls else (1 if image_url else 0)
             
             # 2. Text Translation & Formatting via Grok

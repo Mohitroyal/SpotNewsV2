@@ -2130,7 +2130,7 @@ class RenderService:
                                 finalCont.style.setProperty('max-height', finalHeight + 'px', 'important');
                                 
                                 let heroBox = null;
-                                const heroImg = document.querySelector('#compositor-canvas img') || document.querySelector('.featured-image img, .article-image img');
+                                const heroImg = document.querySelector('.hero-img') || document.querySelector('#compositor-canvas img') || document.querySelector('.featured-image img, .article-image img');
                                 if (heroImg) {
                                     const rect = heroImg.getBoundingClientRect();
                                     const contRect = finalCont.getBoundingClientRect();
