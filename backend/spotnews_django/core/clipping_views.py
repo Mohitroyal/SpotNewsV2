@@ -89,8 +89,9 @@ def run_clipping_generation_background(clipping_id, data, user_id):
                 print(f"[BACKGROUND] Downloading video from {video_url}...")
                 urllib.request.urlretrieve(video_url, temp_video)
                 
-                x, y = int(hero_box['x']), int(hero_box['y'])
-                w, h = int(hero_box['width']), int(hero_box['height'])
+                scale_factor = 3.2
+                x, y = int(hero_box['x'] * scale_factor), int(hero_box['y'] * scale_factor)
+                w, h = int(hero_box['width'] * scale_factor), int(hero_box['height'] * scale_factor)
                 
                 print(f"[BACKGROUND] Running FFmpeg overlay at {x},{y} ({w}x{h})")
                 ffmpeg_exe = get_ffmpeg_exe()
@@ -100,7 +101,7 @@ def run_clipping_generation_background(clipping_id, data, user_id):
                     "-loop", "1", "-i", temp_png,
                     "-i", temp_video,
                     "-filter_complex",
-                    f"[1:v]scale={w}:{h}:force_original_aspect_ratio=increase,crop={w}:{h}[vid];[0:v][vid]overlay={x}:{y}[outv]",
+                    f"[1:v]scale={w}:{h}:force_original_aspect_ratio=increase,crop={w}:{h}[vid];[0:v][vid]overlay={x}:{y},pad=ceil(iw/2)*2:ceil(ih/2)*2[outv]",
                     "-map", "[outv]", "-map", "1:a?",
                     "-c:v", "libx264",
                     "-c:a", "aac",
