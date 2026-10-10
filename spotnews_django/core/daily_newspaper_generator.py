@@ -297,8 +297,8 @@ def build_newspaper_html(
                 </div>
                 """
             else:
-                span_style = "break-inside: avoid; -webkit-column-break-inside: avoid; page-break-inside: avoid; margin-bottom: 10px; border-top: 2px solid #ccc; padding-top: 8px;"
-                head_style = f"font-size: 17px; font-weight: 800; color: {color}; line-height: 1.2; margin-bottom: 4px;"
+                span_style = "margin-bottom: 10px; border-top: 2px solid #ccc; padding-top: 8px;"
+                head_style = f"font-size: 17px; font-weight: 800; color: {color}; line-height: 1.2; margin-bottom: 4px; break-after: avoid; page-break-after: avoid;"
                 content_style = "font-size: 12px; line-height: 1.4; text-align: justify; color: #111;"
                 
                 item_html = f"""
@@ -321,7 +321,7 @@ def build_newspaper_html(
         page_break = "" if is_last_page else "page-break-after: always;"
         
         page_html = f"""
-        <div class="pdf-page" style="width: 297mm; height: 420mm; overflow: hidden; padding: 8mm 10mm; background: white; margin: 0 auto; box-sizing: border-box; {page_break} position: relative; display: flex; flex-direction: column;">
+        <div class="pdf-page" style="width: 297mm; height: 396mm; overflow: hidden; padding: 8mm 10mm; background: white; margin: 0 auto; box-sizing: border-box; {page_break} position: relative; display: flex; flex-direction: column;">
             {masthead}
             {lead_story_html}
             <div style="flex: 1; column-count: 4; column-gap: 15px; column-fill: auto; orphans: 2; widows: 2; overflow: hidden; position: relative;">
