@@ -118,16 +118,21 @@ def build_newspaper_html(
         if not imgs and art.get("image_url"):
             imgs = [art.get("image_url")]
             
-        img_cost = 800 if imgs else 0
-        weight = len(content) + (len(headline) * 3) + img_cost
+        is_lead = (idx == 0)
+        img_cost = 0
+        if imgs:
+            img_cost = 1500 if is_lead else 400
+            
+        weight = len(content) + int(len(headline) * (4 if is_lead else 2)) + img_cost
         remaining_primary.append({
             "art": art,
             "weight": weight,
             "is_filler": False
         })
 
-    PAGE1_CAPACITY = 6500
-    PAGE_CAPACITY = 9500
+    PAGE1_CAPACITY = 8000
+    PAGE_CAPACITY = 11000
+    OVERFILL_MARGIN = 4000
     
     chunked_pages = []
     current_page_articles = []
@@ -135,7 +140,7 @@ def build_newspaper_html(
     
     filler_pool = []
     
-    def get_fillers(needed_limit=20):
+    def get_fillers(needed_limit=40):
         try:
             from django.db import connection
             import json
@@ -151,6 +156,7 @@ def build_newspaper_html(
                     WHERE (c.is_posted = true OR c.is_posted IS NULL OR c.status IN ('completed', 'published', 'posted'))
                       AND (c.status IS NULL OR c.status NOT IN ('draft', 'rejected', 'deleted'))
                       AND LENGTH(c.article_content) > 50
+                      AND LENGTH(c.article_content) < 1500
                 """
                 params = []
                 if used_ids:
@@ -190,8 +196,8 @@ def build_newspaper_html(
                     
                     headline_text = sanitize_text(art["headline"])
                     content_text = sanitize_text(art["content"])
-                    img_cost = 800 if raw_imgs else 0
-                    weight = len(content_text) + (len(headline_text) * 3) + img_cost
+                    img_cost = 400 if raw_imgs else 0
+                    weight = len(content_text) + int(len(headline_text) * 2) + img_cost
                     
                     new_fillers.append({
                         "art": art,
@@ -206,6 +212,7 @@ def build_newspaper_html(
 
     while remaining_primary or current_weight > 0:
         capacity = PAGE1_CAPACITY if len(chunked_pages) == 0 else PAGE_CAPACITY
+        target_weight = capacity + OVERFILL_MARGIN
         
         placed = False
         for i, item in enumerate(remaining_primary):
@@ -217,23 +224,17 @@ def build_newspaper_html(
                 break
                 
         if not placed:
-            gap = capacity - current_weight
-            
-            if gap > 800:
+            # Fill with fillers up to target_weight to guarantee full columns
+            while current_weight < target_weight:
                 if not filler_pool:
-                    filler_pool.extend(get_fillers(30))
+                    filler_pool.extend(get_fillers(40))
                 
-                filler_placed = False
-                for i, item in enumerate(filler_pool):
-                    if current_weight + item["weight"] <= capacity:
-                        current_page_articles.append(item)
-                        current_weight += item["weight"]
-                        filler_pool.pop(i)
-                        filler_placed = True
-                        break
-                        
-                if filler_placed:
-                    continue
+                if not filler_pool:
+                    break
+                
+                item = filler_pool.pop(0)
+                current_page_articles.append(item)
+                current_weight += item["weight"]
             
             if len(current_page_articles) == 0 and remaining_primary:
                 item = remaining_primary.pop(0)
@@ -307,9 +308,9 @@ def build_newspaper_html(
         page_break = "" if is_last_page else "page-break-after: always;"
         
         page_html = f"""
-        <div class="pdf-page" style="width: 297mm; min-height: 420mm; padding: 8mm 10mm; background: white; margin: 0 auto; box-sizing: border-box; {page_break} position: relative;">
+        <div class="pdf-page" style="width: 297mm; height: 420mm; overflow: hidden; padding: 8mm 10mm; background: white; margin: 0 auto; box-sizing: border-box; {page_break} position: relative; display: flex; flex-direction: column;">
             {masthead}
-            <div style="column-count: 4; column-gap: 15px; column-fill: auto; height: {'calc(420mm - 170px)' if is_first_page else 'calc(420mm - 16mm)'}; orphans: 2; widows: 2;">
+            <div style="flex: 1; column-count: 4; column-gap: 15px; column-fill: auto; orphans: 2; widows: 2; overflow: hidden; position: relative;">
                 {"".join(articles_html)}
             </div>
         </div>
