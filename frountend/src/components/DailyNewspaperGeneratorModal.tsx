@@ -52,6 +52,7 @@ export const DailyNewspaperGeneratorModal: React.FC<Props> = ({ isOpen, onClose,
   const [generationProgress, setGenerationProgress] = useState(0);
   const [generatedResult, setGeneratedResult] = useState<{
     pdf_url: string;
+    pdf_base64?: string | null;
     total_pages: number;
     total_articles: number;
     edition_id: string;
@@ -220,6 +221,7 @@ export const DailyNewspaperGeneratorModal: React.FC<Props> = ({ isOpen, onClose,
 
       setGeneratedResult({
         pdf_url: res.pdf_url,
+        pdf_base64: res.pdf_base64 || null,
         total_pages: res.total_pages,
         total_articles: res.total_articles,
         edition_id: res.edition_id,
@@ -247,51 +249,76 @@ export const DailyNewspaperGeneratorModal: React.FC<Props> = ({ isOpen, onClose,
     setDownloading(true);
     try {
       const targetUrl = generatedResult.pdf_url;
+      // Use the base64 PDF from the server response directly to avoid
+      // ephemeral filesystem / 404 issues when fetching from URL
+      const b64 = generatedResult.pdf_base64;
+      const fileName = `DailyNewspaper-${editionDate}-${Date.now()}.pdf`;
 
       if (Capacitor.isNativePlatform()) {
-        // Android: save PDF to Documents and share via native sheet
-        const res = await fetch(targetUrl);
-        const blob = await res.blob();
-        const reader = new FileReader();
-        reader.readAsDataURL(blob);
-        reader.onloadend = async () => {
-          let base64data = reader.result as string;
-          if (base64data.includes(',')) base64data = base64data.split(',')[1];
-          const fileName = `DailyNewspaper-${editionDate}.pdf`;
+        // Android: write base64 PDF directly to Documents and share
+        let base64data: string;
+        if (b64) {
+          base64data = b64;
+        } else {
+          // Fallback: fetch from URL
+          const res = await fetch(targetUrl);
+          const blob = await res.blob();
+          base64data = await new Promise<string>((resolve) => {
+            const reader = new FileReader();
+            reader.readAsDataURL(blob);
+            reader.onloadend = () => {
+              let d = reader.result as string;
+              if (d.includes(',')) d = d.split(',')[1];
+              resolve(d);
+            };
+          });
+        }
+        try {
+          if (Capacitor.getPlatform() === 'android') await Filesystem.requestPermissions();
+          const writeRes = await Filesystem.writeFile({
+            path: fileName,
+            data: base64data,
+            directory: Directory.Documents,
+            recursive: true,
+          });
           try {
-            if (Capacitor.getPlatform() === 'android') await Filesystem.requestPermissions();
-            const writeRes = await Filesystem.writeFile({
-              path: fileName,
-              data: base64data,
-              directory: Directory.Documents,
-              recursive: true,
+            await Share.share({
+              title: fileName,
+              text: `Daily Newspaper A3 Edition - ${editionDate}`,
+              url: writeRes.uri || targetUrl,
+              dialogTitle: 'Open/Save Daily Newspaper Edition',
             });
-            try {
-              await Share.share({
-                title: fileName,
-                text: `Daily Newspaper A3 Edition - ${editionDate}`,
-                url: writeRes.uri || targetUrl,
-                dialogTitle: 'Open/Save Daily Newspaper Edition',
-              });
-            } catch {
-              await Browser.open({ url: targetUrl });
-            }
-            alert(`Saved to Documents as ${fileName}.`);
-          } catch (e: any) {
-            console.error('Filesystem write error', e);
-            try { await Browser.open({ url: targetUrl }); } catch {}
-          } finally {
-            setDownloading(false);
+          } catch {
+            await Browser.open({ url: targetUrl });
           }
-        };
+          alert(`Saved to Documents as ${fileName}.`);
+        } catch (e: any) {
+          console.error('Filesystem write error', e);
+          try { await Browser.open({ url: targetUrl }); } catch {}
+        } finally {
+          setDownloading(false);
+        }
       } else {
-        // Web: trigger standard download anchor
-        const a = document.createElement('a');
-        a.href = targetUrl;
-        a.download = `DailyNewspaper-${editionDate}.pdf`;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
+        // Web: create blob URL from base64 or fallback to direct URL
+        if (b64) {
+          const bytes = Uint8Array.from(atob(b64), c => c.charCodeAt(0));
+          const blob = new Blob([bytes], { type: 'application/pdf' });
+          const blobUrl = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = blobUrl;
+          a.download = fileName;
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+          URL.revokeObjectURL(blobUrl);
+        } else {
+          const a = document.createElement('a');
+          a.href = targetUrl;
+          a.download = fileName;
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+        }
         setDownloading(false);
       }
     } catch (err: any) {

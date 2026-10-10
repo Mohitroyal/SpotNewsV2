@@ -379,7 +379,6 @@ def render_html_to_pdf(html_content: str, output_path: str) -> bool:
 
     try:
         import os
-        from django.conf import settings
         from playwright.sync_api import sync_playwright
         with sync_playwright() as p:
             browser = p.chromium.launch(
@@ -389,23 +388,32 @@ def render_html_to_pdf(html_content: str, output_path: str) -> bool:
                     "--disable-setuid-sandbox",
                     "--disable-dev-shm-usage",
                     "--disable-gpu",
-                    "--run-all-compositor-stages-before-draw"
+                    "--font-render-hinting=none"
                 ]
             )
-            page = browser.new_page()
-            page.emulate_media(media="screen")
+            # Set viewport to A3 pixel dimensions (297mm x 420mm at 96dpi = 1123x1587)
+            context = browser.new_context(
+                viewport={"width": 1123, "height": 1587},
+                device_scale_factor=1
+            )
+            page = context.new_page()
             page.set_content(html_content, wait_until="networkidle", timeout=120000)
-            page.wait_for_timeout(3000)
+            # Wait extra time for fonts and images to render
+            page.wait_for_timeout(5000)
+            # Log page body text to confirm content exists
+            body_text = page.evaluate("() => document.body ? document.body.innerText.length : 0")
+            print(f"[PDF Generator] Page body text length: {body_text}")
             page.pdf(
                 path=output_path,
                 format="A3",
                 print_background=True,
                 display_header_footer=False,
-                prefer_css_page_size=True,
                 margin={"top": "0mm", "bottom": "0mm", "left": "0mm", "right": "0mm"}
             )
             browser.close()
-            return os.path.exists(output_path) and os.path.getsize(output_path) > 0
+            file_size = os.path.getsize(output_path) if os.path.exists(output_path) else 0
+            print(f"[PDF Generator] Generated PDF size: {file_size} bytes at {output_path}")
+            return file_size > 100  # Must be more than 100 bytes to be valid
     except Exception as e:
         logger.error(f"Playwright PDF rendering error: {e}")
         print(f"Playwright PDF rendering error: {e}")
