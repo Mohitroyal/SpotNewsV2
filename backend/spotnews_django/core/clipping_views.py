@@ -90,7 +90,7 @@ def run_clipping_generation_background(clipping_id, data, user_id):
                 print(f"[BACKGROUND] Downloading video from {video_url}...")
                 urllib.request.urlretrieve(video_url, temp_video)
                 
-                scale_factor = 2.0
+                scale_factor = 1.0
                 x, y = int(hero_box['x'] * scale_factor), int(hero_box['y'] * scale_factor)
                 w, h = int(hero_box['width'] * scale_factor), int(hero_box['height'] * scale_factor)
                 
