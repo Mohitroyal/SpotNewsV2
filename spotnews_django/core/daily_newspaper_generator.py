@@ -130,8 +130,8 @@ def build_newspaper_html(
             "is_filler": False
         })
 
-    PAGE1_CAPACITY = 8000
-    PAGE_CAPACITY = 11000
+    PAGE1_CAPACITY = 12000
+    PAGE_CAPACITY = 16000
     OVERFILL_MARGIN = 4000
     
     chunked_pages = []
@@ -223,18 +223,6 @@ def build_newspaper_html(
                 break
                 
         if not placed:
-            # Fill with fillers up to target_weight to guarantee full columns
-            while current_weight < target_weight:
-                if not filler_pool:
-                    filler_pool.extend(get_fillers(40))
-                
-                if not filler_pool:
-                    break
-                
-                item = filler_pool.pop(0)
-                current_page_articles.append(item)
-                current_weight += item["weight"]
-            
             if len(current_page_articles) == 0 and remaining_primary:
                 item = remaining_primary.pop(0)
                 current_page_articles.append(item)
@@ -327,15 +315,13 @@ def build_newspaper_html(
         page_break = "break-inside: avoid; page-break-inside: avoid;"
         
         page_html = f"""
-        <div class="pdf-page" style="width: 297mm; height: 420mm; overflow: hidden; padding: 12mm 10mm; background: white; margin: 0 auto; box-sizing: border-box; {page_break} position: relative; display: flex; flex-direction: column;">
+        <div class="pdf-page" style="width: 297mm; height: 418mm; overflow: hidden; padding: 12mm 10mm; background: white; margin: 0 auto; box-sizing: border-box; {page_break} position: relative; display: grid; grid-template-rows: auto 1fr;">
             <div class="header-section">
                 {masthead}
                 {lead_story_html}
             </div>
-            <div style="flex: 1; position: relative; margin-top: 5px;">
-                <div style="position: absolute; top: 0; bottom: 30px; left: 0; right: 0; column-count: 4; column-gap: 15px; column-fill: auto; orphans: 2; widows: 2; overflow: hidden;">
-                    {"".join(articles_html)}
-                </div>
+            <div style="min-height: 0; column-count: 5; column-gap: 10px; column-rule: 1px solid #ccc; column-fill: auto; orphans: 2; widows: 2; overflow: hidden; margin-top: 5px; margin-bottom: 25px;">
+                {"".join(articles_html)}
             </div>
             {custom_footer}
         </div>
