@@ -320,11 +320,15 @@ def build_newspaper_html(
         page_break = "break-inside: avoid; page-break-inside: avoid;"
         
         page_html = f"""
-        <div class="pdf-page" style="width: 297mm; height: 390mm; overflow: hidden; padding: 8mm 10mm; background: white; margin: 0 auto; box-sizing: border-box; {page_break} position: relative; display: flex; flex-direction: column;">
-            {masthead}
-            {lead_story_html}
-            <div style="flex: 1; min-height: 0; height: 100%; column-count: 4; column-gap: 15px; column-fill: auto; orphans: 2; widows: 2; overflow: hidden; position: relative;">
-                {"".join(articles_html)}
+        <div class="pdf-page" style="width: 297mm; height: 395mm; overflow: hidden; padding: 8mm 10mm; background: white; margin: 0 auto; box-sizing: border-box; {page_break} position: relative; display: flex; flex-direction: column;">
+            <div class="header-section">
+                {masthead}
+                {lead_story_html}
+            </div>
+            <div style="flex: 1; position: relative; margin-top: 5px;">
+                <div style="position: absolute; top: 0; bottom: 0; left: 0; right: 0; column-count: 4; column-gap: 15px; column-fill: auto; orphans: 2; widows: 2; overflow: hidden;">
+                    {"".join(articles_html)}
+                </div>
             </div>
         </div>
         """
