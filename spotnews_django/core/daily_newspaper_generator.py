@@ -315,12 +315,12 @@ def build_newspaper_html(
         page_break = "break-inside: avoid; page-break-inside: avoid;"
         
         page_html = f"""
-        <div class="pdf-page" style="width: 297mm; height: 396mm; overflow: hidden; padding: 12mm 10mm; background: white; margin: 0 auto; box-sizing: border-box; {page_break} position: relative; display: flex; flex-direction: column;">
+        <div class="pdf-page" style="width: 297mm; height: 396mm; padding: 12mm 10mm; background: white; margin: 0 auto; box-sizing: border-box; {page_break} position: relative; display: flex; flex-direction: column;">
             <div class="header-section" style="flex: 0 0 auto;">
                 {masthead}
                 {lead_story_html}
             </div>
-            <div style="flex: 1 1 0; min-height: 0; column-count: 5; column-gap: 10px; column-rule: 1px solid #ccc; column-fill: auto; orphans: 2; widows: 2; overflow: hidden; margin-top: 5px; margin-bottom: 25px;">
+            <div style="flex: 1 1 0; min-height: 0; column-count: 5; column-gap: 10px; column-rule: 1px solid #ccc; column-fill: auto; orphans: 2; widows: 2; margin-top: 5px; margin-bottom: 25px;">
                 {"".join(articles_html)}
             </div>
             {custom_footer}
@@ -342,8 +342,9 @@ def build_newspaper_html(
             padding: 0;
         }}
         html, body {{
-            background: #ffffff;
-            color: #000000;
+            background: #ffffff !important;
+            background-color: #ffffff !important;
+            color: #000000 !important;
             font-family: 'Noto Serif Telugu', serif;
             -webkit-print-color-adjust: exact;
             print-color-adjust: exact;
@@ -387,10 +388,12 @@ def render_html_to_pdf(html_content: str, output_path: str) -> bool:
                     "--no-sandbox",
                     "--disable-setuid-sandbox",
                     "--disable-dev-shm-usage",
-                    "--disable-gpu"
+                    "--disable-gpu",
+                    "--run-all-compositor-stages-before-draw"
                 ]
             )
             page = browser.new_page()
+            page.emulate_media(media="screen")
             page.set_content(html_content, wait_until="networkidle", timeout=120000)
             page.wait_for_timeout(3000)
             page.pdf(
@@ -398,6 +401,7 @@ def render_html_to_pdf(html_content: str, output_path: str) -> bool:
                 format="A3",
                 print_background=True,
                 display_header_footer=False,
+                prefer_css_page_size=True,
                 margin={"top": "0mm", "bottom": "0mm", "left": "0mm", "right": "0mm"}
             )
             browser.close()
