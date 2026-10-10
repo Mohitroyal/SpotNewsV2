@@ -315,12 +315,12 @@ def build_newspaper_html(
         page_break = "break-inside: avoid; page-break-inside: avoid;"
         
         page_html = f"""
-        <div class="pdf-page" style="width: 297mm; height: 396mm; overflow: hidden; padding: 12mm 10mm; background: white; margin: 0 auto; box-sizing: border-box; {page_break} position: relative; display: grid; grid-template-rows: auto 1fr;">
-            <div class="header-section">
+        <div class="pdf-page" style="width: 297mm; height: 396mm; overflow: hidden; padding: 12mm 10mm; background: white; margin: 0 auto; box-sizing: border-box; {page_break} position: relative; display: flex; flex-direction: column;">
+            <div class="header-section" style="flex: 0 0 auto;">
                 {masthead}
                 {lead_story_html}
             </div>
-            <div style="min-height: 0; column-count: 5; column-gap: 10px; column-rule: 1px solid #ccc; column-fill: auto; orphans: 2; widows: 2; overflow: hidden; margin-top: 5px; margin-bottom: 25px;">
+            <div style="flex: 1 1 0; min-height: 0; column-count: 5; column-gap: 10px; column-rule: 1px solid #ccc; column-fill: auto; orphans: 2; widows: 2; overflow: hidden; margin-top: 5px; margin-bottom: 25px;">
                 {"".join(articles_html)}
             </div>
             {custom_footer}
@@ -391,7 +391,7 @@ def render_html_to_pdf(html_content: str, output_path: str) -> bool:
                 ]
             )
             page = browser.new_page()
-            page.set_content(html_content, wait_until="domcontentloaded", timeout=120000)
+            page.set_content(html_content, wait_until="networkidle", timeout=120000)
             page.wait_for_timeout(3000)
             page.pdf(
                 path=output_path,
