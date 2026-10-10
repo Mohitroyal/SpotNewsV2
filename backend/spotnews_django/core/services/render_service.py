@@ -1924,7 +1924,7 @@ class RenderService:
                     "--disable-setuid-sandbox",
                     "--disable-dev-shm-usage",
                     "--disable-gpu",
-                    "--single-process",
+                    "--disable-gpu",
                     "--js-flags=--max-old-space-size=96",
                     "--renderer-process-limit=1",
                     "--disable-v8-idle-tasks",
@@ -1939,7 +1939,8 @@ class RenderService:
                     "--allow-file-access-from-files",
                     "--force-device-scale-factor=2.0",
                     "--high-dpi-support=1",
-                    "--enable-use-zoom-for-dsf=true"
+                    "--enable-use-zoom-for-dsf=true",
+                    "--disable-site-isolation-trials"
                 ],
             }
             if chrome_path: launch_kwargs["executable_path"] = chrome_path
