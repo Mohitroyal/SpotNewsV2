@@ -1934,7 +1934,7 @@ class RenderService:
         """Uses Playwright to render HTML and take both a PNG screenshot and/or a PDF print."""
         async with self.semaphore:
             _log_memory("generate_clipping_assets: Enter")
-            chrome_path = self._get_chromium_executable()
+            chrome_path = _get_chromium_executable()
             launch_kwargs = {
                 "headless": True,
                 "args": [
