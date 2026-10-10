@@ -1934,33 +1934,9 @@ class RenderService:
         """Uses Playwright to render HTML and take both a PNG screenshot and/or a PDF print."""
         async with self.semaphore:
             _log_memory("generate_clipping_assets: Enter")
-            chrome_path = _get_chromium_executable()
             launch_kwargs = {
                 "headless": True,
-                "args": [
-                    "--no-sandbox",
-                    "--disable-setuid-sandbox",
-                    "--disable-dev-shm-usage",
-                    "--disable-gpu",
-                    "--single-process",
-                    "--js-flags=--max-old-space-size=96",
-                    "--renderer-process-limit=1",
-                    "--disable-v8-idle-tasks",
-                    "--disable-extensions",
-                    "--disable-component-update",
-                    "--disable-background-networking",
-                    "--disable-sync",
-                    "--disable-translate",
-                    "--mute-audio",
-                    "--no-first-run",
-                    "--disable-web-security",
-                    "--allow-file-access-from-files",
-                    "--force-device-scale-factor=3.2",
-                    "--high-dpi-support=1",
-                    "--enable-use-zoom-for-dsf=true"
-                ],
             }
-            if chrome_path: launch_kwargs["executable_path"] = chrome_path
 
             max_attempts = 2
             for attempt in range(max_attempts):
@@ -1968,8 +1944,8 @@ class RenderService:
                 page = None
                 try:
                     async with async_playwright() as p:
-                        browser = await p.chromium.launch(**launch_kwargs)
-                        page = await browser.new_page(viewport={"width": 2400, "height": 2400}, device_scale_factor=3.2)
+                        browser = await p.webkit.launch(**launch_kwargs)
+                        page = await browser.new_page(viewport={"width": 1060, "height": 1400}, device_scale_factor=1.0)
                         def handle_console(msg):
                             if "net::ERR_UNKNOWN_URL_SCHEME" in msg.text or "Not allowed to load local resource" in msg.text:
                                 return
