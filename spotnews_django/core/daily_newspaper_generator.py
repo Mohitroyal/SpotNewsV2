@@ -321,10 +321,10 @@ def build_newspaper_html(
         page_break = "" if is_last_page else "page-break-after: always;"
         
         page_html = f"""
-        <div class="pdf-page" style="width: 297mm; height: 396mm; overflow: hidden; padding: 8mm 10mm; background: white; margin: 0 auto; box-sizing: border-box; {page_break} position: relative; display: flex; flex-direction: column;">
+        <div class="pdf-page" style="width: 297mm; height: 390mm; overflow: hidden; padding: 8mm 10mm; background: white; margin: 0 auto; box-sizing: border-box; {page_break} position: relative; display: flex; flex-direction: column;">
             {masthead}
             {lead_story_html}
-            <div style="flex: 1; column-count: 4; column-gap: 15px; column-fill: auto; orphans: 2; widows: 2; overflow: hidden; position: relative;">
+            <div style="flex: 1; min-height: 0; height: 100%; column-count: 4; column-gap: 15px; column-fill: auto; orphans: 2; widows: 2; overflow: hidden; position: relative;">
                 {"".join(articles_html)}
             </div>
         </div>
