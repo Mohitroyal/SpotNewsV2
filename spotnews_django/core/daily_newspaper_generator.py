@@ -317,19 +317,27 @@ def build_newspaper_html(
             
         masthead = masthead_block if is_first_page else ""
         # For the last page, avoid page-break-after to prevent a trailing blank page
+        custom_footer = f"""
+        <div style="position: absolute; bottom: 12mm; left: 10mm; right: 10mm; font-size: 11px; font-weight: bold; border-top: 2px solid #000; display: flex; justify-content: space-between; font-family: sans-serif; color: #444; padding-top: 4px;">
+            <span>{publication_name.upper()} — TELUGU DAILY</span>
+            <span>PAGE {page_idx + 1} OF {len(chunked_pages)}</span>
+        </div>
+        """
+        
         page_break = "break-inside: avoid; page-break-inside: avoid;"
         
         page_html = f"""
-        <div class="pdf-page" style="width: 297mm; height: 395mm; overflow: hidden; padding: 8mm 10mm; background: white; margin: 0 auto; box-sizing: border-box; {page_break} position: relative; display: flex; flex-direction: column;">
+        <div class="pdf-page" style="width: 297mm; height: 420mm; overflow: hidden; padding: 12mm 10mm; background: white; margin: 0 auto; box-sizing: border-box; {page_break} position: relative; display: flex; flex-direction: column;">
             <div class="header-section">
                 {masthead}
                 {lead_story_html}
             </div>
             <div style="flex: 1; position: relative; margin-top: 5px;">
-                <div style="position: absolute; top: 0; bottom: 0; left: 0; right: 0; column-count: 4; column-gap: 15px; column-fill: auto; orphans: 2; widows: 2; overflow: hidden;">
+                <div style="position: absolute; top: 0; bottom: 30px; left: 0; right: 0; column-count: 4; column-gap: 15px; column-fill: auto; orphans: 2; widows: 2; overflow: hidden;">
                     {"".join(articles_html)}
                 </div>
             </div>
+            {custom_footer}
         </div>
         """
         pages_html.append(page_html)
@@ -403,10 +411,8 @@ def render_html_to_pdf(html_content: str, output_path: str) -> bool:
                 path=output_path,
                 format="A3",
                 print_background=True,
-                display_header_footer=True,
-                header_template=header_template,
-                footer_template=footer_template,
-                margin={"top": "12mm", "bottom": "12mm", "left": "0mm", "right": "0mm"}
+                display_header_footer=False,
+                margin={"top": "0mm", "bottom": "0mm", "left": "0mm", "right": "0mm"}
             )
             browser.close()
             return os.path.exists(output_path) and os.path.getsize(output_path) > 0
