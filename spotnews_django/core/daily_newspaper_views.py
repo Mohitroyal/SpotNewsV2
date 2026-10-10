@@ -272,7 +272,7 @@ def generate_daily_newspaper(request):
             existing_row = cursor.fetchone()
             
             current_version = 1
-            if existing_row and not overwrite_existing:
+            if existing_row:
                 current_version = (existing_row[1] or 1) + 1
 
         # Build HTML content
