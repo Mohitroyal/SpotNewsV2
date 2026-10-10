@@ -11,6 +11,7 @@ from django.core.files.storage import FileSystemStorage
 import os
 
 import asyncio
+import base64
 
 # Import services once adapted for Django
 from .services.grok_service import grok_service
@@ -141,7 +142,7 @@ def run_clipping_generation_background(clipping_id, data, user_id):
                 custom_layout = json.loads(row[0]) if row and row[0] else {}
                 custom_layout['mp4_url'] = mp4_url
                 cursor.execute(
-                    "UPDATE clippings SET status = %s, png_url = %s, pdf_url = %s, custom_layout = %s WHERE id = %s",
+                    "UPDATE clippings SET status = %s, png_url = %s, pdf_url = %s, custom_layout = %s::jsonb WHERE id = %s",
                     ['completed', png_url, pdf_url, json.dumps(custom_layout), clipping_id]
                 )
             
@@ -154,7 +155,7 @@ def run_clipping_generation_background(clipping_id, data, user_id):
         try:
             with connection.cursor() as cursor:
                 cursor.execute(
-                    "UPDATE clippings SET status = %s, custom_layout = %s WHERE id = %s",
+                    "UPDATE clippings SET status = %s, custom_layout = %s::jsonb WHERE id = %s",
                     ['failed', json.dumps({"error": str(e), "stage": "Processing Error"}), clipping_id]
                 )
         except Exception as db_err:
@@ -188,7 +189,6 @@ def create_clipping(request):
         auth_header = request.headers.get("Authorization")
         token = auth_header.split(" ")[1]
         parts = token.split(".")
-        import base64
         payload_b64 = parts[1] + "=" * ((4 - len(parts[1]) % 4) % 4)
         payload = json.loads(base64.urlsafe_b64decode(payload_b64).decode('utf-8'))
         user_id = payload.get("sub")
@@ -243,7 +243,6 @@ def list_clippings(request):
         auth_header = request.headers.get("Authorization")
         token = auth_header.split(" ")[1]
         parts = token.split(".")
-        import base64
         payload_b64 = parts[1] + "=" * ((4 - len(parts[1]) % 4) % 4)
         payload = json.loads(base64.urlsafe_b64decode(payload_b64).decode('utf-8'))
         user_id = payload.get("sub")
