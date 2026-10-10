@@ -315,7 +315,7 @@ def build_newspaper_html(
         page_break = "break-inside: avoid; page-break-inside: avoid;"
         
         page_html = f"""
-        <div class="pdf-page" style="width: 297mm; height: 418mm; overflow: hidden; padding: 12mm 10mm; background: white; margin: 0 auto; box-sizing: border-box; {page_break} position: relative; display: grid; grid-template-rows: auto 1fr;">
+        <div class="pdf-page" style="width: 297mm; height: 396mm; overflow: hidden; padding: 12mm 10mm; background: white; margin: 0 auto; box-sizing: border-box; {page_break} position: relative; display: grid; grid-template-rows: auto 1fr;">
             <div class="header-section">
                 {masthead}
                 {lead_story_html}
