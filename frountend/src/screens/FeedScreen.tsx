@@ -334,6 +334,7 @@ export const FeedScreen: React.FC = () => {
                           <div 
                             className="w-full h-full relative z-10 bg-black group"
                             onClick={(e) => {
+                              e.stopPropagation();
                               const video = e.currentTarget.querySelector('video');
                               const thumbnail = e.currentTarget.querySelector('.thumbnail-container');
                               if (video) {
@@ -381,6 +382,7 @@ export const FeedScreen: React.FC = () => {
                           <div 
                             className="w-full h-full relative z-10 bg-black group"
                             onClick={(e) => {
+                              e.stopPropagation();
                               const video = e.currentTarget.querySelector('video');
                               if (video) {
                                 if (video.paused) {
