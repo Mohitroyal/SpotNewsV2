@@ -111,11 +111,78 @@ def build_newspaper_html(
     PAGE1_CAPACITY = 6500
     PAGE_CAPACITY = 9500
     
+    # --- FILLER ARTICLES LOGIC ---
+    try:
+        from django.db import connection
+        import json
+        existing_ids = [str(a.get("id")) for a in ordered_articles if a.get("id")]
+        filler_articles = []
+        with connection.cursor() as cursor:
+            if existing_ids:
+                query = """
+                    SELECT c.id, c.headline, c.article_content, c.image_url, c.image_urls, p.full_name, c.district
+                    FROM clippings c
+                    LEFT JOIN profiles p ON c.user_id = p.id
+                    WHERE (c.is_posted = true OR c.is_posted IS NULL OR c.status IN ('completed', 'published', 'posted'))
+                      AND (c.status IS NULL OR c.status NOT IN ('draft', 'rejected', 'deleted'))
+                      AND LENGTH(COALESCE(c.article_content, '')) > 50
+                      AND LENGTH(COALESCE(c.article_content, '')) < 1200
+                      AND c.id::text != ALL(%s)
+                    ORDER BY c.created_at DESC
+                    LIMIT 100
+                """
+                cursor.execute(query, [existing_ids])
+            else:
+                query = """
+                    SELECT c.id, c.headline, c.article_content, c.image_url, c.image_urls, p.full_name, c.district
+                    FROM clippings c
+                    LEFT JOIN profiles p ON c.user_id = p.id
+                    WHERE (c.is_posted = true OR c.is_posted IS NULL OR c.status IN ('completed', 'published', 'posted'))
+                      AND (c.status IS NULL OR c.status NOT IN ('draft', 'rejected', 'deleted'))
+                      AND LENGTH(COALESCE(c.article_content, '')) > 50
+                      AND LENGTH(COALESCE(c.article_content, '')) < 1200
+                    ORDER BY c.created_at DESC
+                    LIMIT 100
+                """
+                cursor.execute(query)
+            
+            rows = cursor.fetchall()
+            for r in rows:
+                raw_imgs = r[4]
+                if isinstance(raw_imgs, str):
+                    try:
+                        raw_imgs = json.loads(raw_imgs)
+                    except:
+                        raw_imgs = [raw_imgs]
+                elif not raw_imgs and r[3]:
+                    raw_imgs = [r[3]]
+                elif not raw_imgs:
+                    raw_imgs = []
+                filler_art = {
+                    "id": str(r[0]),
+                    "headline": r[1] or "ముఖ్యాంశం",
+                    "content": r[2] or "",
+                    "image_url": r[3] or (raw_imgs[0] if raw_imgs else ""),
+                    "image_urls": raw_imgs,
+                    "reporter_name": r[5] or "రిపోర్టర్",
+                    "district": r[6] or "",
+                }
+                f_headline = sanitize_text(filler_art["headline"])
+                f_content = sanitize_text(filler_art["content"])
+                f_imgs = filler_art["image_urls"] or ([] if not filler_art["image_url"] else [filler_art["image_url"]])
+                f_weight = len(f_content) + (len(f_headline) * 3) + (800 if f_imgs else 0)
+                filler_articles.append((filler_art, f_weight))
+    except Exception as e:
+        logger.error(f"Error fetching filler articles: {e}")
+        filler_articles = []
+    # -------------------------------
+
     current_weight = 0
     current_page_articles = []
     chunked_pages = []
+    global_article_index = 0
 
-    for idx, art in enumerate(ordered_articles):
+    for art in ordered_articles:
         headline = sanitize_text(art.get("headline") or art.get("title") or "ముఖ్యాంశం")
         content = sanitize_text(art.get("content") or art.get("summary") or "")
         imgs = art.get("image_urls") or []
@@ -128,14 +195,47 @@ def build_newspaper_html(
         capacity = PAGE1_CAPACITY if len(chunked_pages) == 0 else PAGE_CAPACITY
         
         if current_weight + weight > capacity and len(current_page_articles) > 0:
+            shortfall = capacity - current_weight
+            while shortfall > 400 and filler_articles:
+                best_filler_idx = -1
+                for i, (f_art, f_weight) in enumerate(filler_articles):
+                    if f_weight <= shortfall + 250:
+                        best_filler_idx = i
+                        break
+                if best_filler_idx != -1:
+                    f_art, f_weight = filler_articles.pop(best_filler_idx)
+                    current_page_articles.append((f_art, global_article_index))
+                    global_article_index += 1
+                    current_weight += f_weight
+                    shortfall -= f_weight
+                else:
+                    break
+                    
             chunked_pages.append(current_page_articles)
             current_page_articles = []
             current_weight = 0
             
-        current_page_articles.append((art, idx))
+        current_page_articles.append((art, global_article_index))
+        global_article_index += 1
         current_weight += weight
         
     if current_page_articles:
+        capacity = PAGE1_CAPACITY if len(chunked_pages) == 0 else PAGE_CAPACITY
+        shortfall = capacity - current_weight
+        while shortfall > 400 and filler_articles:
+            best_filler_idx = -1
+            for i, (f_art, f_weight) in enumerate(filler_articles):
+                if f_weight <= shortfall + 250:
+                    best_filler_idx = i
+                    break
+            if best_filler_idx != -1:
+                f_art, f_weight = filler_articles.pop(best_filler_idx)
+                current_page_articles.append((f_art, global_article_index))
+                global_article_index += 1
+                current_weight += f_weight
+                shortfall -= f_weight
+            else:
+                break
         chunked_pages.append(current_page_articles)
 
     pages_html = []
