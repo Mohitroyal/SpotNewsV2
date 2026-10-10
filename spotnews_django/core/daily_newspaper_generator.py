@@ -320,7 +320,7 @@ def build_newspaper_html(
         page_break = "break-inside: avoid; page-break-inside: avoid;"
         
         page_html = f"""
-        <div class="pdf-page" style="width: 100%; height: 100vh; overflow: hidden; padding: 8mm 10mm; background: white; margin: 0 auto; box-sizing: border-box; {page_break} position: relative; display: flex; flex-direction: column;">
+        <div class="pdf-page" style="width: 297mm; height: 390mm; overflow: hidden; padding: 8mm 10mm; background: white; margin: 0 auto; box-sizing: border-box; {page_break} position: relative; display: flex; flex-direction: column;">
             {masthead}
             {lead_story_html}
             <div style="flex: 1; min-height: 0; height: 100%; column-count: 4; column-gap: 15px; column-fill: auto; orphans: 2; widows: 2; overflow: hidden; position: relative;">
