@@ -398,7 +398,8 @@ export const dailyNewspaperService = {
     total_articles: number;
     message: string;
   }> {
-    // 1. Try Backend API first (Playwright Chromium server-side generation: sharp, vector, proper pagination)
+    // 1. Backend API (Playwright Chromium server-side generation: sharp, vector, proper pagination)
+    let lastError: any = null;
     try {
       const client = getDjangoClient();
       const res = await client.post('/api/v1/admin/daily-newspaper/generate', config, { timeout: 120_000 });
@@ -407,66 +408,20 @@ export const dailyNewspaperService = {
       }
     } catch (backendErr: any) {
       console.warn('[DailyNewspaper] Primary Django client generate failed, trying api fallback:', backendErr);
+      lastError = backendErr;
       try {
         const res = await api.post('/api/v1/admin/daily-newspaper/generate', config, { timeout: 120_000 });
         if (res.data && res.data.success) {
           return res.data;
         }
       } catch (apiErr: any) {
-        console.warn('[DailyNewspaper] Backend generate failed, falling back to client-side:', apiErr);
+        console.error('[DailyNewspaper] Backend generate failed:', apiErr);
+        lastError = apiErr;
       }
     }
 
-    // 2. Client-side fallback via html2pdf
-    try {
-      const preview = await generateClientSidePreviewHtml(config);
-      
-      const iframe = document.createElement('iframe');
-      iframe.style.position = 'fixed';
-      iframe.style.top = '0';
-      iframe.style.left = '0';
-      iframe.style.width = '297mm';
-      iframe.style.height = '100vh';
-      iframe.style.opacity = '0.01';
-      iframe.style.pointerEvents = 'none';
-      iframe.style.zIndex = '-999';
-      document.body.appendChild(iframe);
-
-      const doc = iframe.contentWindow?.document;
-      if (!doc) throw new Error("Iframe not initialized");
-      
-      doc.open();
-      doc.write(preview.html);
-      doc.close();
-
-      await new Promise(resolve => setTimeout(resolve, 3000));
-
-      const html2pdf = (await import('html2pdf.js')).default;
-      const opt = {
-        margin: 0,
-        filename: `DailyNewspaper-${config.edition_date}.pdf`,
-        image: { type: 'jpeg' as 'jpeg', quality: 0.98 },
-        html2canvas: { scale: 2, useCORS: true, logging: false, windowWidth: 1122 },
-        jsPDF: { unit: 'mm', format: 'a3', orientation: 'portrait' as const }
-      };
-
-      const pdfBlob = await html2pdf().set(opt).from(doc.body).output('blob');
-      const pdfBlobUrl = URL.createObjectURL(pdfBlob);
-      
-      document.body.removeChild(iframe);
-
-      return {
-        success: true,
-        edition_id: `edition-${Date.now()}`,
-        pdf_url: pdfBlobUrl,
-        total_pages: preview.total_pages,
-        total_articles: preview.total_articles,
-        message: `Generated local PDF successfully.`,
-      };
-    } catch (err: any) {
-      console.error('Local PDF Generation Error:', err);
-      throw new Error(err.message || 'Failed to generate PDF');
-    }
+    const errorMsg = lastError?.response?.data?.detail || lastError?.message || 'Server PDF generation failed. Please try again.';
+    throw new Error(errorMsg);
   },
 
   async getDailyEditions(): Promise<DailyEditionRecord[]> {
