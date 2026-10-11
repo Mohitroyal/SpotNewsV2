@@ -1,6 +1,26 @@
 import { supabase } from '@/lib/supabase';
 import api from '@/lib/axios';
-import axios from 'axios';
+import { useAuthStore } from '@/store';
+
+async function getAuthHeaders(): Promise<Record<string, string>> {
+  let token = useAuthStore.getState().token;
+  if (!token) {
+    try {
+      const { data } = await supabase.auth.getSession();
+      token = data?.session?.access_token || null;
+    } catch {}
+  }
+  if (!token && typeof window !== "undefined") {
+    const raw = localStorage.getItem("newscraft-auth");
+    if (raw) {
+      try {
+        const { state } = JSON.parse(raw);
+        token = state?.token || null;
+      } catch {}
+    }
+  }
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}
 
 export interface EligibleArticle {
   id: string;
@@ -265,26 +285,6 @@ export async function generateClientSidePreviewHtml(config: DailyNewspaperConfig
   return { html, total_pages: totalPages, total_articles: totalArticles };
 }
 
-const getDjangoClient = () => {
-  const djangoUrl = import.meta.env.VITE_DJANGO_API_URL || import.meta.env.VITE_API_URL || 'https://spotnewsv2.onrender.com';
-  const instance = axios.create({
-    baseURL: djangoUrl,
-    headers: { "Content-Type": "application/json" }
-  });
-
-  if (typeof window !== "undefined") {
-    const raw = localStorage.getItem("newscraft-auth");
-    if (raw) {
-      try {
-        const { state } = JSON.parse(raw);
-        if (state?.token) {
-          instance.defaults.headers.common.Authorization = `Bearer ${state.token}`;
-        }
-      } catch {}
-    }
-  }
-  return instance;
-};
 
 export const dailyNewspaperService = {
   /**
@@ -294,13 +294,17 @@ export const dailyNewspaperService = {
   async getEligibleClippings(dateStr: string): Promise<{ total: number; articles: EligibleArticle[] }> {
     // 1. Try Backend API
     try {
-      const client = getDjangoClient();
-      const res = await client.get('/api/v1/admin/daily-newspaper/clippings', { params: { date: dateStr } });
+      const headers = await getAuthHeaders();
+      const res = await api.get('/api/v1/admin/daily-newspaper/clippings', {
+        params: { date: dateStr },
+        headers,
+        timeout: 20_000,
+      });
       if (res.data && Array.isArray(res.data.articles) && res.data.articles.length > 0) {
         return { total: res.data.total_eligible ?? res.data.articles.length, articles: res.data.articles };
       }
     } catch (err) {
-      console.warn('[DailyNewspaper] Backend unavailable:', err);
+      console.warn('[DailyNewspaper] Backend clippings unavailable:', err);
     }
 
     // 2. Direct Supabase — all clippings created on this date (IST-aware)
@@ -376,16 +380,11 @@ export const dailyNewspaperService = {
 
   async preview(config: DailyNewspaperConfig): Promise<{ html: string; total_pages: number; total_articles: number }> {
     try {
-      const client = getDjangoClient();
-      const res = await client.post('/api/v1/admin/daily-newspaper/preview', config);
+      const headers = await getAuthHeaders();
+      const res = await api.post('/api/v1/admin/daily-newspaper/preview', config, { headers, timeout: 30_000 });
       return res.data;
     } catch {
-      try {
-        const res = await api.post('/api/v1/admin/daily-newspaper/preview', config);
-        return res.data;
-      } catch {
-        return generateClientSidePreviewHtml(config);
-      }
+      return generateClientSidePreviewHtml(config);
     }
   },
 
@@ -398,26 +397,20 @@ export const dailyNewspaperService = {
     total_articles: number;
     message: string;
   }> {
-    // 1. Backend API (Playwright Chromium server-side generation: sharp, vector, proper pagination)
+    // Backend API (Playwright Chromium server-side generation with guaranteed A3 styling)
     let lastError: any = null;
     try {
-      const client = getDjangoClient();
-      const res = await client.post('/api/v1/admin/daily-newspaper/generate', config, { timeout: 120_000 });
+      const headers = await getAuthHeaders();
+      const res = await api.post('/api/v1/admin/daily-newspaper/generate', config, {
+        headers,
+        timeout: 180_000,
+      });
       if (res.data && res.data.success) {
         return res.data;
       }
-    } catch (backendErr: any) {
-      console.warn('[DailyNewspaper] Primary Django client generate failed, trying api fallback:', backendErr);
-      lastError = backendErr;
-      try {
-        const res = await api.post('/api/v1/admin/daily-newspaper/generate', config, { timeout: 120_000 });
-        if (res.data && res.data.success) {
-          return res.data;
-        }
-      } catch (apiErr: any) {
-        console.error('[DailyNewspaper] Backend generate failed:', apiErr);
-        lastError = apiErr;
-      }
+    } catch (apiErr: any) {
+      console.error('[DailyNewspaper] Backend generate failed:', apiErr);
+      lastError = apiErr;
     }
 
     const errorMsg = lastError?.response?.data?.detail || lastError?.message || 'Server PDF generation failed. Please try again.';
@@ -426,8 +419,8 @@ export const dailyNewspaperService = {
 
   async getDailyEditions(): Promise<DailyEditionRecord[]> {
     try {
-      const client = getDjangoClient();
-      const res = await client.get('/api/v1/admin/daily-newspaper/editions');
+      const headers = await getAuthHeaders();
+      const res = await api.get('/api/v1/admin/daily-newspaper/editions', { headers, timeout: 20_000 });
       if (Array.isArray(res.data)) return res.data;
     } catch {
       console.warn('[DailyNewspaper] Backend editions unavailable.');

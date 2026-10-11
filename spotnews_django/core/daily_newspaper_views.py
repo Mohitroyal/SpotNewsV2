@@ -18,6 +18,9 @@ def verify_superadmin_request(request):
     Verifies JWT token and checks if user role in profiles is 'superadmin' or 'admin'.
     Returns (is_authorized, user_id, user_role, error_response).
     """
+    if request.method == 'OPTIONS':
+        return True, None, "admin", None
+
     auth_header = request.headers.get("Authorization")
     if not auth_header or not auth_header.startswith("Bearer "):
         return False, None, None, JsonResponse({"detail": "Missing Authorization header"}, status=401)
@@ -305,14 +308,15 @@ def generate_daily_newspaper(request):
         if not success:
             return JsonResponse({"detail": "Failed to generate PDF. The server environment may lack Chromium dependencies (Playwright failed). Check server logs."}, status=500)
             
-        # Read PDF into memory and encode as base64 for direct download
-        # This avoids ephemeral filesystem issues on Render free tier
+        # Read PDF into memory and encode as base64 for direct download if within safe size limit (< 8MB)
+        # Giant base64 strings (>8MB) trigger Out-Of-Memory, proxy drops, and network errors on mobile
         pdf_base64 = None
         try:
             with open(output_pdf_path, 'rb') as f:
                 pdf_bytes = f.read()
-            pdf_base64 = base64.b64encode(pdf_bytes).decode('utf-8')
-            print(f"[PDF Generator] PDF read successfully: {len(pdf_bytes)} bytes")
+            if len(pdf_bytes) <= 8 * 1024 * 1024:
+                pdf_base64 = base64.b64encode(pdf_bytes).decode('utf-8')
+            print(f"[PDF Generator] PDF read successfully: {len(pdf_bytes)} bytes (b64 included: {pdf_base64 is not None})")
         except Exception as read_err:
             print(f"[PDF Generator] Failed to read PDF: {read_err}")
             

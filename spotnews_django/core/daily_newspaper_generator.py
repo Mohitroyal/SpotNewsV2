@@ -444,14 +444,30 @@ def render_html_to_pdf(html_content: str, output_path: str) -> bool:
             page = context.new_page()
             # Emulate screen media so CSS flexbox & multi-columns layout identically to browser preview
             page.emulate_media(media="screen")
-            page.set_content(html_content, wait_until="load", timeout=30000)
+            page.set_content(html_content, wait_until="domcontentloaded", timeout=60000)
 
             # Wait for Telugu web fonts to finish rendering
             try:
                 page.evaluate("document.fonts ? document.fonts.ready : Promise.resolve()")
             except Exception:
                 pass
-            page.wait_for_timeout(2000)
+
+            # Allow up to 3 seconds for images to finish loading without blocking if slow/missing
+            try:
+                page.evaluate("""
+                    Promise.race([
+                        Promise.all(
+                            Array.from(document.images)
+                                .filter(img => !img.complete)
+                                .map(img => new Promise(res => { img.onload = img.onerror = res; }))
+                        ),
+                        new Promise(res => setTimeout(res, 3000))
+                    ])
+                """)
+            except Exception:
+                pass
+
+            page.wait_for_timeout(800)
 
             body_text = page.evaluate("() => document.body ? document.body.innerText.length : 0")
             print(f"[PDF Generator] Page body text length: {body_text}")
@@ -460,6 +476,7 @@ def render_html_to_pdf(html_content: str, output_path: str) -> bool:
                 path=output_path,
                 format="A3",
                 print_background=True,
+                prefer_css_page_size=True,
                 display_header_footer=False,
                 margin={"top": "0mm", "bottom": "0mm", "left": "0mm", "right": "0mm"}
             )
