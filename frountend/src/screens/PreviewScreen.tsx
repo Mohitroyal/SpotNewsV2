@@ -1,12 +1,13 @@
 import { useParams, useNavigate } from 'react-router-dom';
-import { useGenerationStore, useAuthStore } from '@/store';
-import { ArrowLeft, Download, FileDown, Share2, MoreHorizontal, FileText, Send, CheckCircle2 } from 'lucide-react';
+import { useGenerationStore, useAuthStore, getReporterName, getReporterPhoto } from '@/store';
+import { ArrowLeft, Download, FileDown, Share2, MoreHorizontal, FileText, Send, CheckCircle2, Loader2 } from 'lucide-react';
 import { generationService } from '@/services/generation.service';
 import { supabase } from '@/lib/supabase';
 import { useState, useEffect, useRef } from 'react';
 import { Capacitor } from '@capacitor/core';
 import { Filesystem, Directory } from '@capacitor/filesystem';
 import { Share } from '@capacitor/share';
+import { ShareAfterClipping } from '@/features/share/ShareAfterClipping';
 
 // ─── Stage → Progress mapping ───────────────────────────────────────────────
 const STAGE_PROGRESS: Record<string, number> = {
@@ -49,14 +50,53 @@ export const PreviewScreen = () => {
   const { id } = useParams();
   const navigate = useNavigate();
   const generations = useGenerationStore((state) => state.generations);
-  const generation = generations.find(g => g.id === id);
+  const storeGen = generations.find(g => g.id === id);
+  const [remoteGen, setRemoteGen] = useState<any>(null);
+  const [loadingRemote, setLoadingRemote] = useState(!storeGen && !!id);
+  const generation = storeGen || remoteGen;
   const updateGeneration = useGenerationStore((state) => state.updateGeneration);
+
+  useEffect(() => {
+    if (!storeGen && id) {
+      setLoadingRemote(true);
+      supabase
+        .from('clippings')
+        .select('*')
+        .eq('id', id)
+        .maybeSingle()
+        .then(({ data, error }) => {
+          setLoadingRemote(false);
+          if (data && !error) {
+            setRemoteGen({
+              id: data.id,
+              userId: data.user_id,
+              headline: data.headline,
+              config: {
+                headline: data.headline,
+                articleContent: data.article_content,
+                imageUrls: data.image_urls || (data.image_url ? [data.image_url] : []),
+                location: [data.district, data.state].filter(Boolean).join(', '),
+              },
+              status: data.status || 'completed',
+              createdAt: data.created_at,
+              png_url: data.png_url || data.image_url,
+              pdf_url: data.pdf_url,
+              mp4_url: data.mp4_url,
+              stage: 'completed',
+              progress: 100,
+            });
+          }
+        });
+    }
+  }, [id, storeGen]);
 
   const [downloading, setDownloading] = useState(false);
   const [isShareSheetOpen, setIsShareSheetOpen] = useState(false);
+  const [showRtiShare, setShowRtiShare] = useState(false);
   const [isPosting, setIsPosting] = useState(false);
   const [isPosted, setIsPosted] = useState(false);
   
+  const user = useAuthStore((state) => state.user);
   const userState = useAuthStore((state) => state.userState) || '';
   const district = useAuthStore((state) => state.district) || '';
   
@@ -187,6 +227,7 @@ export const PreviewScreen = () => {
       } else {
         if (generation.pdf_url) {
           const res = await fetch(generation.pdf_url);
+          if (!res.ok) throw new Error(`Failed to download PDF from server (HTTP ${res.status})`);
           blob = await res.blob();
         } else {
           blob = await generationService.exportPdf(generation.id);
@@ -367,6 +408,30 @@ export const PreviewScreen = () => {
       setIsPosting(false);
     }
   };
+
+  if (loadingRemote) {
+    return (
+      <div className="h-screen bg-[#0d1829] flex flex-col items-center justify-center text-white">
+        <Loader2 className="w-10 h-10 animate-spin text-[#ffd43b] mb-4" />
+        <p className="text-sm font-semibold">వార్త లోడ్ అవుతోంది...</p>
+      </div>
+    );
+  }
+
+  if (!generation) {
+    return (
+      <div className="h-screen bg-[#0d1829] flex flex-col items-center justify-center text-white p-6 text-center">
+        <h2 className="text-xl font-bold mb-2">వార్త దొరకలేదు</h2>
+        <p className="text-sm text-slate-400 mb-6">ఈ క్లిప్పింగ్ అందుబాటులో లేదు లేదా తొలగించబడింది.</p>
+        <button
+          onClick={() => navigate('/')}
+          className="px-6 py-2.5 bg-[#e11d48] text-white font-bold rounded-xl text-sm"
+        >
+          హోమ్‌కి వెళ్లండి
+        </button>
+      </div>
+    );
+  }
 
   // ── Derived state for the progress UI ────────────────────────────────────
   const progressPercent = generation.progress ?? getProgress(liveStage || generation.stage);
@@ -596,68 +661,111 @@ export const PreviewScreen = () => {
                })()}
              </div>
 
-             <div className="w-full shrink-0 flex flex-col gap-2">
-                <div className="flex w-full gap-2">
-                  <button
-                    onClick={() => handleDownload('jpg')}
-                    disabled={downloading}
-                    className="flex-1 py-[14px] bg-[#cc2222] hover:bg-[#ff3333] active:bg-[#a01b1b] text-white rounded-[8px] font-bold text-xs tracking-wider uppercase transition-all flex items-center justify-center gap-2 shadow-sm hover:shadow-[0_4px_12px_rgba(204,34,34,0.3)] animate-in slide-in-from-bottom-2 duration-300 delay-200 fill-mode-both relative overflow-hidden group"
-                  >
-                    <div className="absolute inset-0 bg-white/20 translate-x-[-100%] group-hover:animate-[shimmerSweep_1s_ease-out]" />
-                    <Download className="w-4 h-4 shrink-0" />
-                    <span>Save JPG</span>
-                  </button>
+                 <div className="w-full shrink-0 flex flex-col gap-2">
+                   <div className="flex w-full gap-2">
+                     <button
+                       onClick={() => handleDownload('jpg')}
+                       disabled={downloading}
+                       className="flex-1 py-[14px] bg-[#cc2222] hover:bg-[#ff3333] active:bg-[#a01b1b] text-white rounded-[8px] font-bold text-xs tracking-wider uppercase transition-all flex items-center justify-center gap-2 shadow-sm hover:shadow-[0_4px_12px_rgba(204,34,34,0.3)] animate-in slide-in-from-bottom-2 duration-300 delay-200 fill-mode-both relative overflow-hidden group"
+                     >
+                       <div className="absolute inset-0 bg-white/20 translate-x-[-100%] group-hover:animate-[shimmerSweep_1s_ease-out]" />
+                       <Download className="w-4 h-4 shrink-0" />
+                       <span>Save JPG</span>
+                     </button>
 
-                  <button
-                    onClick={() => handleDownload('pdf')}
-                    disabled={downloading}
-                    className="flex-1 py-[14px] bg-[#015BB3] hover:bg-[#145AB1] active:bg-[#015BB3] text-white rounded-[8px] font-bold text-xs tracking-wider uppercase transition-all flex items-center justify-center gap-2 shadow-sm hover:shadow-[0_4px_12px_rgba(1,91,179,0.3)] animate-in slide-in-from-bottom-2 duration-300 delay-300 fill-mode-both relative overflow-hidden group"
-                  >
-                    <div className="absolute inset-0 bg-white/10 translate-x-[-100%] group-hover:animate-[shimmerSweep_1s_ease-out]" />
-                    <FileDown className="w-4 h-4 shrink-0" />
-                    <span>Save PDF</span>
-                  </button>
+                     <button
+                       onClick={() => handleDownload('pdf')}
+                       disabled={downloading}
+                       className="flex-1 py-[14px] bg-[#015BB3] hover:bg-[#145AB1] active:bg-[#015BB3] text-white rounded-[8px] font-bold text-xs tracking-wider uppercase transition-all flex items-center justify-center gap-2 shadow-sm hover:shadow-[0_4px_12px_rgba(1,91,179,0.3)] animate-in slide-in-from-bottom-2 duration-300 delay-300 fill-mode-both relative overflow-hidden group"
+                     >
+                       <div className="absolute inset-0 bg-white/10 translate-x-[-100%] group-hover:animate-[shimmerSweep_1s_ease-out]" />
+                       <FileDown className="w-4 h-4 shrink-0" />
+                       <span>Save PDF</span>
+                     </button>
+                   </div>
+
+                   <div className="flex w-full gap-2">
+                     {/* RTI Share Card button (reporters only) */}
+                     {user?.role === 'reporter' ? (
+                       <button
+                         onClick={() => setShowRtiShare(true)}
+                         disabled={downloading || isPosting}
+                         className="flex-1 py-[14px] bg-[#0e2a66] hover:bg-[#14397a] active:bg-[#0a1f50] text-white rounded-[8px] font-bold text-xs tracking-wider uppercase transition-all flex items-center justify-center gap-2 shadow-sm hover:shadow-[0_4px_12px_rgba(14,42,102,0.35)] animate-in slide-in-from-bottom-2 duration-300 delay-350 fill-mode-both"
+                       >
+                         <span>📤 Share Card</span>
+                       </button>
+                     ) : (
+                       <button
+                         onClick={() => setIsShareSheetOpen(true)}
+                         disabled={downloading || isPosting}
+                         className="flex-1 py-[14px] bg-[#dceef8] hover:bg-[#b8d4e8] active:bg-[#b8d4e8] text-[#0a2540] border-[1px] border-[#b8d4e8] rounded-[8px] font-bold text-xs tracking-wider uppercase transition-all flex items-center justify-center gap-2 shadow-sm hover:shadow-md animate-in slide-in-from-bottom-2 duration-300 delay-400 fill-mode-both relative overflow-hidden group"
+                       >
+                         <div className="absolute inset-0 bg-white/40 translate-x-[-100%] group-hover:animate-[shimmerSweep_1s_ease-out]" />
+                         <Share2 className="w-4 h-4 shrink-0" />
+                         <span>Share</span>
+                       </button>
+                     )}
+
+                     <button
+                       onClick={handlePostToFeed}
+                       disabled={downloading || isPosting || isPosted}
+                       className={`flex-1 py-[14px] rounded-[8px] font-bold text-xs tracking-wider uppercase transition-all flex items-center justify-center gap-2 shadow-sm animate-in slide-in-from-bottom-2 duration-300 delay-400 fill-mode-both relative overflow-hidden group ${
+                         isPosted
+                           ? 'bg-[#25D366] text-white border-[1px] border-[#25D366]'
+                           : 'bg-[#fff] hover:bg-[#f0f0f0] active:bg-[#e0e0e0] text-[#015BB3] border-[1px] border-[#015BB3]'
+                       }`}
+                     >
+                       {isPosted ? (
+                         <>
+                           <CheckCircle2 className="w-4 h-4 shrink-0" />
+                           <span>Posted</span>
+                         </>
+                       ) : (
+                         <>
+                           <Send className="w-4 h-4 shrink-0" />
+                           <span>{isPosting ? 'Posting...' : 'Post to Feed'}</span>
+                         </>
+                       )}
+                     </button>
+                   </div>
                 </div>
-
-                <div className="flex w-full gap-2">
-                  <button
-                    onClick={() => setIsShareSheetOpen(true)}
-                    disabled={downloading || isPosting}
-                    className="flex-1 py-[14px] bg-[#dceef8] hover:bg-[#b8d4e8] active:bg-[#b8d4e8] text-[#0a2540] border-[1px] border-[#b8d4e8] rounded-[8px] font-bold text-xs tracking-wider uppercase transition-all flex items-center justify-center gap-2 shadow-sm hover:shadow-md animate-in slide-in-from-bottom-2 duration-300 delay-400 fill-mode-both relative overflow-hidden group"
-                  >
-                    <div className="absolute inset-0 bg-white/40 translate-x-[-100%] group-hover:animate-[shimmerSweep_1s_ease-out]" />
-                    <Share2 className="w-4 h-4 shrink-0" />
-                    <span>Share</span>
-                  </button>
-
-                  <button
-                    onClick={handlePostToFeed}
-                    disabled={downloading || isPosting || isPosted}
-                    className={`flex-1 py-[14px] rounded-[8px] font-bold text-xs tracking-wider uppercase transition-all flex items-center justify-center gap-2 shadow-sm animate-in slide-in-from-bottom-2 duration-300 delay-400 fill-mode-both relative overflow-hidden group ${
-                      isPosted 
-                        ? 'bg-[#25D366] text-white border-[1px] border-[#25D366]' 
-                        : 'bg-[#fff] hover:bg-[#f0f0f0] active:bg-[#e0e0e0] text-[#015BB3] border-[1px] border-[#015BB3]'
-                    }`}
-                  >
-                    {isPosted ? (
-                      <>
-                        <CheckCircle2 className="w-4 h-4 shrink-0" />
-                        <span>Posted</span>
-                      </>
-                    ) : (
-                      <>
-                        <Send className="w-4 h-4 shrink-0" />
-                        <span>{isPosting ? 'Posting...' : 'Post to Feed'}</span>
-                      </>
-                    )}
-                  </button>
-                </div>
-             </div>
           </div>
         )}
       </div>
 
-      {/* ── Share Bottom Sheet (styled to match palette) ─────────────────── */}
+      {/* ── RTI Share Card Sheet (reporters only) ─────────────────────── */}
+      {showRtiShare && generation.png_url && (() => {
+        const reporterName = getReporterName(user?.email) || (user as any)?.user_metadata?.full_name || (user as any)?.user_metadata?.name || user?.full_name || user?.firstName || 'Reporter';
+        const reporterPhoto = getReporterPhoto(user?.email) || user?.avatarUrl || (user as any)?.user_metadata?.avatar_url || (user as any)?.user_metadata?.picture || undefined;
+        const reporterSlug = (user as any)?.slug || user?.id || 'reporter';
+        return (
+          <ShareAfterClipping
+            post={{
+              id: generation.id as any,
+              headline: generation.config?.headline || generation.headline || 'వార్త',
+              place: (generation.config as any)?.location || (generation as any).location || '',
+              date: new Date().toLocaleDateString('te-IN', { day: 'numeric', month: 'long', year: 'numeric' }),
+              clippingUrl: generation.png_url,
+              thumbUrl: generation.png_url,
+            }}
+            reporter={{
+              id: user?.id || '',
+              slug: reporterSlug,
+              name: reporterName,
+              photoUrl: reporterPhoto,
+              verified: (user as any)?.verified ?? false,
+              avgStars: 0,
+              ratingsCount: 0,
+              stories: 0,
+              views: 0,
+              experienceYears: (user as any)?.experience_years,
+            }}
+            onClose={() => setShowRtiShare(false)}
+          />
+        );
+      })()}
+
+      {/* ── Share Bottom Sheet (non-reporters / fallback) ──────────────── */}
       {isShareSheetOpen && (
         <div 
           className="fixed inset-0 bg-[#0a2540]/60 backdrop-blur-sm z-[60] transition-opacity duration-300"

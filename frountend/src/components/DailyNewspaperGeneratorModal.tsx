@@ -7,7 +7,6 @@ import {
 import { Capacitor } from '@capacitor/core';
 import { Filesystem, Directory } from '@capacitor/filesystem';
 import { Share } from '@capacitor/share';
-import { Browser } from '@capacitor/browser';
 import {
   dailyNewspaperService,
   type EligibleArticle,
@@ -262,6 +261,7 @@ export const DailyNewspaperGeneratorModal: React.FC<Props> = ({ isOpen, onClose,
         } else {
           // Fallback: fetch from URL
           const res = await fetch(targetUrl);
+          if (!res.ok) throw new Error(`Server returned HTTP ${res.status} when fetching PDF`);
           const blob = await res.blob();
           base64data = await new Promise<string>((resolve) => {
             const reader = new FileReader();
@@ -275,26 +275,41 @@ export const DailyNewspaperGeneratorModal: React.FC<Props> = ({ isOpen, onClose,
         }
         try {
           if (Capacitor.getPlatform() === 'android') await Filesystem.requestPermissions();
-          const writeRes = await Filesystem.writeFile({
+          // Write to Documents for permanent device storage
+          await Filesystem.writeFile({
             path: fileName,
             data: base64data,
             directory: Directory.Documents,
             recursive: true,
           });
+
+          // Write a copy to Cache for safe Android file-sharing
+          let shareUrl = targetUrl;
+          try {
+            const cacheResult = await Filesystem.writeFile({
+              path: fileName,
+              data: base64data,
+              directory: Directory.Cache,
+              recursive: true,
+            });
+            if (cacheResult.uri) {
+              shareUrl = cacheResult.uri;
+            }
+          } catch {}
+
           try {
             await Share.share({
               title: fileName,
               text: `Daily Newspaper A3 Edition - ${editionDate}`,
-              url: writeRes.uri || targetUrl,
-              dialogTitle: 'Open/Save Daily Newspaper Edition',
+              url: shareUrl,
+              dialogTitle: 'Open/Share Daily Newspaper Edition',
             });
-          } catch {
-            await Browser.open({ url: targetUrl });
-          }
-          alert(`Saved to Documents as ${fileName}.`);
+          } catch {}
+
+          alert(`Daily Newspaper saved to your Documents as ${fileName}`);
         } catch (e: any) {
           console.error('Filesystem write error', e);
-          try { await Browser.open({ url: targetUrl }); } catch {}
+          alert(`Download saved, but error sharing: ${e.message || e}`);
         } finally {
           setDownloading(false);
         }

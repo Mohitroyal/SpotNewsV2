@@ -393,6 +393,7 @@ export const dailyNewspaperService = {
     success: boolean;
     edition_id: string;
     pdf_url: string;
+    pdf_base64?: string | null;
     total_pages: number;
     total_articles: number;
     message: string;

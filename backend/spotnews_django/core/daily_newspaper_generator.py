@@ -1,6 +1,8 @@
 import os
 from pathlib import Path
-os.environ["PLAYWRIGHT_BROWSERS_PATH"] = str(Path(__file__).resolve().parent.parent / "pw-browsers")
+pw_dir = Path(__file__).resolve().parent.parent / "pw-browsers"
+if pw_dir.is_dir():
+    os.environ["PLAYWRIGHT_BROWSERS_PATH"] = str(pw_dir)
 import re
 import json
 import logging
@@ -194,17 +196,40 @@ def build_newspaper_html(
             """
             articles_html.append(item_html)
             
-        masthead = masthead_block if is_first_page else ""
+        if is_first_page:
+            header_html = masthead_block
+        else:
+            header_html = f"""
+            <div style="display: flex; justify-content: space-between; align-items: center; background: #006600; color: #ffffff; font-size: 13px; font-weight: bold; padding: 6px 15px; margin-bottom: 8px; border-radius: 2px;">
+                <div>{sanitize_text(publication_name)}</div>
+                <div>{telugu_date_formatted}</div>
+                <div>పేజీ {page_idx + 1}</div>
+            </div>
+            """
+
+        page_num_str = f"పేజీ {page_idx + 1}"
+        custom_footer = f"""
+        <div class="footer-section" style="flex: 0 0 auto; display: flex; justify-content: space-between; align-items: center; border-top: 1px solid #ccc; padding-top: 4px; font-size: 11px; color: #555; margin-top: 6px;">
+            <div>{sanitize_text(publication_name)} - {edition_date}</div>
+            <div style="font-weight: bold;">{page_num_str}</div>
+        </div>
+        """
+
         # For the last page, avoid page-break-after to prevent a trailing blank page
         is_last_page = (page_idx == len(chunked_pages) - 1)
-        page_break = "" if is_last_page else "page-break-after: always;"
+        page_break_style = "" if is_last_page else "page-break-after: always; break-after: page;"
         
         page_html = f"""
-        <div class="pdf-page" style="width: 297mm; min-height: 420mm; padding: 8mm 10mm; background: white; margin: 0 auto; box-sizing: border-box; {page_break} position: relative;">
-            {masthead}
-            <div style="column-count: 4; column-gap: 15px; column-fill: auto; height: {'calc(420mm - 170px)' if is_first_page else 'calc(420mm - 16mm)'}; orphans: 2; widows: 2;">
-                {"".join(articles_html)}
+        <div class="pdf-page" style="width: 297mm; height: 420mm; max-height: 420mm; padding: 12mm 10mm; background: #ffffff; margin: 0 auto; box-sizing: border-box; position: relative; display: flex; flex-direction: column; overflow: hidden; page-break-inside: avoid; break-inside: avoid; {page_break_style}">
+            <div class="header-section" style="flex: 0 0 auto;">
+                {header_html}
             </div>
+            <div class="flex-wrapper" style="flex: 1 1 0; min-height: 0; position: relative; margin-top: 5px;">
+                <div class="cols" style="position: absolute; top: 0; bottom: 0; left: 0; right: 0; column-count: 5; column-gap: 10px; column-rule: 1px solid #ccc; column-fill: auto; orphans: 2; widows: 2;">
+                    {"".join(articles_html)}
+                </div>
+            </div>
+            {custom_footer}
         </div>
         """
         pages_html.append(page_html)
@@ -217,17 +242,37 @@ def build_newspaper_html(
     <title>{sanitize_text(publication_name)} - {edition_date}</title>
     <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+Telugu:wght@400;600;700;800;900&display=swap" rel="stylesheet">
     <style>
+        @page {{
+            size: 297mm 420mm;
+            margin: 0;
+        }}
         *, *::before, *::after {{
             box-sizing: border-box;
             margin: 0;
             padding: 0;
         }}
         html, body {{
-            background: #ffffff;
-            color: #000000;
+            background: #ffffff !important;
+            background-color: #ffffff !important;
+            color: #000000 !important;
             font-family: 'Noto Serif Telugu', serif;
             -webkit-print-color-adjust: exact;
             print-color-adjust: exact;
+        }}
+        .pdf-page {{
+            width: 297mm;
+            height: 420mm;
+            max-height: 420mm;
+            padding: 12mm 10mm;
+            background: #ffffff;
+            margin: 0 auto;
+            box-sizing: border-box;
+            position: relative;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            page-break-inside: avoid;
+            break-inside: avoid;
         }}
     </style>
 </head>
@@ -240,52 +285,82 @@ def build_newspaper_html(
 """
     return html
 
-def render_html_to_pdf(html_content: str, output_path: str) -> bool:
-    """Render HTML string to A3 PDF file using Playwright Chromium with continuous flow pagination."""
-    
-    header_template = f"""
-    <div style="width: 100%; font-size: 11px; font-weight: bold; border-bottom: 2px solid #006600; margin: 0 10mm; padding-bottom: 4px; display: flex; justify-content: space-between; font-family: sans-serif; color: #333;">
-        <span style="color: #006600;">స్పాట్ న్యూస్ — దినపత్రిక</span>
-        <span>పేజీ <span class="pageNumber"></span> of <span class="totalPages"></span></span>
-    </div>
-    """
-    
-    footer_template = f"""
-    <div style="width: 100%; font-size: 11px; font-weight: bold; border-top: 2px solid #000; margin: 0 10mm; padding-top: 4px; display: flex; justify-content: space-between; font-family: sans-serif; color: #444;">
-        <span>స్పాట్ న్యూస్ — TELUGU DAILY</span>
-        <span>PAGE <span class="pageNumber"></span> OF <span class="totalPages"></span></span>
-    </div>
-    """
+def _get_chromium_executable() -> Optional[str]:
+    """Locate the Chromium executable installed by Playwright on Render/Linux or return None for local auto-detect."""
+    import glob
+    browsers_path = os.getenv("PLAYWRIGHT_BROWSERS_PATH")
+    if not browsers_path:
+        if os.path.isdir("/opt/render/project/.playwright"):
+            browsers_path = "/opt/render/project/.playwright"
+        else:
+            return None
 
+    patterns = [
+        os.path.join(browsers_path, "chromium-*/chrome-linux/chrome"),
+        os.path.join(browsers_path, "chromium-*/chrome-linux/chromium"),
+        os.path.join(browsers_path, "chromium-*/chrome"),
+        os.path.join(browsers_path, "chromium_headless_shell-*/chrome-headless-shell-linux64/chrome-headless-shell"),
+    ]
+    for pattern in patterns:
+        matches = glob.glob(pattern)
+        if matches:
+            print(f"[PLAYWRIGHT] Using Chromium at: {matches[0]}")
+            return matches[0]
+
+    return None
+
+def render_html_to_pdf(html_content: str, output_path: str) -> bool:
+    """Render HTML string to A3 PDF file using Playwright Chromium with guaranteed styling and font loading."""
     try:
         import os
-        from django.conf import settings
-        os.environ["PLAYWRIGHT_BROWSERS_PATH"] = os.path.join(str(settings.BASE_DIR), "pw-browsers")
         from playwright.sync_api import sync_playwright
+
+        chrome_path = _get_chromium_executable()
+        launch_kwargs = {
+            "headless": True,
+            "args": [
+                "--no-sandbox",
+                "--disable-setuid-sandbox",
+                "--disable-dev-shm-usage",
+                "--disable-gpu",
+                "--font-render-hinting=none"
+            ]
+        }
+        if chrome_path:
+            launch_kwargs["executable_path"] = chrome_path
+
         with sync_playwright() as p:
-            browser = p.chromium.launch(
-                headless=True,
-                args=[
-                    "--no-sandbox",
-                    "--disable-setuid-sandbox",
-                    "--disable-dev-shm-usage",
-                    "--disable-gpu"
-                ]
+            browser = p.chromium.launch(**launch_kwargs)
+            context = browser.new_context(
+                viewport={"width": 1123, "height": 1587},
+                device_scale_factor=1
             )
-            page = browser.new_page()
-            page.set_content(html_content, wait_until="domcontentloaded", timeout=120000)
-            page.wait_for_timeout(3000)
+            page = context.new_page()
+            # Emulate screen media so CSS flexbox & multi-columns layout identically to browser preview
+            page.emulate_media(media="screen")
+            page.set_content(html_content, wait_until="load", timeout=30000)
+
+            # Wait for Telugu web fonts to finish rendering
+            try:
+                page.evaluate("document.fonts ? document.fonts.ready : Promise.resolve()")
+            except Exception:
+                pass
+            page.wait_for_timeout(2000)
+
+            body_text = page.evaluate("() => document.body ? document.body.innerText.length : 0")
+            print(f"[PDF Generator] Page body text length: {body_text}")
+
             page.pdf(
                 path=output_path,
                 format="A3",
                 print_background=True,
-                display_header_footer=True,
-                header_template=header_template,
-                footer_template=footer_template,
-                margin={"top": "12mm", "bottom": "12mm", "left": "0mm", "right": "0mm"}
+                display_header_footer=False,
+                margin={"top": "0mm", "bottom": "0mm", "left": "0mm", "right": "0mm"}
             )
             browser.close()
-            return os.path.exists(output_path) and os.path.getsize(output_path) > 0
+            file_size = os.path.getsize(output_path) if os.path.exists(output_path) else 0
+            print(f"[PDF Generator] Generated PDF size: {file_size} bytes at {output_path}")
+            return file_size > 100
     except Exception as e:
         logger.error(f"Playwright PDF rendering error: {e}")
         print(f"Playwright PDF rendering error: {e}")

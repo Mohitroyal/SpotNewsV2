@@ -25,6 +25,7 @@ import { useAuthStore, useUIStore, getReporterPhoto, getReporterName } from './s
 import { supabase } from './lib/supabase';
 import { App as CapacitorApp } from '@capacitor/app';
 import { Browser } from '@capacitor/browser';
+import { initDeepLinks } from './lib/deepLinks';
 
 import { ErrorBoundary } from './ErrorBoundary';
 
@@ -260,6 +261,7 @@ import { GoogleAuth } from '@codetrix-studio/capacitor-google-auth';
 function AppUrlListener() {
   const navigate = useNavigate();
   useEffect(() => {
+    // Handle password-reset redirects
     const handleUrlOpen = (ev: Event) => {
       const customEv = ev as CustomEvent;
       const type = customEv.detail?.type;
@@ -268,6 +270,10 @@ function AppUrlListener() {
       }
     };
     window.addEventListener('appUrlOpenRoute', handleUrlOpen);
+
+    // Handle deep links: rtiexpress.in/n/<id>  and  /r/<slug>
+    initDeepLinks(navigate);
+
     return () => window.removeEventListener('appUrlOpenRoute', handleUrlOpen);
   }, [navigate]);
   return null;
@@ -367,6 +373,9 @@ function App() {
           }
         };
         fetchRole();
+
+        // Push notifications require a valid google-services.json from Firebase Console.
+        // Disabled to prevent native crash on PushNotifications.register() / FCM calls.
       }
     });
 
@@ -428,7 +437,11 @@ function App() {
 
         <Route
           path="/preview/:id"
-          element={isAuthenticated ? <PreviewScreen /> : <Navigate to="/login" />}
+          element={<PreviewScreen />}
+        />
+        <Route
+          path="/news/:id"
+          element={<PreviewScreen />}
         />
 
         <Route

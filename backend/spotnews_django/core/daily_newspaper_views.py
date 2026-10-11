@@ -302,7 +302,25 @@ def generate_daily_newspaper(request):
         if not success:
             return JsonResponse({"detail": "Failed to generate PDF. The server environment may lack Chromium dependencies (Playwright failed). Check server logs."}, status=500)
             
+        # Read PDF into memory and encode as base64 for direct download
+        pdf_base64 = None
+        try:
+            with open(output_pdf_path, 'rb') as f:
+                pdf_bytes = f.read()
+            pdf_base64 = base64.b64encode(pdf_bytes).decode('utf-8')
+            print(f"[PDF Generator] PDF read successfully: {len(pdf_bytes)} bytes")
+        except Exception as read_err:
+            print(f"[PDF Generator] Failed to read PDF: {read_err}")
+
         pdf_url = request.build_absolute_uri(f"/api/editions/{filename}")
+        try:
+            from core.services.storage_service import storage_service
+            uploaded_cdn_url = storage_service.upload_file(output_pdf_path, f"editions/{filename}", content_type="application/pdf")
+            if uploaded_cdn_url:
+                pdf_url = uploaded_cdn_url
+                print(f"[PDF Generator] Uploaded edition to Supabase Storage: {pdf_url}")
+        except Exception as storage_err:
+            print(f"[PDF Generator] Supabase storage upload note: {storage_err}")
 
         # Save snapshot to database table `daily_editions`
         new_id = f"edition-{int(time.time())}"
@@ -346,6 +364,7 @@ def generate_daily_newspaper(request):
             "total_articles": total_articles,
             "total_pages": total_pages,
             "pdf_url": pdf_url,
+            "pdf_base64": pdf_base64,
             "filename": filename,
             "status": "completed",
             "message": f"Daily Newspaper Edition generated successfully! ({total_pages} pages, {total_articles} articles)"

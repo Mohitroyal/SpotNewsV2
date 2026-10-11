@@ -314,6 +314,14 @@ def generate_daily_newspaper(request):
             print(f"[PDF Generator] Failed to read PDF: {read_err}")
             
         pdf_url = request.build_absolute_uri(f"/api/editions/{filename}")
+        try:
+            from core.services.storage_service import storage_service
+            uploaded_cdn_url = storage_service.upload_file(output_pdf_path, f"editions/{filename}", content_type="application/pdf")
+            if uploaded_cdn_url:
+                pdf_url = uploaded_cdn_url
+                print(f"[PDF Generator] Uploaded edition to Supabase Storage: {pdf_url}")
+        except Exception as storage_err:
+            print(f"[PDF Generator] Supabase storage upload note: {storage_err}")
 
         # Save snapshot to database table `daily_editions`
         new_id = f"edition-{int(time.time())}"

@@ -26,6 +26,23 @@
                 <data android:scheme="https" android:host="news-frount.vercel.app" />
             </intent-filter>
 
+            <!-- App Links: Supabase edge function URLs for /n/... and /r/... -->
+            <intent-filter android:autoVerify="true">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="https" android:host="rffrqokpnqoycpozrjuc.supabase.co" android:pathPrefix="/functions/v1/share-page/n/" />
+                <data android:scheme="https" android:host="rffrqokpnqoycpozrjuc.supabase.co" android:pathPrefix="/functions/v1/share-page/r/" />
+            </intent-filter>
+
+            <!-- Custom Scheme: spotnews://n/... and spotnews://r/... -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="spotnews" />
+            </intent-filter>
+
             <intent-filter>
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
@@ -45,8 +62,18 @@
 
     </application>
 
+    <!-- Queries for Direct Social Sharing (Android 11+) -->
+    <queries>
+        <package android:name="com.whatsapp" />
+        <package android:name="com.whatsapp.w4b" />
+        <package android:name="com.instagram.android" />
+        <package android:name="com.facebook.katana" />
+        <package android:name="com.twitter.android" />
+    </queries>
+
     <!-- Permissions -->
     <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" tools:node="remove" />
     <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" tools:node="remove" />
     <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" tools:node="remove" />

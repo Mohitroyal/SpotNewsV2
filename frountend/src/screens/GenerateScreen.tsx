@@ -445,7 +445,10 @@ export const GenerateScreen = () => {
         reporterName,
         reporterImage,
         reporter_name: reporterName,
-        reporter_image: reporterImage
+        reporter_image: reporterImage,
+        video_url: videoUrl || undefined,
+        image_urls: imageUrls,
+        image_url: imageUrls[0] || ''
       };
       setStageIndex(2);
       const renderTimer = setTimeout(() => setStageIndex(3), 8_000);

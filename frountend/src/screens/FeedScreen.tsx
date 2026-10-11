@@ -1,7 +1,11 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { Newspaper, MapPin, RefreshCw, X, Send, Share2, Copy, Check } from 'lucide-react';
 import { useAuthStore, useUIStore } from '@/store';
 import { supabase } from '@/lib/supabase';
+import { StarRating } from '@/features/rating/StarRating';
+import { useAdvisory } from '@/features/weather/useAdvisory';
+import { AdvisoryCard, AdvisoryStrip } from '@/features/weather/AdvisoryCard';
 
 interface Comment {
   id: string;
@@ -13,9 +17,13 @@ interface Comment {
 }
 
 export const FeedScreen: React.FC = () => {
+  const [searchParams] = useSearchParams();
+  const targetClipId = searchParams.get('clipId');
   const { user } = useAuthStore();
   const district = useAuthStore((state) => state.district) || '';
   const userState = useAuthStore((state) => state.userState) || '';
+  const { advisory } = useAdvisory(district || 'హైదరాబాద్');
+  const [showWeatherSheet, setShowWeatherSheet] = useState(false);
   const isFullScreenFeed = useUIStore((state) => state.isFullScreenFeed);
   const toggleFullScreenFeed = useUIStore((state) => state.toggleFullScreenFeed);
   const [clippings, setClippings] = useState<any[]>([]);
@@ -114,7 +122,26 @@ export const FeedScreen: React.FC = () => {
       const { data, error } = await query;
       if (error) throw error;
 
-      const postedClippings = (data || []).filter((c) => c.is_posted === true);
+      let postedClippings = (data || []).filter((c) => c.is_posted === true);
+
+      // If a specific clipping was opened via link / deep link
+      if (targetClipId) {
+        const existingIndex = postedClippings.findIndex((c) => c.id === targetClipId);
+        if (existingIndex > -1) {
+          const [targeted] = postedClippings.splice(existingIndex, 1);
+          postedClippings = [targeted, ...postedClippings];
+        } else {
+          const { data: targetData } = await supabase
+            .from('clippings')
+            .select('*')
+            .eq('id', targetClipId)
+            .maybeSingle();
+          if (targetData) {
+            postedClippings = [targetData, ...postedClippings];
+          }
+        }
+      }
+
       setClippings(postedClippings);
     } catch (err) {
       console.error('Failed to fetch feed', err);
@@ -254,7 +281,7 @@ export const FeedScreen: React.FC = () => {
 
   useEffect(() => {
     fetchFeed();
-  }, [district, userState]);
+  }, [district, userState, targetClipId]);
 
   return (
     <div className={`flex flex-col h-[100dvh] bg-black ${!isFullScreenFeed ? 'pb-[60px]' : ''}`}>
@@ -275,11 +302,14 @@ export const FeedScreen: React.FC = () => {
               <span>Refresh</span>
             </button>
           </div>
-          <div className="px-4 mt-3">
-            <div className="inline-flex items-center gap-1.5 bg-[#015BB3] text-white px-3 py-1.5 rounded-full text-xs font-bold shadow-sm">
+          <div className="px-4 mt-3 flex flex-col gap-2.5">
+            <div className="inline-flex items-center gap-1.5 bg-[#015BB3] text-white px-3 py-1.5 rounded-full text-xs font-bold shadow-sm self-start">
               <MapPin className="w-3.5 h-3.5" />
               Showing news for: {district || 'All Regions'}{userState ? `, ${userState}` : ''}
             </div>
+            {advisory && (
+              <AdvisoryStrip row={advisory} onOpen={() => setShowWeatherSheet(true)} />
+            )}
           </div>
         </div>
       )}
@@ -302,19 +332,19 @@ export const FeedScreen: React.FC = () => {
           </div>
         ) : (
           <div className="h-full w-full overflow-y-auto snap-y snap-mandatory no-scrollbar relative bg-black">
-            {clippings.map((clip: any) => {
+            {clippings.map((clip: any, index: number) => {
               const isLiked = likedIds.has(clip.id);
 
               return (
-                <div
-                  key={clip.id}
-                  data-clip-id={clip.id}
-                  ref={(el) => {
-                    if (el) cardRefs.current.set(clip.id, el);
-                    else cardRefs.current.delete(clip.id);
-                  }}
-                  className="w-full h-full snap-start snap-always flex flex-col bg-black border-b border-gray-800 relative"
-                >
+                <React.Fragment key={clip.id}>
+                  <div
+                    data-clip-id={clip.id}
+                    ref={(el) => {
+                      if (el) cardRefs.current.set(clip.id, el);
+                      else cardRefs.current.delete(clip.id);
+                    }}
+                    className="w-full h-full snap-start snap-always flex flex-col bg-black border-b border-gray-800 relative"
+                  >
                   {/* Full Screen Generated Image */}
                   <div
                     className="flex-1 w-full bg-black relative flex items-center justify-center overflow-hidden pb-[56px]"
@@ -492,8 +522,23 @@ export const FeedScreen: React.FC = () => {
                       </button>
                     </div>
                   </div>
+
+                  {/* Star rating — readers only (not shown to the reporter themselves) */}
+                  {user?.role !== 'reporter' && clip.reporter_id && clip.headline && (
+                    <div className="absolute bottom-[64px] left-3 right-3 z-20 flex justify-center pointer-events-auto">
+                      <div style={{ background: 'rgba(0,0,0,0.75)', borderRadius: 12, padding: '4px 12px', backdropFilter: 'blur(4px)' }}>
+                        <StarRating postId={clip.id} reporterName={clip.reporter_name || 'Reporter'} />
+                      </div>
+                    </div>
+                  )}
                 </div>
-              );
+                {index === 1 && advisory && (
+                  <div key="advisory-feed-slide" className="w-full h-full snap-start snap-always flex items-center justify-center bg-black p-4 relative overflow-y-auto">
+                    <AdvisoryCard row={advisory} />
+                  </div>
+                )}
+              </React.Fragment>
+            );
             })}
           </div>
         )}
@@ -680,6 +725,18 @@ export const FeedScreen: React.FC = () => {
             >
               Cancel
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* ── Weather Advisory Modal Sheet ─────────────────────────────────── */}
+      {showWeatherSheet && advisory && (
+        <div
+          className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in"
+          onClick={() => setShowWeatherSheet(false)}
+        >
+          <div onClick={(e) => e.stopPropagation()} className="w-full max-w-md animate-in zoom-in-95">
+            <AdvisoryCard row={advisory} onClose={() => setShowWeatherSheet(false)} />
           </div>
         </div>
       )}
