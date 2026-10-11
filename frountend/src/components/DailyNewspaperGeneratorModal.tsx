@@ -232,7 +232,33 @@ export const DailyNewspaperGeneratorModal: React.FC<Props> = ({ isOpen, onClose,
       clearInterval(progressInterval);
       setGenerating(false);
       setGenerationProgress(0);
-      setErrorMsg(err?.response?.data?.detail || err?.message || 'Failed to generate Daily Newspaper PDF.');
+      const msg = err?.response?.data?.detail || err?.message || 'Failed to generate Daily Newspaper PDF.';
+      setErrorMsg(`${msg} (Tip: If server memory is busy, you can use "Print / Save PDF" to download immediately.)`);
+    }
+  };
+
+  const handlePrintPreview = () => {
+    if (!previewHtml) return;
+    try {
+      const printWindow = window.open('', '_blank');
+      if (printWindow) {
+        printWindow.document.open();
+        printWindow.document.write(previewHtml);
+        printWindow.document.close();
+        setTimeout(() => {
+          printWindow.focus();
+          printWindow.print();
+        }, 1000);
+      } else {
+        // Fallback for popup blocker
+        const iframe = document.querySelector('iframe[title="Daily Newspaper A3 Preview"]') as HTMLIFrameElement;
+        if (iframe && iframe.contentWindow) {
+          iframe.contentWindow.focus();
+          iframe.contentWindow.print();
+        }
+      }
+    } catch (printErr) {
+      console.error('Print preview error:', printErr);
     }
   };
 
@@ -686,6 +712,13 @@ export const DailyNewspaperGeneratorModal: React.FC<Props> = ({ isOpen, onClose,
                     className="px-3 py-1.5 text-xs font-bold text-slate-600 bg-slate-200 rounded-lg"
                   >
                     Edit
+                  </button>
+                  <button
+                    onClick={handlePrintPreview}
+                    className="px-4 py-2 bg-indigo-600 text-white rounded-xl text-xs font-bold hover:bg-indigo-700 transition-all shadow-md flex items-center gap-1.5"
+                    title="Directly print or save the 100% vector A3 newspaper from your device without server limits"
+                  >
+                    🖨️ Print / Save PDF
                   </button>
                   <button
                     onClick={handleGeneratePDF}
