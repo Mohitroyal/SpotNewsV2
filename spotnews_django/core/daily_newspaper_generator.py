@@ -130,106 +130,19 @@ def build_newspaper_html(
             "is_filler": False
         })
 
-    PAGE1_CAPACITY = 12000
-    PAGE_CAPACITY = 16000
-    OVERFILL_MARGIN = 4000
+    total_articles = len(ordered_articles)
+    # Dynamic target page count: 9 to 10 articles per A3 page (5 columns),
+    # matching the user's mobile preview and ensuring dense, balanced layout across all pages
+    target_pages = max(1, (total_articles + 8) // 9)
+    articles_per_page = max(1, (total_articles + target_pages - 1) // target_pages)
     
     chunked_pages = []
-    current_page_articles = []
-    current_weight = 0
-    
-    filler_pool = []
-    
-    def get_fillers(needed_limit=40):
-        try:
-            from django.db import connection
-            import json
-            with connection.cursor() as cursor:
-                format_strings = ','.join(['%s'] * len(used_ids)) if used_ids else "''"
-                query = """
-                    SELECT 
-                        c.id, c.headline, c.article_content,
-                        c.image_url, c.image_urls, c.created_at,
-                        p.full_name as reporter_name, c.district
-                    FROM clippings c
-                    LEFT JOIN profiles p ON c.user_id = p.id
-                    WHERE (c.is_posted = true OR c.is_posted IS NULL OR c.status IN ('completed', 'published', 'posted'))
-                      AND (c.status IS NULL OR c.status NOT IN ('draft', 'rejected', 'deleted'))
-                      AND LENGTH(c.article_content) > 50
-                """
-                params = []
-                if used_ids:
-                    query += f" AND c.id::text NOT IN ({format_strings})"
-                    params.extend(list(used_ids))
-                    
-                query += " ORDER BY c.created_at DESC LIMIT %s"
-                params.append(needed_limit)
-                
-                cursor.execute(query, params)
-                rows = cursor.fetchall()
-                
-                new_fillers = []
-                for r in rows:
-                    raw_imgs = r[4]
-                    if isinstance(raw_imgs, str):
-                        try:
-                            raw_imgs = json.loads(raw_imgs)
-                        except:
-                            raw_imgs = [raw_imgs]
-                    elif not raw_imgs and r[3]:
-                        raw_imgs = [r[3]]
-                    elif not raw_imgs:
-                        raw_imgs = []
-
-                    art_id = str(r[0])
-                    art = {
-                        "id": art_id,
-                        "headline": r[1] or "ముఖ్యాంశం",
-                        "content": r[2] or "",
-                        "image_url": r[3] or (raw_imgs[0] if raw_imgs else ""),
-                        "image_urls": raw_imgs,
-                        "reporter_name": r[6] or "రిపోర్టర్",
-                        "district": r[7] or "",
-                        "location": r[7] or ""
-                    }
-                    
-                    headline_text = sanitize_text(art["headline"])
-                    content_text = sanitize_text(art["content"])
-                    img_cost = 400 if raw_imgs else 0
-                    weight = len(content_text) + int(len(headline_text) * 2) + img_cost
-                    
-                    new_fillers.append({
-                        "art": art,
-                        "weight": weight,
-                        "is_filler": True
-                    })
-                    used_ids.add(art_id)
-                return new_fillers
-        except Exception as e:
-            logger.error(f"Error fetching fillers: {e}")
-            return []
-
-    while remaining_primary or current_weight > 0:
-        capacity = PAGE1_CAPACITY if len(chunked_pages) == 0 else PAGE_CAPACITY
-        target_weight = capacity + OVERFILL_MARGIN
-        
-        placed = False
-        for i, item in enumerate(remaining_primary):
-            if current_weight + item["weight"] <= capacity:
-                current_page_articles.append(item)
-                current_weight += item["weight"]
-                remaining_primary.pop(i)
-                placed = True
-                break
-                
-        if not placed:
-            if len(current_page_articles) == 0 and remaining_primary:
-                item = remaining_primary.pop(0)
-                current_page_articles.append(item)
-                
-            chunked_pages.append(current_page_articles)
-            current_page_articles = []
-            current_weight = 0
+    for p in range(target_pages):
+        start = p * articles_per_page
+        end = min(start + articles_per_page, total_articles)
+        page_slice = ordered_articles[start:end]
+        if page_slice:
+            chunked_pages.append([{"art": a, "weight": 1000, "is_filler": False} for a in page_slice])
 
     global_idx = 0
     pages_html = []
@@ -269,21 +182,20 @@ def build_newspaper_html(
             byline_html = f'<div style="font-size: 11px; font-weight: bold; color: #666; margin-bottom: 6px; padding-bottom: 4px; border-bottom: 1px solid #eee;">{byline_str}</div>'
 
             if is_lead:
-                head_style = f"font-size: 34px; font-weight: 900; color: {color}; line-height: 1.15; margin-bottom: 6px; text-align: center;"
-                content_style = "column-count: 3; column-gap: 18px; font-size: 13px; line-height: 1.5; text-align: justify; color: #111;"
-                
+                head_style = f"font-size: 24px; font-weight: 900; color: {color}; line-height: 1.2; margin-bottom: 6px;"
                 lead_story_html = f"""
-                <div style="margin-bottom: 12px; border-bottom: 2px solid #D60000; padding-bottom: 8px;">
+                <div class="article-cell lead-cell" style="margin-bottom: 12px; border-bottom: 2px solid #D60000; padding-bottom: 8px; break-inside: avoid; -webkit-column-break-inside: avoid; page-break-inside: avoid;">
                     <h2 style="{head_style}">
                         {headline}
                     </h2>
                     {byline_html}
-                    <div style="{content_style}">
-                        {img_html}
-                        <p style="margin: 0; text-indent: 15px;">{content}</p>
+                    {img_html}
+                    <div style="font-size: 12px; line-height: 1.45; text-align: justify; color: #111;">
+                        <p style="margin: 0;">{content}</p>
                     </div>
                 </div>
                 """
+                articles_html.append(lead_story_html)
             else:
                 span_style = "margin-bottom: 10px; border-top: 2px solid #ccc; padding-top: 8px;"
                 head_style = f"font-size: 17px; font-weight: 800; color: {color}; line-height: 1.2; margin-bottom: 4px; break-after: avoid; page-break-after: avoid;"
@@ -346,7 +258,7 @@ def build_newspaper_html(
 <head>
     <meta charset="UTF-8">
     <title>{sanitize_text(publication_name)} - {edition_date}</title>
-    <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+Telugu:wght@400;600;700;800;900&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Suranna&family=Ramabhadra&display=swap" rel="stylesheet">
     <style>
         @page {{
             size: 297mm 420mm;
@@ -361,7 +273,7 @@ def build_newspaper_html(
             background: #ffffff !important;
             background-color: #ffffff !important;
             color: #000000 !important;
-            font-family: 'Noto Serif Telugu', serif;
+            font-family: 'Suranna', 'Ramabhadra', serif;
             -webkit-print-color-adjust: exact;
             print-color-adjust: exact;
         }}
@@ -416,7 +328,7 @@ def _get_chromium_executable() -> Optional[str]:
     return None
 
 def render_html_to_pdf(html_content: str, output_path: str) -> bool:
-    """Render HTML string to A3 PDF file using Playwright Chromium with guaranteed styling and font loading."""
+    """Render HTML string to A3 PDF file using Playwright Chromium with guaranteed styling, low memory, and image compression."""
     try:
         import os
         from playwright.sync_api import sync_playwright
@@ -429,6 +341,10 @@ def render_html_to_pdf(html_content: str, output_path: str) -> bool:
                 "--disable-setuid-sandbox",
                 "--disable-dev-shm-usage",
                 "--disable-gpu",
+                "--single-process",
+                "--disable-extensions",
+                "--disable-background-networking",
+                "--mute-audio",
                 "--font-render-hinting=none"
             ]
         }
@@ -442,6 +358,32 @@ def render_html_to_pdf(html_content: str, output_path: str) -> bool:
                 device_scale_factor=1
             )
             page = context.new_page()
+
+            # Compress high-resolution images on-the-fly to prevent Out-Of-Memory on 512MB RAM instances
+            def route_image_compress(route, request):
+                if request.resource_type == "image":
+                    try:
+                        response = route.fetch()
+                        body = response.body()
+                        if len(body) > 150_000:
+                            import io
+                            from PIL import Image
+                            im = Image.open(io.BytesIO(body))
+                            im.thumbnail((600, 600), Image.Resampling.LANCZOS)
+                            out_buf = io.BytesIO()
+                            im.convert("RGB").save(out_buf, format="JPEG", quality=75)
+                            route.fulfill(response=response, body=out_buf.getvalue(), headers={"content-type": "image/jpeg"})
+                            return
+                        route.fulfill(response=response)
+                    except Exception:
+                        route.continue_()
+                elif request.resource_type in ["media", "websocket", "eventsource"]:
+                    route.abort()
+                else:
+                    route.continue_()
+
+            page.route("**/*", route_image_compress)
+
             # Emulate screen media so CSS flexbox & multi-columns layout identically to browser preview
             page.emulate_media(media="screen")
             page.set_content(html_content, wait_until="domcontentloaded", timeout=60000)

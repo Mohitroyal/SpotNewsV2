@@ -1,8 +1,5 @@
 import os
 from pathlib import Path
-pw_dir = Path(__file__).resolve().parent.parent / "pw-browsers"
-if pw_dir.is_dir():
-    os.environ["PLAYWRIGHT_BROWSERS_PATH"] = str(pw_dir)
 import re
 import json
 import logging
@@ -111,13 +108,9 @@ def build_newspaper_html(
 
     headline_colors = ["#D60000", "#003399", "#8B0055", "#006600", "#111111"]
     
-    PAGE1_CAPACITY = 6500
-    PAGE_CAPACITY = 9500
+    used_ids = set([str(a.get("id")) for a in ordered_articles if a.get("id")])
     
-    current_weight = 0
-    current_page_articles = []
-    chunked_pages = []
-
+    remaining_primary = []
     for idx, art in enumerate(ordered_articles):
         headline = sanitize_text(art.get("headline") or art.get("title") or "ముఖ్యాంశం")
         content = sanitize_text(art.get("content") or art.get("summary") or "")
@@ -125,28 +118,41 @@ def build_newspaper_html(
         if not imgs and art.get("image_url"):
             imgs = [art.get("image_url")]
             
-        img_cost = 800 if imgs else 0
-        weight = len(content) + (len(headline) * 3) + img_cost
-        
-        capacity = PAGE1_CAPACITY if len(chunked_pages) == 0 else PAGE_CAPACITY
-        
-        if current_weight + weight > capacity and len(current_page_articles) > 0:
-            chunked_pages.append(current_page_articles)
-            current_page_articles = []
-            current_weight = 0
+        is_lead = (idx == 0)
+        img_cost = 0
+        if imgs:
+            img_cost = 1500 if is_lead else 400
             
-        current_page_articles.append((art, idx))
-        current_weight += weight
-        
-    if current_page_articles:
-        chunked_pages.append(current_page_articles)
+        weight = len(content) + int(len(headline) * (4 if is_lead else 2)) + img_cost
+        remaining_primary.append({
+            "art": art,
+            "weight": weight,
+            "is_filler": False
+        })
 
+    total_articles = len(ordered_articles)
+    # Dynamic target page count: 9 to 10 articles per A3 page (5 columns),
+    # matching the user's mobile preview and ensuring dense, balanced layout across all pages
+    target_pages = max(1, (total_articles + 8) // 9)
+    articles_per_page = max(1, (total_articles + target_pages - 1) // target_pages)
+    
+    chunked_pages = []
+    for p in range(target_pages):
+        start = p * articles_per_page
+        end = min(start + articles_per_page, total_articles)
+        page_slice = ordered_articles[start:end]
+        if page_slice:
+            chunked_pages.append([{"art": a, "weight": 1000, "is_filler": False} for a in page_slice])
+
+    global_idx = 0
     pages_html = []
     for page_idx, page_group in enumerate(chunked_pages):
         is_first_page = (page_idx == 0)
+        lead_story_html = ""
         articles_html = []
         
-        for local_idx, (art, original_idx) in enumerate(page_group):
+        for local_idx, item in enumerate(page_group):
+            art = item["art"]
             headline = sanitize_text(art.get("headline") or art.get("title") or "ముఖ్యాంశం")
             content = sanitize_text(art.get("content") or art.get("summary") or "")
             reporter = sanitize_text(art.get("reporter_name") or art.get("byline") or "రిపోర్టర్")
@@ -157,22 +163,15 @@ def build_newspaper_html(
                 imgs = [art.get("image_url")]
             
             is_lead = (is_first_page and local_idx == 0)
-            color = headline_colors[original_idx % len(headline_colors)]
+            color = headline_colors[global_idx % len(headline_colors)]
+            global_idx += 1
             
-            if is_lead:
-                span_style = "column-span: all; margin-bottom: 12px; border-bottom: 2px solid #D60000; padding-bottom: 8px;"
-                head_style = f"font-size: 34px; font-weight: 900; color: {color}; line-height: 1.15; margin-bottom: 6px; text-align: center;"
-                content_style = "column-count: 3; column-gap: 18px; font-size: 13px; line-height: 1.5; text-align: justify; color: #111;"
-                img_style = "width: 100%; max-height: 300px; object-fit: cover; break-inside: avoid; -webkit-column-break-inside: avoid; page-break-inside: avoid;"
-            else:
-                span_style = "break-inside: avoid; -webkit-column-break-inside: avoid; page-break-inside: avoid; margin-bottom: 10px; border-top: 2px solid #ccc; padding-top: 8px;"
-                head_style = f"font-size: 17px; font-weight: 800; color: {color}; line-height: 1.2; margin-bottom: 4px;"
-                content_style = "font-size: 12px; line-height: 1.4; text-align: justify; color: #111;"
-                img_style = "width: 100%; max-height: 180px; object-fit: cover; margin-bottom: 5px; break-inside: avoid; -webkit-column-break-inside: avoid; page-break-inside: avoid;"
-
             img_html = ""
             if imgs and len(imgs) > 0:
                 first_img = imgs[0]
+                img_style = "width: 100%; max-height: 180px; object-fit: cover; margin-bottom: 5px; break-inside: avoid; -webkit-column-break-inside: avoid; page-break-inside: avoid;"
+                if is_lead:
+                    img_style = "width: 100%; max-height: 300px; object-fit: cover; break-inside: avoid; -webkit-column-break-inside: avoid; page-break-inside: avoid;"
                 img_html = f"""
                 <div style="text-align: center; margin-bottom: 6px; break-inside: avoid; page-break-inside: avoid; -webkit-column-break-inside: avoid;">
                     <img src="{first_img}" style="{img_style}" />
@@ -182,19 +181,39 @@ def build_newspaper_html(
             byline_str = f"{loc} &nbsp;|&nbsp; {reporter}" if loc and reporter else (loc or reporter)
             byline_html = f'<div style="font-size: 11px; font-weight: bold; color: #666; margin-bottom: 6px; padding-bottom: 4px; border-bottom: 1px solid #eee;">{byline_str}</div>'
 
-            item_html = f"""
-            <div class="article-cell" style="{span_style}">
-                <h2 style="{head_style}">
-                    {headline}
-                </h2>
-                {byline_html}
-                <div style="{content_style}">
+            if is_lead:
+                head_style = f"font-size: 24px; font-weight: 900; color: {color}; line-height: 1.2; margin-bottom: 6px;"
+                lead_story_html = f"""
+                <div class="article-cell lead-cell" style="margin-bottom: 12px; border-bottom: 2px solid #D60000; padding-bottom: 8px; break-inside: avoid; -webkit-column-break-inside: avoid; page-break-inside: avoid;">
+                    <h2 style="{head_style}">
+                        {headline}
+                    </h2>
+                    {byline_html}
                     {img_html}
-                    <p style="margin: 0; text-indent: 15px;">{content}</p>
+                    <div style="font-size: 12px; line-height: 1.45; text-align: justify; color: #111;">
+                        <p style="margin: 0;">{content}</p>
+                    </div>
                 </div>
-            </div>
-            """
-            articles_html.append(item_html)
+                """
+                articles_html.append(lead_story_html)
+            else:
+                span_style = "margin-bottom: 10px; border-top: 2px solid #ccc; padding-top: 8px;"
+                head_style = f"font-size: 17px; font-weight: 800; color: {color}; line-height: 1.2; margin-bottom: 4px; break-after: avoid; page-break-after: avoid;"
+                content_style = "font-size: 12px; line-height: 1.4; text-align: justify; color: #111;"
+                
+                item_html = f"""
+                <div class="article-cell" style="{span_style}">
+                    <h2 style="{head_style}">
+                        {headline}
+                    </h2>
+                    {byline_html}
+                    <div style="{content_style}">
+                        {img_html}
+                        <p style="margin: 0; text-indent: 15px;">{content}</p>
+                    </div>
+                </div>
+                """
+                articles_html.append(item_html)
             
         if is_first_page:
             header_html = masthead_block
@@ -214,8 +233,7 @@ def build_newspaper_html(
             <div style="font-weight: bold;">{page_num_str}</div>
         </div>
         """
-
-        # For the last page, avoid page-break-after to prevent a trailing blank page
+        
         is_last_page = (page_idx == len(chunked_pages) - 1)
         page_break_style = "" if is_last_page else "page-break-after: always; break-after: page;"
         
@@ -240,7 +258,7 @@ def build_newspaper_html(
 <head>
     <meta charset="UTF-8">
     <title>{sanitize_text(publication_name)} - {edition_date}</title>
-    <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+Telugu:wght@400;600;700;800;900&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Suranna&family=Ramabhadra&display=swap" rel="stylesheet">
     <style>
         @page {{
             size: 297mm 420mm;
@@ -255,7 +273,7 @@ def build_newspaper_html(
             background: #ffffff !important;
             background-color: #ffffff !important;
             color: #000000 !important;
-            font-family: 'Noto Serif Telugu', serif;
+            font-family: 'Suranna', 'Ramabhadra', serif;
             -webkit-print-color-adjust: exact;
             print-color-adjust: exact;
         }}
@@ -310,7 +328,7 @@ def _get_chromium_executable() -> Optional[str]:
     return None
 
 def render_html_to_pdf(html_content: str, output_path: str) -> bool:
-    """Render HTML string to A3 PDF file using Playwright Chromium with guaranteed styling and font loading."""
+    """Render HTML string to A3 PDF file using Playwright Chromium with guaranteed styling, low memory, and image compression."""
     try:
         import os
         from playwright.sync_api import sync_playwright
@@ -323,6 +341,10 @@ def render_html_to_pdf(html_content: str, output_path: str) -> bool:
                 "--disable-setuid-sandbox",
                 "--disable-dev-shm-usage",
                 "--disable-gpu",
+                "--single-process",
+                "--disable-extensions",
+                "--disable-background-networking",
+                "--mute-audio",
                 "--font-render-hinting=none"
             ]
         }
@@ -336,6 +358,32 @@ def render_html_to_pdf(html_content: str, output_path: str) -> bool:
                 device_scale_factor=1
             )
             page = context.new_page()
+
+            # Compress high-resolution images on-the-fly to prevent Out-Of-Memory on 512MB RAM instances
+            def route_image_compress(route, request):
+                if request.resource_type == "image":
+                    try:
+                        response = route.fetch()
+                        body = response.body()
+                        if len(body) > 150_000:
+                            import io
+                            from PIL import Image
+                            im = Image.open(io.BytesIO(body))
+                            im.thumbnail((600, 600), Image.Resampling.LANCZOS)
+                            out_buf = io.BytesIO()
+                            im.convert("RGB").save(out_buf, format="JPEG", quality=75)
+                            route.fulfill(response=response, body=out_buf.getvalue(), headers={"content-type": "image/jpeg"})
+                            return
+                        route.fulfill(response=response)
+                    except Exception:
+                        route.continue_()
+                elif request.resource_type in ["media", "websocket", "eventsource"]:
+                    route.abort()
+                else:
+                    route.continue_()
+
+            page.route("**/*", route_image_compress)
+
             # Emulate screen media so CSS flexbox & multi-columns layout identically to browser preview
             page.emulate_media(media="screen")
             page.set_content(html_content, wait_until="domcontentloaded", timeout=60000)
