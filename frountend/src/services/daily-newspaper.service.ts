@@ -398,17 +398,36 @@ export const dailyNewspaperService = {
     total_articles: number;
     message: string;
   }> {
+    // 1. Try Backend API first (Playwright Chromium server-side generation: sharp, vector, proper pagination)
+    try {
+      const client = getDjangoClient();
+      const res = await client.post('/api/v1/admin/daily-newspaper/generate', config, { timeout: 120_000 });
+      if (res.data && res.data.success) {
+        return res.data;
+      }
+    } catch (backendErr: any) {
+      console.warn('[DailyNewspaper] Primary Django client generate failed, trying api fallback:', backendErr);
+      try {
+        const res = await api.post('/api/v1/admin/daily-newspaper/generate', config, { timeout: 120_000 });
+        if (res.data && res.data.success) {
+          return res.data;
+        }
+      } catch (apiErr: any) {
+        console.warn('[DailyNewspaper] Backend generate failed, falling back to client-side:', apiErr);
+      }
+    }
+
+    // 2. Client-side fallback via html2pdf
     try {
       const preview = await generateClientSidePreviewHtml(config);
       
-      // Use an iframe instead of a div because injecting full HTML into a div strips the <style> and <head> tags!
       const iframe = document.createElement('iframe');
-      iframe.style.position = 'fixed'; // Keep in viewport so Capacitor doesn't cull it
+      iframe.style.position = 'fixed';
       iframe.style.top = '0';
       iframe.style.left = '0';
       iframe.style.width = '297mm';
       iframe.style.height = '100vh';
-      iframe.style.opacity = '0.01'; // Almost invisible but tricks WebView into painting it
+      iframe.style.opacity = '0.01';
       iframe.style.pointerEvents = 'none';
       iframe.style.zIndex = '-999';
       document.body.appendChild(iframe);
@@ -420,7 +439,6 @@ export const dailyNewspaperService = {
       doc.write(preview.html);
       doc.close();
 
-      // Wait a moment for layout and images to fully load
       await new Promise(resolve => setTimeout(resolve, 3000));
 
       const html2pdf = (await import('html2pdf.js')).default;
@@ -428,7 +446,7 @@ export const dailyNewspaperService = {
         margin: 0,
         filename: `DailyNewspaper-${config.edition_date}.pdf`,
         image: { type: 'jpeg' as 'jpeg', quality: 0.98 },
-        html2canvas: { scale: 2, useCORS: true, logging: false, windowWidth: 1122 }, // 1122px approx 297mm
+        html2canvas: { scale: 2, useCORS: true, logging: false, windowWidth: 1122 },
         jsPDF: { unit: 'mm', format: 'a3', orientation: 'portrait' as const }
       };
 
@@ -447,7 +465,7 @@ export const dailyNewspaperService = {
       };
     } catch (err: any) {
       console.error('Local PDF Generation Error:', err);
-      throw new Error(err.message || 'Failed to generate PDF locally');
+      throw new Error(err.message || 'Failed to generate PDF');
     }
   },
 
