@@ -368,13 +368,13 @@ def render_html_to_pdf(html_content: str, output_path: str) -> bool:
                     try:
                         response = route.fetch()
                         body = response.body()
-                        if len(body) > 150_000:
+                        if len(body) > 60_000:
                             import io
                             from PIL import Image
                             im = Image.open(io.BytesIO(body))
-                            im.thumbnail((600, 600), Image.Resampling.LANCZOS)
+                            im.thumbnail((450, 450), Image.Resampling.LANCZOS)
                             out_buf = io.BytesIO()
-                            im.convert("RGB").save(out_buf, format="JPEG", quality=75)
+                            im.convert("RGB").save(out_buf, format="JPEG", quality=65)
                             route.fulfill(response=response, body=out_buf.getvalue(), headers={"content-type": "image/jpeg"})
                             return
                         route.fulfill(response=response)
@@ -444,18 +444,18 @@ def generate_chunked_daily_newspaper_pdf(
     lead_story_id: Optional[str] = None,
     advertisement_config: Optional[Dict[str, Any]] = None,
     edition_info: Optional[Dict[str, Any]] = None,
-    max_articles_per_chunk: int = 10
+    max_articles_per_chunk: int = 8
 ) -> bool:
     """
     Render large newspapers (e.g. 50-100+ articles, 10+ pages) safely on memory-constrained servers (Render 512MB RAM).
-    Splits articles into chunks of ~10 articles (1 A3 page per chunk), renders each chunk in an isolated Chromium
+    Splits articles into chunks of ~8-9 articles (exactly 1 A3 page per chunk), renders each chunk in an isolated Chromium
     instance to avoid accumulating Chromium memory, and merges them using pypdf.
     """
     import gc
     import pypdf
 
     total_articles = len(articles)
-    if total_articles <= max_articles_per_chunk:
+    if total_articles <= 8:
         # Single chunk is lightweight and safe
         html_content = build_newspaper_html(
             publication_name=publication_name,

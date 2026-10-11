@@ -240,23 +240,32 @@ export const DailyNewspaperGeneratorModal: React.FC<Props> = ({ isOpen, onClose,
   const handlePrintPreview = () => {
     if (!previewHtml) return;
     try {
-      const printWindow = window.open('', '_blank');
-      if (printWindow) {
-        printWindow.document.open();
-        printWindow.document.write(previewHtml);
-        printWindow.document.close();
-        setTimeout(() => {
-          printWindow.focus();
-          printWindow.print();
-        }, 1000);
-      } else {
-        // Fallback for popup blocker
-        const iframe = document.querySelector('iframe[title="Daily Newspaper A3 Preview"]') as HTMLIFrameElement;
-        if (iframe && iframe.contentWindow) {
-          iframe.contentWindow.focus();
-          iframe.contentWindow.print();
-        }
+      const iframe = document.querySelector('iframe[title="Daily Newspaper A3 Preview"]') as HTMLIFrameElement;
+      if (iframe && iframe.contentWindow) {
+        iframe.contentWindow.focus();
+        iframe.contentWindow.print();
+        return;
       }
+      
+      // If iframe not available, create hidden iframe to print
+      const hiddenIframe = document.createElement('iframe');
+      hiddenIframe.style.position = 'fixed';
+      hiddenIframe.style.right = '0';
+      hiddenIframe.style.bottom = '0';
+      hiddenIframe.style.width = '0';
+      hiddenIframe.style.height = '0';
+      hiddenIframe.style.border = '0';
+      document.body.appendChild(hiddenIframe);
+      
+      hiddenIframe.contentDocument?.open();
+      hiddenIframe.contentDocument?.write(previewHtml);
+      hiddenIframe.contentDocument?.close();
+      
+      setTimeout(() => {
+        hiddenIframe.contentWindow?.focus();
+        hiddenIframe.contentWindow?.print();
+        setTimeout(() => document.body.removeChild(hiddenIframe), 5000);
+      }, 800);
     } catch (printErr) {
       console.error('Print preview error:', printErr);
     }
