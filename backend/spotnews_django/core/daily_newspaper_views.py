@@ -10,7 +10,11 @@ from django.db import connection
 from django.views.decorators.csrf import csrf_exempt
 from django.conf import settings
 
-from .daily_newspaper_generator import build_newspaper_html, render_html_to_pdf
+from .daily_newspaper_generator import (
+    build_newspaper_html,
+    render_html_to_pdf,
+    generate_chunked_daily_newspaper_pdf
+)
 
 def verify_superadmin_request(request):
     """
@@ -278,7 +282,7 @@ def generate_daily_newspaper(request):
             existing_row = cursor.fetchone()
             
             current_version = 1
-            if existing_row and not overwrite_existing:
+            if existing_row:
                 current_version = (existing_row[1] or 1) + 1
 
         # Build HTML content
@@ -303,8 +307,18 @@ def generate_daily_newspaper(request):
         filename = f"{clean_pub_code}-{edition_date}-v{current_version}.pdf"
         output_pdf_path = os.path.join(media_editions_dir, filename)
 
-        # Render PDF via Playwright
-        success = render_html_to_pdf(html_content, output_pdf_path)
+        # Render PDF safely using chunked generation for large newspapers
+        success = generate_chunked_daily_newspaper_pdf(
+            publication_name=publication_name,
+            logo_url=logo_url,
+            edition_date=edition_date,
+            articles=articles,
+            output_path=output_pdf_path,
+            lead_story_id=lead_story_id,
+            advertisement_config=ad_config,
+            edition_info=edition_info,
+            max_articles_per_chunk=10
+        )
         if not success:
             return JsonResponse({"detail": "Failed to generate PDF. The server environment may lack Chromium dependencies (Playwright failed). Check server logs."}, status=500)
             
@@ -319,7 +333,7 @@ def generate_daily_newspaper(request):
             print(f"[PDF Generator] PDF read successfully: {len(pdf_bytes)} bytes (b64 included: {pdf_base64 is not None})")
         except Exception as read_err:
             print(f"[PDF Generator] Failed to read PDF: {read_err}")
-
+            
         pdf_url = request.build_absolute_uri(f"/api/editions/{filename}")
         try:
             from core.services.storage_service import storage_service

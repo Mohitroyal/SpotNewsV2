@@ -59,7 +59,9 @@ def build_newspaper_html(
     articles: List[Dict[str, Any]],
     lead_story_id: Optional[str] = None,
     advertisement_config: Optional[Dict[str, Any]] = None,
-    edition_info: Optional[Dict[str, Any]] = None
+    edition_info: Optional[Dict[str, Any]] = None,
+    page_offset: int = 0,
+    total_pages_override: Optional[int] = None
 ) -> str:
     """
     Generate clean, print-ready HTML string for a CONTINUOUS Daily Newspaper.
@@ -147,7 +149,8 @@ def build_newspaper_html(
     global_idx = 0
     pages_html = []
     for page_idx, page_group in enumerate(chunked_pages):
-        is_first_page = (page_idx == 0)
+        display_page_num = page_offset + page_idx + 1
+        is_first_page = (display_page_num == 1)
         lead_story_html = ""
         articles_html = []
         
@@ -222,11 +225,11 @@ def build_newspaper_html(
             <div style="display: flex; justify-content: space-between; align-items: center; background: #006600; color: #ffffff; font-size: 13px; font-weight: bold; padding: 6px 15px; margin-bottom: 8px; border-radius: 2px;">
                 <div>{sanitize_text(publication_name)}</div>
                 <div>{telugu_date_formatted}</div>
-                <div>పేజీ {page_idx + 1}</div>
+                <div>పేజీ {display_page_num}</div>
             </div>
             """
 
-        page_num_str = f"పేజీ {page_idx + 1}"
+        page_num_str = f"పేజీ {display_page_num}"
         custom_footer = f"""
         <div class="footer-section" style="flex: 0 0 auto; display: flex; justify-content: space-between; align-items: center; border-top: 1px solid #ccc; padding-top: 4px; font-size: 11px; color: #555; margin-top: 6px;">
             <div>{sanitize_text(publication_name)} - {edition_date}</div>
@@ -430,3 +433,108 @@ def render_html_to_pdf(html_content: str, output_path: str) -> bool:
         logger.error(f"Playwright PDF rendering error: {e}")
         print(f"Playwright PDF rendering error: {e}")
         return False
+
+
+def generate_chunked_daily_newspaper_pdf(
+    publication_name: str,
+    logo_url: str,
+    edition_date: str,
+    articles: List[Dict[str, Any]],
+    output_path: str,
+    lead_story_id: Optional[str] = None,
+    advertisement_config: Optional[Dict[str, Any]] = None,
+    edition_info: Optional[Dict[str, Any]] = None,
+    max_articles_per_chunk: int = 10
+) -> bool:
+    """
+    Render large newspapers (e.g. 50-100+ articles, 10+ pages) safely on memory-constrained servers (Render 512MB RAM).
+    Splits articles into chunks of ~10 articles (1 A3 page per chunk), renders each chunk in an isolated Chromium
+    instance to avoid accumulating Chromium memory, and merges them using pypdf.
+    """
+    import gc
+    import pypdf
+
+    total_articles = len(articles)
+    if total_articles <= max_articles_per_chunk:
+        # Single chunk is lightweight and safe
+        html_content = build_newspaper_html(
+            publication_name=publication_name,
+            logo_url=logo_url,
+            edition_date=edition_date,
+            articles=articles,
+            lead_story_id=lead_story_id,
+            advertisement_config=advertisement_config,
+            edition_info=edition_info
+        )
+        return render_html_to_pdf(html_content, output_path)
+
+    # Reorder articles if lead_story_id is provided so it stays first
+    ordered_articles = list(articles)
+    if lead_story_id:
+        lead_idx = next((i for i, a in enumerate(ordered_articles) if str(a.get("id")) == str(lead_story_id)), None)
+        if lead_idx is not None:
+            lead_item = ordered_articles.pop(lead_idx)
+            ordered_articles.insert(0, lead_item)
+
+    # Dynamic target page count: ~9-10 articles per page
+    target_pages = max(1, (total_articles + 8) // 9)
+    articles_per_page = max(1, (total_articles + target_pages - 1) // target_pages)
+
+    # Group into single-page chunks (each page has articles_per_page articles)
+    chunks = []
+    for p in range(target_pages):
+        start = p * articles_per_page
+        end = min(start + articles_per_page, total_articles)
+        page_slice = ordered_articles[start:end]
+        if page_slice:
+            chunks.append((p, page_slice))
+
+    print(f"[PDF Generator] Rendering {total_articles} articles across {len(chunks)} chunks for memory safety...")
+    temp_dir = os.path.dirname(output_path)
+    base_name = os.path.splitext(os.path.basename(output_path))[0]
+    
+    merger = pypdf.PdfWriter()
+    temp_files = []
+
+    try:
+        for chunk_idx, (page_idx, chunk_articles) in enumerate(chunks):
+            chunk_pdf = os.path.join(temp_dir, f"{base_name}_chunk_{chunk_idx}.pdf")
+            temp_files.append(chunk_pdf)
+
+            chunk_html = build_newspaper_html(
+                publication_name=publication_name,
+                logo_url=logo_url,
+                edition_date=edition_date,
+                articles=chunk_articles,
+                lead_story_id=lead_story_id if chunk_idx == 0 else None,
+                advertisement_config=advertisement_config,
+                edition_info=edition_info,
+                page_offset=page_idx,
+                total_pages_override=target_pages
+            )
+
+            ok = render_html_to_pdf(chunk_html, chunk_pdf)
+            if not ok or not os.path.exists(chunk_pdf):
+                raise RuntimeError(f"Failed to render chunk {chunk_idx + 1}/{len(chunks)}")
+
+            merger.append(chunk_pdf)
+            gc.collect()
+
+        with open(output_path, "wb") as f_out:
+            merger.write(f_out)
+        merger.close()
+        print(f"[PDF Generator] Successfully merged all {len(chunks)} chunks into {output_path} ({os.path.getsize(output_path)} bytes)")
+        return True
+    except Exception as e:
+        logger.error(f"[PDF Generator] Chunked rendering error: {e}")
+        print(f"[PDF Generator] Chunked rendering error: {e}")
+        return False
+    finally:
+        for f in temp_files:
+            try:
+                if os.path.exists(f):
+                    os.remove(f)
+            except Exception:
+                pass
+        gc.collect()
+
