@@ -27,6 +27,19 @@ def sanitize_text(text: str) -> str:
     text = re.sub(r'[\x00-\x1F\x7F]', '', str(text))
     return text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace('"', "&quot;").strip()
 
+def optimize_image_url(url: Optional[str], max_width: int = 500) -> str:
+    """
+    Supabase Storage on-the-fly image optimization:
+    Converts raw 12MP (4000x3000) camera photos into compact ~500px thumbnails.
+    Cuts image memory from 48MB per bitmap down to <0.8MB per bitmap in Chromium!
+    """
+    if not url:
+        return ""
+    clean_url = str(url).strip()
+    if "/storage/v1/object/public/" in clean_url:
+        return clean_url.replace("/storage/v1/object/public/", "/storage/v1/render/image/public/") + f"?width={max_width}&resize=contain&quality=80"
+    return clean_url
+
 def build_newspaper_html(
     publication_name: str,
     logo_url: str,
@@ -54,11 +67,14 @@ def build_newspaper_html(
     price = edition_info.get("price", "రూ. 1.50/-") if edition_info else "రూ. 1.50/-"
     location = edition_info.get("location", "హైదరాబాద్ / ఆంధ్రప్రదేశ్ & తెలంగాణ") if edition_info else "హైదరాబాద్ / ఆంధ్రప్రదేశ్ & తెలంగాణ"
 
+    opt_logo_url = optimize_image_url(logo_url, max_width=350)
+
     ad_html = ""
     if advertisement_config and advertisement_config.get("image_url"):
+        opt_ad_url = optimize_image_url(advertisement_config['image_url'], max_width=350)
         ad_html = f"""
         <div style="width: 25%; padding-left: 10px; text-align: center;">
-            <img src="{advertisement_config['image_url']}" style="max-height: 85px; max-width: 100%; border: 1px solid #ccc; padding: 2px;" />
+            <img src="{opt_ad_url}" style="max-height: 85px; max-width: 100%; border: 1px solid #ccc; padding: 2px;" />
         </div>
         """
 
@@ -66,7 +82,7 @@ def build_newspaper_html(
     <!-- Masthead (Page 1) -->
     <div style="display: flex; justify-content: space-between; align-items: center; background: #ffffff; padding: 4px 0; border-bottom: 3.5px solid #D60000; margin-bottom: 3px;">
         <div style="flex: 1; text-align: center;">
-            <img src="{logo_url}" alt="{sanitize_text(publication_name)}" style="max-height: 85px; max-width: 100%; object-fit: contain;" />
+            <img src="{opt_logo_url}" alt="{sanitize_text(publication_name)}" style="max-height: 85px; max-width: 100%; object-fit: contain;" />
         </div>
         {ad_html}
     </div>
@@ -132,9 +148,10 @@ def build_newspaper_html(
 
             lead_img_html = ""
             if lead_imgs:
+                opt_lead_img = optimize_image_url(lead_imgs[0], max_width=750)
                 lead_img_html = f"""
                 <div style="width: 44%; float: left; margin-right: 18px; margin-bottom: 10px;">
-                    <img src="{lead_imgs[0]}" style="width: 100%; max-height: 270px; object-fit: cover; border: 1px solid #ccc; padding: 2px; border-radius: 2px; display: block;" />
+                    <img src="{opt_lead_img}" style="width: 100%; max-height: 270px; object-fit: cover; border: 1px solid #ccc; padding: 2px; border-radius: 2px; display: block;" />
                 </div>
                 """
 
@@ -175,9 +192,10 @@ def build_newspaper_html(
 
                     s_img_html = ""
                     if s_imgs:
+                        opt_s_img = optimize_image_url(s_imgs[0], max_width=450)
                         s_img_html = f"""
                         <div style="margin-bottom: 6px; text-align: center;">
-                            <img src="{s_imgs[0]}" style="width: 100%; max-height: 175px; object-fit: cover; border: 1px solid #ddd; padding: 1px; border-radius: 2px;" />
+                            <img src="{opt_s_img}" style="width: 100%; max-height: 175px; object-fit: cover; border: 1px solid #ddd; padding: 1px; border-radius: 2px;" />
                         </div>
                         """
 
@@ -233,9 +251,10 @@ def build_newspaper_html(
 
                 img_html = ""
                 if imgs:
+                    opt_img = optimize_image_url(imgs[0], max_width=450)
                     img_html = f"""
                     <div style="margin-bottom: 6px; text-align: center;">
-                        <img src="{imgs[0]}" style="width: 100%; max-height: 190px; object-fit: cover; border: 1px solid #ddd; padding: 1px; border-radius: 2px;" />
+                        <img src="{opt_img}" style="width: 100%; max-height: 190px; object-fit: cover; border: 1px solid #ddd; padding: 1px; border-radius: 2px;" />
                     </div>
                     """
 
@@ -351,10 +370,10 @@ def _get_chromium_executable() -> Optional[str]:
             return None
 
     patterns = [
+        os.path.join(browsers_path, "chromium_headless_shell-*/chrome-headless-shell-linux64/chrome-headless-shell"),
         os.path.join(browsers_path, "chromium-*/chrome-linux/chrome"),
         os.path.join(browsers_path, "chromium-*/chrome-linux/chromium"),
         os.path.join(browsers_path, "chromium-*/chrome"),
-        os.path.join(browsers_path, "chromium_headless_shell-*/chrome-headless-shell-linux64/chrome-headless-shell"),
     ]
     for pattern in patterns:
         matches = glob.glob(pattern)
@@ -377,9 +396,13 @@ def render_html_to_pdf(html_content: str, output_path: str) -> bool:
                 "--disable-setuid-sandbox",
                 "--disable-dev-shm-usage",
                 "--disable-gpu",
-                "--js-flags=--max-old-space-size=96",
+                "--disable-software-rasterizer",
+                "--no-zygote",
                 "--renderer-process-limit=1",
+                "--single-process-network-service",
+                "--js-flags=--max-old-space-size=48",
                 "--disable-site-isolation-trials",
+                "--disable-features=AudioServiceOutOfProcess,IsolateOrigins,site-per-process",
                 "--disable-extensions",
                 "--disable-background-networking",
                 "--mute-audio"
@@ -511,9 +534,13 @@ def generate_chunked_daily_newspaper_pdf(
             "--disable-setuid-sandbox",
             "--disable-dev-shm-usage",
             "--disable-gpu",
-            "--js-flags=--max-old-space-size=64",
+            "--disable-software-rasterizer",
+            "--no-zygote",
             "--renderer-process-limit=1",
+            "--single-process-network-service",
+            "--js-flags=--max-old-space-size=48",
             "--disable-site-isolation-trials",
+            "--disable-features=AudioServiceOutOfProcess,IsolateOrigins,site-per-process",
             "--disable-extensions",
             "--disable-background-networking",
             "--mute-audio"

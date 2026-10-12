@@ -285,19 +285,8 @@ def generate_daily_newspaper(request):
             if existing_row:
                 current_version = (existing_row[1] or 1) + 1
 
-        # Build HTML content
-        html_content = build_newspaper_html(
-            publication_name=publication_name,
-            logo_url=logo_url,
-            edition_date=edition_date,
-            articles=articles,
-            lead_story_id=lead_story_id,
-            advertisement_config=ad_config,
-            edition_info=edition_info
-        )
-
         total_articles = len(articles)
-        total_pages = max(1, (total_articles + 9) // 10)
+        total_pages = max(1, (total_articles + 7) // 8)
 
         # Create output directory inside Django media/editions
         media_editions_dir = os.path.join(settings.BASE_DIR, 'media', 'editions')
@@ -317,20 +306,23 @@ def generate_daily_newspaper(request):
             lead_story_id=lead_story_id,
             advertisement_config=ad_config,
             edition_info=edition_info,
-            max_articles_per_chunk=10
+            max_articles_per_chunk=8
         )
         if not success:
             return JsonResponse({"detail": "Failed to generate PDF. The server environment may lack Chromium dependencies (Playwright failed). Check server logs."}, status=500)
             
-        # Read PDF into memory and encode as base64 for direct download if within safe size limit (< 8MB)
-        # Giant base64 strings (>8MB) trigger Out-Of-Memory, proxy drops, and network errors on mobile
+        # Read PDF into memory and encode as base64 for direct download if within safe size limit (< 4MB)
+        # Giant base64 strings trigger Out-Of-Memory, proxy drops, and network errors on mobile
         pdf_base64 = None
         try:
             with open(output_pdf_path, 'rb') as f:
                 pdf_bytes = f.read()
-            if len(pdf_bytes) <= 8 * 1024 * 1024:
+            if len(pdf_bytes) <= 4 * 1024 * 1024:
                 pdf_base64 = base64.b64encode(pdf_bytes).decode('utf-8')
-            print(f"[PDF Generator] PDF read successfully: {len(pdf_bytes)} bytes (b64 included: {pdf_base64 is not None})")
+            del pdf_bytes
+            import gc
+            gc.collect()
+            print(f"[PDF Generator] PDF read successfully (b64 included: {pdf_base64 is not None})")
         except Exception as read_err:
             print(f"[PDF Generator] Failed to read PDF: {read_err}")
             
