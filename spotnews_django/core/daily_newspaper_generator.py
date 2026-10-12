@@ -467,21 +467,11 @@ def generate_chunked_daily_newspaper_pdf(
     max_articles_per_chunk: int = 8
 ) -> bool:
     import gc
+    import io
     import pypdf
+    from playwright.sync_api import sync_playwright
 
     total_articles = len(articles)
-    if total_articles <= 8:
-        html_content = build_newspaper_html(
-            publication_name=publication_name,
-            logo_url=logo_url,
-            edition_date=edition_date,
-            articles=articles,
-            lead_story_id=lead_story_id,
-            advertisement_config=advertisement_config,
-            edition_info=edition_info
-        )
-        return render_html_to_pdf(html_content, output_path)
-
     ordered_articles = list(articles)
     if lead_story_id:
         lead_idx = next((i for i, a in enumerate(ordered_articles) if str(a.get("id")) == str(lead_story_id)), None)
@@ -489,6 +479,7 @@ def generate_chunked_daily_newspaper_pdf(
             lead_item = ordered_articles.pop(lead_idx)
             ordered_articles.insert(0, lead_item)
 
+    # Calculate pages needed (approx 8 articles per page)
     target_pages = max(1, (total_articles + 7) // 8)
     articles_per_page = max(1, (total_articles + target_pages - 1) // target_pages)
 
@@ -500,48 +491,106 @@ def generate_chunked_daily_newspaper_pdf(
         if page_slice:
             chunks.append((p, page_slice))
 
-    temp_dir = os.path.dirname(output_path)
-    base_name = os.path.splitext(os.path.basename(output_path))[0]
-    
-    merger = pypdf.PdfWriter()
-    temp_files = []
+    print(f"[PDF Generator] Rendering {total_articles} articles across {len(chunks)} pages in high-speed session...")
+
+    chrome_path = _get_chromium_executable()
+    launch_kwargs = {
+        "headless": True,
+        "args": [
+            "--no-sandbox",
+            "--disable-setuid-sandbox",
+            "--disable-dev-shm-usage",
+            "--disable-gpu",
+            "--single-process",
+            "--disable-extensions",
+            "--disable-background-networking",
+            "--mute-audio"
+        ]
+    }
+    if chrome_path:
+        launch_kwargs["executable_path"] = chrome_path
 
     try:
-        for chunk_idx, (page_idx, chunk_articles) in enumerate(chunks):
-            chunk_pdf = os.path.join(temp_dir, f"{base_name}_chunk_{chunk_idx}.pdf")
-            temp_files.append(chunk_pdf)
-
-            chunk_html = build_newspaper_html(
-                publication_name=publication_name,
-                logo_url=logo_url,
-                edition_date=edition_date,
-                articles=chunk_articles,
-                lead_story_id=lead_story_id if chunk_idx == 0 else None,
-                advertisement_config=advertisement_config,
-                edition_info=edition_info,
-                page_offset=page_idx,
-                total_pages_override=1
+        with sync_playwright() as p:
+            browser = p.chromium.launch(**launch_kwargs)
+            context = browser.new_context(
+                viewport={"width": 1123, "height": 1587},
+                device_scale_factor=1
             )
 
-            ok = render_html_to_pdf(chunk_html, chunk_pdf)
-            if not ok or not os.path.exists(chunk_pdf):
-                raise RuntimeError(f"Failed to render chunk {chunk_idx + 1}/{len(chunks)}")
+            # Route compression handler
+            def route_image_compress(route, request):
+                if request.resource_type == "image":
+                    try:
+                        response = route.fetch()
+                        body = response.body()
+                        if len(body) > 60_000:
+                            import io as pyio
+                            from PIL import Image
+                            im = Image.open(pyio.BytesIO(body))
+                            im.thumbnail((450, 450), Image.Resampling.LANCZOS)
+                            out_buf = pyio.BytesIO()
+                            im.convert("RGB").save(out_buf, format="JPEG", quality=65)
+                            route.fulfill(response=response, body=out_buf.getvalue(), headers={"content-type": "image/jpeg"})
+                            return
+                        route.fulfill(response=response)
+                    except Exception:
+                        route.continue_()
+                elif request.resource_type in ["media", "websocket", "eventsource"]:
+                    route.abort()
+                else:
+                    route.continue_()
 
-            merger.append(chunk_pdf)
-            gc.collect()
+            context.route("**/*", route_image_compress)
+            merger = pypdf.PdfWriter()
 
-        with open(output_path, "wb") as f_out:
-            merger.write(f_out)
-        merger.close()
-        return True
+            for chunk_idx, (page_idx, chunk_articles) in enumerate(chunks):
+                chunk_html = build_newspaper_html(
+                    publication_name=publication_name,
+                    logo_url=logo_url,
+                    edition_date=edition_date,
+                    articles=chunk_articles,
+                    lead_story_id=lead_story_id if chunk_idx == 0 else None,
+                    advertisement_config=advertisement_config,
+                    edition_info=edition_info,
+                    page_offset=page_idx,
+                    total_pages_override=1
+                )
+
+                page = context.new_page()
+                page.emulate_media(media="screen")
+                page.set_content(chunk_html, wait_until="domcontentloaded", timeout=30000)
+
+                # Wait for fonts on first page
+                if chunk_idx == 0:
+                    try:
+                        page.evaluate("document.fonts ? document.fonts.ready : Promise.resolve()")
+                    except Exception:
+                        pass
+
+                pdf_bytes = page.pdf(
+                    format="A3",
+                    print_background=True,
+                    prefer_css_page_size=True,
+                    display_header_footer=False,
+                    margin={"top": "0mm", "bottom": "0mm", "left": "0mm", "right": "0mm"}
+                )
+                page.close()
+
+                merger.append(io.BytesIO(pdf_bytes))
+                print(f"[PDF Generator] Page {chunk_idx + 1}/{len(chunks)} rendered ({len(pdf_bytes)} bytes)")
+
+            with open(output_path, "wb") as f_out:
+                merger.write(f_out)
+            merger.close()
+            context.close()
+            browser.close()
+
+        file_size = os.path.getsize(output_path) if os.path.exists(output_path) else 0
+        print(f"[PDF Generator] Successfully rendered all {len(chunks)} pages into {output_path} ({file_size} bytes)")
+        return file_size > 100
     except Exception as e:
-        print(f"[PDF Generator] Chunked rendering error: {e}")
+        print(f"[PDF Generator] High-speed PDF rendering error: {e}")
         return False
     finally:
-        for f in temp_files:
-            try:
-                if os.path.exists(f):
-                    os.remove(f)
-            except Exception:
-                pass
         gc.collect()
