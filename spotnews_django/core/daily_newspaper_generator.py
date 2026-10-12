@@ -514,8 +514,6 @@ def generate_chunked_daily_newspaper_pdf(
             "--js-flags=--max-old-space-size=64",
             "--renderer-process-limit=1",
             "--disable-site-isolation-trials",
-            "--disk-cache-size=1",
-            "--media-cache-size=1",
             "--disable-extensions",
             "--disable-background-networking",
             "--mute-audio"
@@ -548,7 +546,7 @@ def generate_chunked_daily_newspaper_pdf(
 
                 page = context.new_page()
                 page.emulate_media(media="screen")
-                page.set_content(chunk_html, wait_until="domcontentloaded", timeout=30000)
+                page.set_content(chunk_html, wait_until="domcontentloaded", timeout=20000)
 
                 # Wait for fonts on first page only
                 if chunk_idx == 0:
@@ -557,7 +555,7 @@ def generate_chunked_daily_newspaper_pdf(
                     except Exception:
                         pass
 
-                # Non-blocking image load guard (up to 1.5s)
+                # Fast non-blocking image load guard (up to 600ms)
                 try:
                     page.evaluate("""
                         Promise.race([
@@ -566,7 +564,7 @@ def generate_chunked_daily_newspaper_pdf(
                                     .filter(img => !img.complete)
                                     .map(img => new Promise(res => { img.onload = img.onerror = res; }))
                             ),
-                            new Promise(res => setTimeout(res, 1500))
+                            new Promise(res => setTimeout(res, 600))
                         ])
                     """)
                 except Exception:
