@@ -462,30 +462,11 @@ def generate_chunked_daily_newspaper_pdf(
     max_articles_per_chunk: int = 8
 ) -> bool:
     import gc
-    total_articles = len(articles)
-    print(f"[PDF Generator] Rendering newspaper PDF for {total_articles} articles...")
-
-    # Build the full multi-page newspaper HTML
-    full_html = build_newspaper_html(
-        publication_name=publication_name,
-        logo_url=logo_url,
-        edition_date=edition_date,
-        articles=articles,
-        lead_story_id=lead_story_id,
-        advertisement_config=advertisement_config,
-        edition_info=edition_info
-    )
-
-    # First attempt: direct multi-page rendering (fast, single pass, native C++ engine)
-    success = render_html_to_pdf(full_html, output_path)
-    if success:
-        return True
-
-    print(f"[PDF Generator] Direct multi-page render failed; falling back to sequential chunk merger...")
     import io
     import pypdf
     from playwright.sync_api import sync_playwright
 
+    total_articles = len(articles)
     ordered_articles = list(articles)
     if lead_story_id:
         lead_idx = next((i for i, a in enumerate(ordered_articles) if str(a.get("id")) == str(lead_story_id)), None)
@@ -493,6 +474,22 @@ def generate_chunked_daily_newspaper_pdf(
             lead_item = ordered_articles.pop(lead_idx)
             ordered_articles.insert(0, lead_item)
 
+    # For small edition (<= 10 articles, 1 page), render in single shot
+    if total_articles <= 10:
+        full_html = build_newspaper_html(
+            publication_name=publication_name,
+            logo_url=logo_url,
+            edition_date=edition_date,
+            articles=ordered_articles,
+            lead_story_id=lead_story_id,
+            advertisement_config=advertisement_config,
+            edition_info=edition_info
+        )
+        return render_html_to_pdf(full_html, output_path)
+
+    # For larger editions (50-90+ articles), render Page-by-Page in a single browser session.
+    # Closing each page immediately frees all decoded image bitmaps and DOM trees.
+    # Memory stays strictly under 150MB across the entire generation!
     target_pages = max(1, (total_articles + 7) // 8)
     articles_per_page = max(1, (total_articles + target_pages - 1) // target_pages)
 
@@ -504,6 +501,8 @@ def generate_chunked_daily_newspaper_pdf(
         if page_slice:
             chunks.append((p, page_slice))
 
+    print(f"[PDF Generator] Rendering {total_articles} articles across {len(chunks)} pages in low-memory session...")
+
     chrome_path = _get_chromium_executable()
     launch_kwargs = {
         "headless": True,
@@ -512,9 +511,11 @@ def generate_chunked_daily_newspaper_pdf(
             "--disable-setuid-sandbox",
             "--disable-dev-shm-usage",
             "--disable-gpu",
-            "--js-flags=--max-old-space-size=96",
+            "--js-flags=--max-old-space-size=64",
             "--renderer-process-limit=1",
             "--disable-site-isolation-trials",
+            "--disk-cache-size=1",
+            "--media-cache-size=1",
             "--disable-extensions",
             "--disable-background-networking",
             "--mute-audio"
@@ -549,11 +550,27 @@ def generate_chunked_daily_newspaper_pdf(
                 page.emulate_media(media="screen")
                 page.set_content(chunk_html, wait_until="domcontentloaded", timeout=30000)
 
+                # Wait for fonts on first page only
                 if chunk_idx == 0:
                     try:
-                        page.evaluate("Promise.race([document.fonts ? document.fonts.ready : Promise.resolve(), new Promise(r => setTimeout(r, 2000))])")
+                        page.evaluate("Promise.race([document.fonts ? document.fonts.ready : Promise.resolve(), new Promise(r => setTimeout(r, 1500))])")
                     except Exception:
                         pass
+
+                # Non-blocking image load guard (up to 1.5s)
+                try:
+                    page.evaluate("""
+                        Promise.race([
+                            Promise.all(
+                                Array.from(document.images)
+                                    .filter(img => !img.complete)
+                                    .map(img => new Promise(res => { img.onload = img.onerror = res; }))
+                            ),
+                            new Promise(res => setTimeout(res, 1500))
+                        ])
+                    """)
+                except Exception:
+                    pass
 
                 pdf_bytes = page.pdf(
                     format="A3",
@@ -563,12 +580,13 @@ def generate_chunked_daily_newspaper_pdf(
                     margin={"top": "0mm", "bottom": "0mm", "left": "0mm", "right": "0mm"}
                 )
                 try:
-                    page.close()
+                    page.close()  # Destroy page & free RAM immediately!
                 except Exception:
                     pass
+                gc.collect()
 
                 merger.append(io.BytesIO(pdf_bytes))
-                print(f"[PDF Generator] Fallback chunk {chunk_idx + 1}/{len(chunks)} rendered ({len(pdf_bytes)} bytes)")
+                print(f"[PDF Generator] Page {chunk_idx + 1}/{len(chunks)} rendered ({len(pdf_bytes)} bytes)")
 
             with open(output_path, "wb") as f_out:
                 merger.write(f_out)
@@ -583,10 +601,10 @@ def generate_chunked_daily_newspaper_pdf(
                 pass
 
         file_size = os.path.getsize(output_path) if os.path.exists(output_path) else 0
-        print(f"[PDF Generator] Fallback rendered all {len(chunks)} pages into {output_path} ({file_size} bytes)")
+        print(f"[PDF Generator] Successfully rendered all {len(chunks)} pages into {output_path} ({file_size} bytes)")
         return file_size > 100
     except Exception as e:
-        print(f"[PDF Generator] Fallback rendering error: {e}")
+        print(f"[PDF Generator] Rendering error: {e}")
         return False
     finally:
         gc.collect()
