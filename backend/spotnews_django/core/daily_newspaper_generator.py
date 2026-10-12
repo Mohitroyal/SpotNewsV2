@@ -323,6 +323,12 @@ def build_newspaper_html(
             overflow: hidden;
             page-break-inside: avoid;
             break-inside: avoid;
+            page-break-after: always;
+            break-after: page;
+        }}
+        .pdf-page:last-child {{
+            page-break-after: auto;
+            break-after: auto;
         }}
     </style>
 </head>
@@ -359,7 +365,7 @@ def _get_chromium_executable() -> Optional[str]:
     return None
 
 def render_html_to_pdf(html_content: str, output_path: str) -> bool:
-    """Render HTML string to A3 PDF file using Playwright Chromium with guaranteed styling, low memory, and image compression."""
+    """Render HTML string to A3 PDF file using Playwright Chromium with guaranteed styling and low memory."""
     try:
         from playwright.sync_api import sync_playwright
 
@@ -371,7 +377,9 @@ def render_html_to_pdf(html_content: str, output_path: str) -> bool:
                 "--disable-setuid-sandbox",
                 "--disable-dev-shm-usage",
                 "--disable-gpu",
-                "--single-process",
+                "--js-flags=--max-old-space-size=96",
+                "--renderer-process-limit=1",
+                "--disable-site-isolation-trials",
                 "--disable-extensions",
                 "--disable-background-networking",
                 "--mute-audio"
@@ -387,42 +395,16 @@ def render_html_to_pdf(html_content: str, output_path: str) -> bool:
                 device_scale_factor=1
             )
             page = context.new_page()
-
-            # Compress high-resolution images on-the-fly to prevent Out-Of-Memory on 512MB RAM instances
-            def route_image_compress(route, request):
-                if request.resource_type == "image":
-                    try:
-                        response = route.fetch()
-                        body = response.body()
-                        if len(body) > 60_000:
-                            import io
-                            from PIL import Image
-                            im = Image.open(io.BytesIO(body))
-                            im.thumbnail((450, 450), Image.Resampling.LANCZOS)
-                            out_buf = io.BytesIO()
-                            im.convert("RGB").save(out_buf, format="JPEG", quality=65)
-                            route.fulfill(response=response, body=out_buf.getvalue(), headers={"content-type": "image/jpeg"})
-                            return
-                        route.fulfill(response=response)
-                    except Exception:
-                        route.continue_()
-                elif request.resource_type in ["media", "websocket", "eventsource"]:
-                    route.abort()
-                else:
-                    route.continue_()
-
-            page.route("**/*", route_image_compress)
-
             page.emulate_media(media="screen")
             page.set_content(html_content, wait_until="domcontentloaded", timeout=60000)
 
-            # Wait for Telugu web fonts to finish rendering
+            # Wait for Telugu web fonts (up to 2s guard)
             try:
-                page.evaluate("document.fonts ? document.fonts.ready : Promise.resolve()")
+                page.evaluate("Promise.race([document.fonts ? document.fonts.ready : Promise.resolve(), new Promise(r => setTimeout(r, 2000))])")
             except Exception:
                 pass
 
-            # Allow up to 3 seconds for images to finish loading without blocking
+            # Allow up to 2.5s for images without blocking
             try:
                 page.evaluate("""
                     Promise.race([
@@ -431,13 +413,11 @@ def render_html_to_pdf(html_content: str, output_path: str) -> bool:
                                 .filter(img => !img.complete)
                                 .map(img => new Promise(res => { img.onload = img.onerror = res; }))
                         ),
-                        new Promise(res => setTimeout(res, 3000))
+                        new Promise(res => setTimeout(res, 2500))
                     ])
                 """)
             except Exception:
                 pass
-
-            page.wait_for_timeout(1000)
 
             page.pdf(
                 path=output_path,
@@ -447,13 +427,28 @@ def render_html_to_pdf(html_content: str, output_path: str) -> bool:
                 display_header_footer=False,
                 margin={"top": "0mm", "bottom": "0mm", "left": "0mm", "right": "0mm"}
             )
-            browser.close()
+            try:
+                page.close()
+            except Exception:
+                pass
+            try:
+                context.close()
+            except Exception:
+                pass
+            try:
+                browser.close()
+            except Exception:
+                pass
+
             file_size = os.path.getsize(output_path) if os.path.exists(output_path) else 0
             print(f"[PDF Generator] Generated PDF size: {file_size} bytes at {output_path}")
             return file_size > 100
     except Exception as e:
         print(f"Playwright PDF rendering error: {e}")
         return False
+    finally:
+        import gc
+        gc.collect()
 
 def generate_chunked_daily_newspaper_pdf(
     publication_name: str,
@@ -467,11 +462,30 @@ def generate_chunked_daily_newspaper_pdf(
     max_articles_per_chunk: int = 8
 ) -> bool:
     import gc
+    total_articles = len(articles)
+    print(f"[PDF Generator] Rendering newspaper PDF for {total_articles} articles...")
+
+    # Build the full multi-page newspaper HTML
+    full_html = build_newspaper_html(
+        publication_name=publication_name,
+        logo_url=logo_url,
+        edition_date=edition_date,
+        articles=articles,
+        lead_story_id=lead_story_id,
+        advertisement_config=advertisement_config,
+        edition_info=edition_info
+    )
+
+    # First attempt: direct multi-page rendering (fast, single pass, native C++ engine)
+    success = render_html_to_pdf(full_html, output_path)
+    if success:
+        return True
+
+    print(f"[PDF Generator] Direct multi-page render failed; falling back to sequential chunk merger...")
     import io
     import pypdf
     from playwright.sync_api import sync_playwright
 
-    total_articles = len(articles)
     ordered_articles = list(articles)
     if lead_story_id:
         lead_idx = next((i for i, a in enumerate(ordered_articles) if str(a.get("id")) == str(lead_story_id)), None)
@@ -479,7 +493,6 @@ def generate_chunked_daily_newspaper_pdf(
             lead_item = ordered_articles.pop(lead_idx)
             ordered_articles.insert(0, lead_item)
 
-    # Calculate pages needed (approx 8 articles per page)
     target_pages = max(1, (total_articles + 7) // 8)
     articles_per_page = max(1, (total_articles + target_pages - 1) // target_pages)
 
@@ -491,8 +504,6 @@ def generate_chunked_daily_newspaper_pdf(
         if page_slice:
             chunks.append((p, page_slice))
 
-    print(f"[PDF Generator] Rendering {total_articles} articles across {len(chunks)} pages in high-speed session...")
-
     chrome_path = _get_chromium_executable()
     launch_kwargs = {
         "headless": True,
@@ -501,7 +512,9 @@ def generate_chunked_daily_newspaper_pdf(
             "--disable-setuid-sandbox",
             "--disable-dev-shm-usage",
             "--disable-gpu",
-            "--single-process",
+            "--js-flags=--max-old-space-size=96",
+            "--renderer-process-limit=1",
+            "--disable-site-isolation-trials",
             "--disable-extensions",
             "--disable-background-networking",
             "--mute-audio"
@@ -517,31 +530,6 @@ def generate_chunked_daily_newspaper_pdf(
                 viewport={"width": 1123, "height": 1587},
                 device_scale_factor=1
             )
-
-            # Route compression handler
-            def route_image_compress(route, request):
-                if request.resource_type == "image":
-                    try:
-                        response = route.fetch()
-                        body = response.body()
-                        if len(body) > 60_000:
-                            import io as pyio
-                            from PIL import Image
-                            im = Image.open(pyio.BytesIO(body))
-                            im.thumbnail((450, 450), Image.Resampling.LANCZOS)
-                            out_buf = pyio.BytesIO()
-                            im.convert("RGB").save(out_buf, format="JPEG", quality=65)
-                            route.fulfill(response=response, body=out_buf.getvalue(), headers={"content-type": "image/jpeg"})
-                            return
-                        route.fulfill(response=response)
-                    except Exception:
-                        route.continue_()
-                elif request.resource_type in ["media", "websocket", "eventsource"]:
-                    route.abort()
-                else:
-                    route.continue_()
-
-            context.route("**/*", route_image_compress)
             merger = pypdf.PdfWriter()
 
             for chunk_idx, (page_idx, chunk_articles) in enumerate(chunks):
@@ -561,10 +549,9 @@ def generate_chunked_daily_newspaper_pdf(
                 page.emulate_media(media="screen")
                 page.set_content(chunk_html, wait_until="domcontentloaded", timeout=30000)
 
-                # Wait for fonts on first page
                 if chunk_idx == 0:
                     try:
-                        page.evaluate("document.fonts ? document.fonts.ready : Promise.resolve()")
+                        page.evaluate("Promise.race([document.fonts ? document.fonts.ready : Promise.resolve(), new Promise(r => setTimeout(r, 2000))])")
                     except Exception:
                         pass
 
@@ -575,22 +562,31 @@ def generate_chunked_daily_newspaper_pdf(
                     display_header_footer=False,
                     margin={"top": "0mm", "bottom": "0mm", "left": "0mm", "right": "0mm"}
                 )
-                page.close()
+                try:
+                    page.close()
+                except Exception:
+                    pass
 
                 merger.append(io.BytesIO(pdf_bytes))
-                print(f"[PDF Generator] Page {chunk_idx + 1}/{len(chunks)} rendered ({len(pdf_bytes)} bytes)")
+                print(f"[PDF Generator] Fallback chunk {chunk_idx + 1}/{len(chunks)} rendered ({len(pdf_bytes)} bytes)")
 
             with open(output_path, "wb") as f_out:
                 merger.write(f_out)
             merger.close()
-            context.close()
-            browser.close()
+            try:
+                context.close()
+            except Exception:
+                pass
+            try:
+                browser.close()
+            except Exception:
+                pass
 
         file_size = os.path.getsize(output_path) if os.path.exists(output_path) else 0
-        print(f"[PDF Generator] Successfully rendered all {len(chunks)} pages into {output_path} ({file_size} bytes)")
+        print(f"[PDF Generator] Fallback rendered all {len(chunks)} pages into {output_path} ({file_size} bytes)")
         return file_size > 100
     except Exception as e:
-        print(f"[PDF Generator] High-speed PDF rendering error: {e}")
+        print(f"[PDF Generator] Fallback rendering error: {e}")
         return False
     finally:
         gc.collect()

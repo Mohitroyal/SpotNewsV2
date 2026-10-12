@@ -344,6 +344,15 @@ def generate_daily_newspaper(request):
         except Exception as storage_err:
             print(f"[PDF Generator] Supabase storage upload note: {storage_err}")
 
+        # Determine actual page count from generated PDF
+        actual_page_count = total_pages
+        try:
+            import pypdf
+            reader = pypdf.PdfReader(output_pdf_path)
+            actual_page_count = len(reader.pages)
+        except Exception:
+            pass
+
         # Save snapshot to database table `daily_editions`
         new_id = f"edition-{int(time.time())}"
         try:
@@ -364,7 +373,7 @@ def generate_daily_newspaper(request):
                     logo_url,
                     json.dumps(articles),
                     str(lead_story_id) if lead_story_id else None,
-                    total_pages,
+                    actual_page_count,
                     total_articles,
                     'completed',
                     pdf_url,
@@ -384,12 +393,12 @@ def generate_daily_newspaper(request):
             "edition_date": edition_date,
             "version": current_version,
             "total_articles": total_articles,
-            "total_pages": total_pages,
+            "total_pages": actual_page_count,
             "pdf_url": pdf_url,
             "pdf_base64": pdf_base64,
             "filename": filename,
             "status": "completed",
-            "message": f"Daily Newspaper Edition generated successfully! ({total_pages} pages, {total_articles} articles)"
+            "message": f"Daily Newspaper Edition generated successfully! ({actual_page_count} pages, {total_articles} articles)"
         })
     except Exception as e:
         print(f"Error generating daily newspaper: {e}")
