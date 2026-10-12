@@ -1,56 +1,31 @@
 import os
-from pathlib import Path
 import re
-import json
-import logging
 from datetime import datetime
 from typing import List, Dict, Any, Optional
 
-logger = logging.getLogger(__name__)
-
-# TELUGU MONTHS AND DAYS MAP
 TELUGU_DAYS = {
-    0: "సోమవారం",
-    1: "మంగళవారం",
-    2: "బుధవారం",
-    3: "గురువారం",
-    4: "శుక్రవారం",
-    5: "శనివారం",
-    6: "ఆదివారం"
+    0: "సోమవారం", 1: "మంగళవారం", 2: "బుధవారం",
+    3: "గురువారం", 4: "శుక్రవారం", 5: "శనివారం", 6: "ఆదివారం"
 }
-
 TELUGU_MONTHS = {
-    1: "జనవరి",
-    2: "ఫిబ్రవరి",
-    3: "మార్చి",
-    4: "ఏప్రిల్",
-    5: "మే",
-    6: "జూన్",
-    7: "జులై",
-    8: "ఆగస్టు",
-    9: "సెప్టెంబర్",
-    10: "అక్టోబర్",
-    11: "నవంబర్",
-    12: "డిసెంబర్"
+    1: "జనవరి", 2: "ఫిబ్రవరి", 3: "మార్చి", 4: "ఏప్రిల్",
+    5: "మే", 6: "జూన్", 7: "జులై", 8: "ఆగస్టు",
+    9: "సెప్టెంబర్", 10: "అక్టోబర్", 11: "నవంబర్", 12: "డిసెంబర్"
 }
 
 def format_telugu_date(date_str: str) -> str:
-    """Format YYYY-MM-DD string into Telugu full date format."""
     try:
         dt = datetime.strptime(date_str, "%Y-%m-%d")
         weekday = TELUGU_DAYS[dt.weekday()]
-        day = dt.day
-        month = TELUGU_MONTHS[dt.month]
-        year = dt.year
-        return f"{weekday} - {day:02d} - {month} - {year}"
+        return f"{weekday} - {dt.day:02d} - {TELUGU_MONTHS[dt.month]} - {dt.year}"
     except Exception:
         return date_str
 
 def sanitize_text(text: str) -> str:
     if not text:
         return ""
-    text = text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace('"', "&quot;")
-    return text.strip()
+    text = re.sub(r'[\x00-\x1F\x7F]', '', str(text))
+    return text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace('"', "&quot;").strip()
 
 def build_newspaper_html(
     publication_name: str,
@@ -63,13 +38,9 @@ def build_newspaper_html(
     page_offset: int = 0,
     total_pages_override: Optional[int] = None
 ) -> str:
-    """
-    Generate clean, print-ready HTML string for a CONTINUOUS Daily Newspaper.
-    Uses CSS Multi-column layout so articles flow naturally across pages with ZERO whitespace gaps.
-    """
     telugu_date_formatted = format_telugu_date(edition_date)
     
-    # Reorder articles if lead_story_id is provided
+    # Reorder articles if lead_story_id is provided so it stays first
     ordered_articles = list(articles)
     if lead_story_id:
         lead_idx = next((i for i, a in enumerate(ordered_articles) if str(a.get("id")) == str(lead_story_id)), None)
@@ -86,22 +57,22 @@ def build_newspaper_html(
     ad_html = ""
     if advertisement_config and advertisement_config.get("image_url"):
         ad_html = f"""
-        <div style="width: 28%; padding-left: 10px; text-align: center;">
+        <div style="width: 25%; padding-left: 10px; text-align: center;">
             <img src="{advertisement_config['image_url']}" style="max-height: 85px; max-width: 100%; border: 1px solid #ccc; padding: 2px;" />
         </div>
         """
-    
+
     masthead_block = f"""
-    <!-- Masthead (Only appears on Page 1) -->
-    <div style="display: flex; justify-content: space-between; align-items: center; background: #ffffff; padding: 10px 0; border-bottom: 4px solid #D60000; margin-bottom: 4px;">
+    <!-- Masthead (Page 1) -->
+    <div style="display: flex; justify-content: space-between; align-items: center; background: #ffffff; padding: 4px 0; border-bottom: 3.5px solid #D60000; margin-bottom: 3px;">
         <div style="flex: 1; text-align: center;">
-            <img src="{logo_url}" alt="{sanitize_text(publication_name)}" style="max-height: 100px; max-width: 100%; object-fit: contain;" />
+            <img src="{logo_url}" alt="{sanitize_text(publication_name)}" style="max-height: 85px; max-width: 100%; object-fit: contain;" />
         </div>
         {ad_html}
     </div>
     
     <!-- Meta Strip -->
-    <div style="display: flex; justify-content: space-between; align-items: center; background: #006600; color: #ffffff; font-size: 13px; font-weight: bold; padding: 5px 15px; margin-bottom: 12px; border-radius: 2px;">
+    <div style="display: flex; justify-content: space-between; align-items: center; background: #006600; color: #ffffff; font-size: 13px; font-weight: bold; padding: 5px 15px; margin-bottom: 8px; border-radius: 2px;">
         <div>సంపుటి: {edition_no} &nbsp;|&nbsp; సంచిక: {issue_no} &nbsp;|&nbsp; ఎడిటర్: {sanitize_text(editor_name)}</div>
         <div style="color: #FFEB3B;">దినపత్రిక &nbsp;|&nbsp; వెల: {price}</div>
         <div>{telugu_date_formatted} &nbsp;|&nbsp; {sanitize_text(location)}</div>
@@ -110,32 +81,8 @@ def build_newspaper_html(
 
     headline_colors = ["#D60000", "#003399", "#8B0055", "#006600", "#111111"]
     
-    used_ids = set([str(a.get("id")) for a in ordered_articles if a.get("id")])
-    
-    remaining_primary = []
-    for idx, art in enumerate(ordered_articles):
-        headline = sanitize_text(art.get("headline") or art.get("title") or "ముఖ్యాంశం")
-        content = sanitize_text(art.get("content") or art.get("summary") or "")
-        imgs = art.get("image_urls") or []
-        if not imgs and art.get("image_url"):
-            imgs = [art.get("image_url")]
-            
-        is_lead = (idx == 0)
-        img_cost = 0
-        if imgs:
-            img_cost = 1500 if is_lead else 400
-            
-        weight = len(content) + int(len(headline) * (4 if is_lead else 2)) + img_cost
-        remaining_primary.append({
-            "art": art,
-            "weight": weight,
-            "is_filler": False
-        })
-
     total_articles = len(ordered_articles)
-    # Dynamic target page count: 9 to 10 articles per A3 page (5 columns),
-    # matching the user's mobile preview and ensuring dense, balanced layout across all pages
-    target_pages = max(1, (total_articles + 8) // 9)
+    target_pages = max(1, (total_articles + 8) // 9) if not total_pages_override else total_pages_override
     articles_per_page = max(1, (total_articles + target_pages - 1) // target_pages)
     
     chunked_pages = []
@@ -144,80 +91,16 @@ def build_newspaper_html(
         end = min(start + articles_per_page, total_articles)
         page_slice = ordered_articles[start:end]
         if page_slice:
-            chunked_pages.append([{"art": a, "weight": 1000, "is_filler": False} for a in page_slice])
+            chunked_pages.append(page_slice)
 
-    global_idx = 0
     pages_html = []
-    for page_idx, page_group in enumerate(chunked_pages):
+    global_idx = 0
+
+    for page_idx, page_articles in enumerate(chunked_pages):
         display_page_num = page_offset + page_idx + 1
         is_first_page = (display_page_num == 1)
-        lead_story_html = ""
-        articles_html = []
-        
-        for local_idx, item in enumerate(page_group):
-            art = item["art"]
-            headline = sanitize_text(art.get("headline") or art.get("title") or "ముఖ్యాంశం")
-            content = sanitize_text(art.get("content") or art.get("summary") or "")
-            reporter = sanitize_text(art.get("reporter_name") or art.get("byline") or "రిపోర్టర్")
-            loc = sanitize_text(art.get("location") or art.get("district") or "")
-            
-            imgs = art.get("image_urls") or []
-            if not imgs and art.get("image_url"):
-                imgs = [art.get("image_url")]
-            
-            is_lead = (is_first_page and local_idx == 0)
-            color = headline_colors[global_idx % len(headline_colors)]
-            global_idx += 1
-            
-            img_html = ""
-            if imgs and len(imgs) > 0:
-                first_img = imgs[0]
-                img_style = "width: 100%; max-height: 180px; object-fit: cover; margin-bottom: 5px; break-inside: avoid; -webkit-column-break-inside: avoid; page-break-inside: avoid;"
-                if is_lead:
-                    img_style = "width: 100%; max-height: 300px; object-fit: cover; break-inside: avoid; -webkit-column-break-inside: avoid; page-break-inside: avoid;"
-                img_html = f"""
-                <div style="text-align: center; margin-bottom: 6px; break-inside: avoid; page-break-inside: avoid; -webkit-column-break-inside: avoid;">
-                    <img src="{first_img}" style="{img_style}" />
-                </div>
-                """
+        count = len(page_articles)
 
-            byline_str = f"{loc} &nbsp;|&nbsp; {reporter}" if loc and reporter else (loc or reporter)
-            byline_html = f'<div style="font-size: 11px; font-weight: bold; color: #666; margin-bottom: 6px; padding-bottom: 4px; border-bottom: 1px solid #eee;">{byline_str}</div>'
-
-            if is_lead:
-                head_style = f"font-size: 24px; font-weight: 900; color: {color}; line-height: 1.2; margin-bottom: 6px;"
-                lead_story_html = f"""
-                <div class="article-cell lead-cell" style="margin-bottom: 12px; border-bottom: 2px solid #D60000; padding-bottom: 8px; break-inside: avoid; -webkit-column-break-inside: avoid; page-break-inside: avoid;">
-                    <h2 style="{head_style}">
-                        {headline}
-                    </h2>
-                    {byline_html}
-                    {img_html}
-                    <div style="font-size: 12px; line-height: 1.45; text-align: justify; color: #111;">
-                        <p style="margin: 0;">{content}</p>
-                    </div>
-                </div>
-                """
-                articles_html.append(lead_story_html)
-            else:
-                span_style = "margin-bottom: 10px; border-top: 2px solid #ccc; padding-top: 8px;"
-                head_style = f"font-size: 17px; font-weight: 800; color: {color}; line-height: 1.2; margin-bottom: 4px; break-after: avoid; page-break-after: avoid;"
-                content_style = "font-size: 12px; line-height: 1.4; text-align: justify; color: #111;"
-                
-                item_html = f"""
-                <div class="article-cell" style="{span_style}">
-                    <h2 style="{head_style}">
-                        {headline}
-                    </h2>
-                    {byline_html}
-                    <div style="{content_style}">
-                        {img_html}
-                        <p style="margin: 0; text-indent: 15px;">{content}</p>
-                    </div>
-                </div>
-                """
-                articles_html.append(item_html)
-            
         if is_first_page:
             header_html = masthead_block
         else:
@@ -229,39 +112,185 @@ def build_newspaper_html(
             </div>
             """
 
-        page_num_str = f"పేజీ {display_page_num}"
-        custom_footer = f"""
-        <div class="footer-section" style="flex: 0 0 auto; display: flex; justify-content: space-between; align-items: center; border-top: 1px solid #ccc; padding-top: 4px; font-size: 11px; color: #555; margin-top: 6px;">
+        page_content_html = ""
+
+        if is_first_page and count >= 1:
+            lead_art = page_articles[0]
+            lead_headline = sanitize_text(lead_art.get("headline") or lead_art.get("title") or "ముఖ్యాంశం")
+            lead_content = sanitize_text(lead_art.get("content") or lead_art.get("summary") or "")
+            lead_reporter = sanitize_text(lead_art.get("reporter_name") or lead_art.get("byline") or "రిపోర్టర్")
+            lead_loc = sanitize_text(lead_art.get("location") or lead_art.get("district") or "")
+            lead_imgs = lead_art.get("image_urls") or []
+            if not lead_imgs and lead_art.get("image_url"):
+                lead_imgs = [lead_art.get("image_url")]
+
+            lead_color = headline_colors[0]
+            global_idx += 1
+
+            lead_byline = f"{lead_loc} &nbsp;|&nbsp; {lead_reporter}" if lead_loc and lead_reporter else (lead_loc or lead_reporter)
+            lead_byline_html = f'<div style="font-size: 11.5px; font-weight: bold; color: #555; margin-bottom: 6px; padding-bottom: 3px; border-bottom: 1px solid #ddd;">{lead_byline}</div>'
+
+            lead_img_html = ""
+            if lead_imgs:
+                lead_img_html = f"""
+                <div style="width: 44%; float: left; margin-right: 18px; margin-bottom: 10px;">
+                    <img src="{lead_imgs[0]}" style="width: 100%; max-height: 270px; object-fit: cover; border: 1px solid #ccc; padding: 2px; border-radius: 2px; display: block;" />
+                </div>
+                """
+
+            lead_story_html = f"""
+            <div class="lead-story-card" style="border-bottom: 3px solid #D60000; padding-bottom: 12px; margin-bottom: 10px; flex: 0 0 auto;">
+                <h1 style="font-size: 28px; font-weight: 900; color: {lead_color}; line-height: 1.22; margin-bottom: 5px;">
+                    {lead_headline}
+                </h1>
+                {lead_byline_html}
+                <div style="font-size: 13px; line-height: 1.55; text-align: justify; color: #111;">
+                    {lead_img_html}
+                    <p style="margin: 0; text-indent: 18px;">{lead_content}</p>
+                    <div style="clear: both;"></div>
+                </div>
+            </div>
+            """
+
+            sec_articles = page_articles[1:]
+            sec_count = len(sec_articles)
+
+            if sec_count > 0:
+                grid_cols = min(4, sec_count)
+                sec_items_html = []
+                for s_idx, s_art in enumerate(sec_articles):
+                    s_head = sanitize_text(s_art.get("headline") or s_art.get("title") or "ముఖ్యాంశం")
+                    s_cont = sanitize_text(s_art.get("content") or s_art.get("summary") or "")
+                    s_rep = sanitize_text(s_art.get("reporter_name") or s_art.get("byline") or "రిపోర్టర్")
+                    s_loc = sanitize_text(s_art.get("location") or s_art.get("district") or "")
+                    s_imgs = s_art.get("image_urls") or []
+                    if not s_imgs and s_art.get("image_url"):
+                        s_imgs = [s_art.get("image_url")]
+
+                    s_color = headline_colors[(global_idx) % len(headline_colors)]
+                    global_idx += 1
+
+                    s_byline = f"{s_loc} &nbsp;|&nbsp; {s_rep}" if s_loc and s_rep else (s_loc or s_rep)
+                    s_byline_html = f'<div style="font-size: 10.5px; font-weight: bold; color: #666; margin-bottom: 5px; padding-bottom: 3px; border-bottom: 1px solid #eee;">{s_byline}</div>'
+
+                    s_img_html = ""
+                    if s_imgs:
+                        s_img_html = f"""
+                        <div style="margin-bottom: 6px; text-align: center;">
+                            <img src="{s_imgs[0]}" style="width: 100%; max-height: 175px; object-fit: cover; border: 1px solid #ddd; padding: 1px; border-radius: 2px;" />
+                        </div>
+                        """
+
+                    is_last_col = (s_idx == sec_count - 1)
+                    border_right = "none" if is_last_col else "1px solid #ccc"
+
+                    item_html = f"""
+                    <div class="news-card" style="border-right: {border_right}; padding: 0 10px; display: flex; flex-direction: column; box-sizing: border-box; overflow: hidden;">
+                        <h2 style="font-size: 17px; font-weight: 800; color: {s_color}; line-height: 1.25; margin-bottom: 4px;">
+                            {s_head}
+                        </h2>
+                        {s_byline_html}
+                        {s_img_html}
+                        <div style="font-size: 12px; line-height: 1.48; text-align: justify; color: #111; flex: 1; overflow: hidden;">
+                            <p style="margin: 0; text-indent: 14px;">{s_cont}</p>
+                        </div>
+                    </div>
+                    """
+                    sec_items_html.append(item_html)
+
+                page_content_html = f"""
+                <div style="flex: 1 1 0; min-height: 0; display: flex; flex-direction: column;">
+                    {lead_story_html}
+                    <div class="secondary-grid" style="flex: 1 1 0; min-height: 0; display: grid; grid-template-columns: repeat({grid_cols}, 1fr); gap: 10px; align-items: stretch;">
+                        {"".join(sec_items_html)}
+                    </div>
+                </div>
+                """
+            else:
+                page_content_html = f"""
+                <div style="flex: 1 1 0; min-height: 0; display: flex; flex-direction: column;">
+                    {lead_story_html}
+                </div>
+                """
+        else:
+            # Interior pages:
+            grid_cols = min(4, max(2, count))
+            items_html = []
+            for a_idx, art in enumerate(page_articles):
+                head = sanitize_text(art.get("headline") or art.get("title") or "ముఖ్యాంశం")
+                cont = sanitize_text(art.get("content") or art.get("summary") or "")
+                rep = sanitize_text(art.get("reporter_name") or art.get("byline") or "రిపోర్టర్")
+                loc = sanitize_text(art.get("location") or art.get("district") or "")
+                imgs = art.get("image_urls") or []
+                if not imgs and art.get("image_url"):
+                    imgs = [art.get("image_url")]
+
+                color = headline_colors[(global_idx) % len(headline_colors)]
+                global_idx += 1
+
+                byline = f"{loc} &nbsp;|&nbsp; {rep}" if loc and rep else (loc or rep)
+                byline_html = f'<div style="font-size: 11px; font-weight: bold; color: #666; margin-bottom: 6px; padding-bottom: 4px; border-bottom: 1px solid #eee;">{byline}</div>'
+
+                img_html = ""
+                if imgs:
+                    img_html = f"""
+                    <div style="margin-bottom: 6px; text-align: center;">
+                        <img src="{imgs[0]}" style="width: 100%; max-height: 190px; object-fit: cover; border: 1px solid #ddd; padding: 1px; border-radius: 2px;" />
+                    </div>
+                    """
+
+                is_last_col = (a_idx == count - 1)
+                border_right = "none" if is_last_col else "1px solid #ccc"
+
+                item_html = f"""
+                <div class="news-card" style="border-right: {border_right}; padding: 0 10px; display: flex; flex-direction: column; box-sizing: border-box; overflow: hidden;">
+                    <h2 style="font-size: 18px; font-weight: 800; color: {color}; line-height: 1.25; margin-bottom: 5px;">
+                        {head}
+                    </h2>
+                    {byline_html}
+                    {img_html}
+                    <div style="font-size: 12.5px; line-height: 1.48; text-align: justify; color: #111; flex: 1; overflow: hidden;">
+                        <p style="margin: 0; text-indent: 14px;">{cont}</p>
+                    </div>
+                </div>
+                """
+                items_html.append(item_html)
+
+            page_content_html = f"""
+            <div style="flex: 1 1 0; min-height: 0; display: grid; grid-template-columns: repeat({grid_cols}, 1fr); gap: 12px; align-items: stretch;">
+                {"".join(items_html)}
+            </div>
+            """
+
+        page_footer = f"""
+        <div class="footer-section" style="flex: 0 0 auto; display: flex; justify-content: space-between; align-items: center; border-top: 1.5px solid #333; padding-top: 4px; font-size: 11px; color: #444; margin-top: 8px;">
             <div>{sanitize_text(publication_name)} - {edition_date}</div>
-            <div style="font-weight: bold;">{page_num_str}</div>
+            <div style="font-weight: bold;">పేజీ {display_page_num}</div>
         </div>
         """
-        
+
         is_last_page = (page_idx == len(chunked_pages) - 1)
         page_break_style = "" if is_last_page else "page-break-after: always; break-after: page;"
-        
+
         page_html = f"""
-        <div class="pdf-page" style="width: 297mm; height: 420mm; max-height: 420mm; padding: 12mm 10mm; background: #ffffff; margin: 0 auto; box-sizing: border-box; position: relative; display: flex; flex-direction: column; overflow: hidden; page-break-inside: avoid; break-inside: avoid; {page_break_style}">
+        <div class="pdf-page" style="width: 297mm; height: 420mm; max-height: 420mm; padding: 10mm 10mm; background: #ffffff; margin: 0 auto; box-sizing: border-box; position: relative; display: flex; flex-direction: column; overflow: hidden; page-break-inside: avoid; break-inside: avoid; {page_break_style}">
             <div class="header-section" style="flex: 0 0 auto;">
                 {header_html}
             </div>
-            <div class="flex-wrapper" style="flex: 1 1 0; min-height: 0; position: relative; margin-top: 5px;">
-                <div class="cols" style="position: absolute; top: 0; bottom: 0; left: 0; right: 0; column-count: 5; column-gap: 10px; column-rule: 1px solid #ccc; column-fill: auto; orphans: 2; widows: 2;">
-                    {"".join(articles_html)}
-                </div>
-            </div>
-            {custom_footer}
+            {page_content_html}
+            {page_footer}
         </div>
         """
         pages_html.append(page_html)
 
-    # Return the raw HTML structure.
     html = f"""<!DOCTYPE html>
 <html lang="te">
 <head>
     <meta charset="UTF-8">
     <title>{sanitize_text(publication_name)} - {edition_date}</title>
-    <link href="https://fonts.googleapis.com/css2?family=Suranna&family=Ramabhadra&display=swap" rel="stylesheet">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+Telugu:wght@400;600;700;800;900&family=Noto+Sans+Telugu:wght@400;600;700&display=swap" rel="stylesheet">
     <style>
         @page {{
             size: 297mm 420mm;
@@ -276,7 +305,7 @@ def build_newspaper_html(
             background: #ffffff !important;
             background-color: #ffffff !important;
             color: #000000 !important;
-            font-family: 'Suranna', 'Ramabhadra', serif;
+            font-family: 'Noto Serif Telugu', serif;
             -webkit-print-color-adjust: exact;
             print-color-adjust: exact;
         }}
@@ -284,7 +313,7 @@ def build_newspaper_html(
             width: 297mm;
             height: 420mm;
             max-height: 420mm;
-            padding: 12mm 10mm;
+            padding: 10mm 10mm;
             background: #ffffff;
             margin: 0 auto;
             box-sizing: border-box;
@@ -307,7 +336,6 @@ def build_newspaper_html(
     return html
 
 def _get_chromium_executable() -> Optional[str]:
-    """Locate the Chromium executable installed by Playwright on Render/Linux or return None for local auto-detect."""
     import glob
     browsers_path = os.getenv("PLAYWRIGHT_BROWSERS_PATH")
     if not browsers_path:
@@ -333,7 +361,6 @@ def _get_chromium_executable() -> Optional[str]:
 def render_html_to_pdf(html_content: str, output_path: str) -> bool:
     """Render HTML string to A3 PDF file using Playwright Chromium with guaranteed styling, low memory, and image compression."""
     try:
-        import os
         from playwright.sync_api import sync_playwright
 
         chrome_path = _get_chromium_executable()
@@ -347,8 +374,7 @@ def render_html_to_pdf(html_content: str, output_path: str) -> bool:
                 "--single-process",
                 "--disable-extensions",
                 "--disable-background-networking",
-                "--mute-audio",
-                "--font-render-hinting=none"
+                "--mute-audio"
             ]
         }
         if chrome_path:
@@ -387,7 +413,6 @@ def render_html_to_pdf(html_content: str, output_path: str) -> bool:
 
             page.route("**/*", route_image_compress)
 
-            # Emulate screen media so CSS flexbox & multi-columns layout identically to browser preview
             page.emulate_media(media="screen")
             page.set_content(html_content, wait_until="domcontentloaded", timeout=60000)
 
@@ -397,7 +422,7 @@ def render_html_to_pdf(html_content: str, output_path: str) -> bool:
             except Exception:
                 pass
 
-            # Allow up to 3 seconds for images to finish loading without blocking if slow/missing
+            # Allow up to 3 seconds for images to finish loading without blocking
             try:
                 page.evaluate("""
                     Promise.race([
@@ -412,10 +437,7 @@ def render_html_to_pdf(html_content: str, output_path: str) -> bool:
             except Exception:
                 pass
 
-            page.wait_for_timeout(800)
-
-            body_text = page.evaluate("() => document.body ? document.body.innerText.length : 0")
-            print(f"[PDF Generator] Page body text length: {body_text}")
+            page.wait_for_timeout(1000)
 
             page.pdf(
                 path=output_path,
@@ -430,10 +452,8 @@ def render_html_to_pdf(html_content: str, output_path: str) -> bool:
             print(f"[PDF Generator] Generated PDF size: {file_size} bytes at {output_path}")
             return file_size > 100
     except Exception as e:
-        logger.error(f"Playwright PDF rendering error: {e}")
         print(f"Playwright PDF rendering error: {e}")
         return False
-
 
 def generate_chunked_daily_newspaper_pdf(
     publication_name: str,
@@ -446,17 +466,11 @@ def generate_chunked_daily_newspaper_pdf(
     edition_info: Optional[Dict[str, Any]] = None,
     max_articles_per_chunk: int = 8
 ) -> bool:
-    """
-    Render large newspapers (e.g. 50-100+ articles, 10+ pages) safely on memory-constrained servers (Render 512MB RAM).
-    Splits articles into chunks of ~8-9 articles (exactly 1 A3 page per chunk), renders each chunk in an isolated Chromium
-    instance to avoid accumulating Chromium memory, and merges them using pypdf.
-    """
     import gc
     import pypdf
 
     total_articles = len(articles)
     if total_articles <= 8:
-        # Single chunk is lightweight and safe
         html_content = build_newspaper_html(
             publication_name=publication_name,
             logo_url=logo_url,
@@ -468,7 +482,6 @@ def generate_chunked_daily_newspaper_pdf(
         )
         return render_html_to_pdf(html_content, output_path)
 
-    # Reorder articles if lead_story_id is provided so it stays first
     ordered_articles = list(articles)
     if lead_story_id:
         lead_idx = next((i for i, a in enumerate(ordered_articles) if str(a.get("id")) == str(lead_story_id)), None)
@@ -476,11 +489,9 @@ def generate_chunked_daily_newspaper_pdf(
             lead_item = ordered_articles.pop(lead_idx)
             ordered_articles.insert(0, lead_item)
 
-    # Dynamic target page count: ~9-10 articles per page
-    target_pages = max(1, (total_articles + 8) // 9)
+    target_pages = max(1, (total_articles + 7) // 8)
     articles_per_page = max(1, (total_articles + target_pages - 1) // target_pages)
 
-    # Group into single-page chunks (each page has articles_per_page articles)
     chunks = []
     for p in range(target_pages):
         start = p * articles_per_page
@@ -489,7 +500,6 @@ def generate_chunked_daily_newspaper_pdf(
         if page_slice:
             chunks.append((p, page_slice))
 
-    print(f"[PDF Generator] Rendering {total_articles} articles across {len(chunks)} chunks for memory safety...")
     temp_dir = os.path.dirname(output_path)
     base_name = os.path.splitext(os.path.basename(output_path))[0]
     
@@ -510,7 +520,7 @@ def generate_chunked_daily_newspaper_pdf(
                 advertisement_config=advertisement_config,
                 edition_info=edition_info,
                 page_offset=page_idx,
-                total_pages_override=target_pages
+                total_pages_override=1
             )
 
             ok = render_html_to_pdf(chunk_html, chunk_pdf)
@@ -523,10 +533,8 @@ def generate_chunked_daily_newspaper_pdf(
         with open(output_path, "wb") as f_out:
             merger.write(f_out)
         merger.close()
-        print(f"[PDF Generator] Successfully merged all {len(chunks)} chunks into {output_path} ({os.path.getsize(output_path)} bytes)")
         return True
     except Exception as e:
-        logger.error(f"[PDF Generator] Chunked rendering error: {e}")
         print(f"[PDF Generator] Chunked rendering error: {e}")
         return False
     finally:
@@ -537,4 +545,3 @@ def generate_chunked_daily_newspaper_pdf(
             except Exception:
                 pass
         gc.collect()
-

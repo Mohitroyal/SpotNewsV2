@@ -237,7 +237,97 @@ export const DailyNewspaperGeneratorModal: React.FC<Props> = ({ isOpen, onClose,
     }
   };
 
-  const handlePrintPreview = () => {
+  const [savingPdf, setSavingPdf] = useState(false);
+
+  const handlePrintOrSavePDF = async () => {
+    // If running inside Capacitor mobile app (Android / iOS):
+    if (Capacitor.isNativePlatform()) {
+      setSavingPdf(true);
+      setErrorMsg(null);
+      try {
+        if (!selectedLogo) {
+          setLogoError('Selection required! Please select a publication logo.');
+          return;
+        }
+        const config: DailyNewspaperConfig = {
+          publication_code: selectedLogo.publication_code,
+          publication_name: selectedLogo.name,
+          logo_url: selectedLogo.logo_url,
+          edition_date: editionDate,
+          articles: activeSelectedArticles.map((a) => ({
+            ...a,
+            content: a.custom_excerpt || a.content || a.summary || '',
+          })),
+          lead_story_id: leadStoryId || undefined,
+          overwrite_existing: true,
+        };
+        const res = await dailyNewspaperService.generate(config);
+        setGeneratedResult({
+          pdf_url: res.pdf_url,
+          pdf_base64: res.pdf_base64 || null,
+          total_pages: res.total_pages,
+          total_articles: res.total_articles,
+          edition_id: res.edition_id,
+        });
+
+        const fileName = `DailyNewspaper-${editionDate}-${Date.now()}.pdf`;
+        let base64data = res.pdf_base64;
+        if (!base64data) {
+          const fetched = await fetch(res.pdf_url);
+          const blob = await fetched.blob();
+          base64data = await new Promise<string>((resolve) => {
+            const reader = new FileReader();
+            reader.readAsDataURL(blob);
+            reader.onloadend = () => {
+              let d = reader.result as string;
+              if (d.includes(',')) d = d.split(',')[1];
+              resolve(d);
+            };
+          });
+        }
+
+        if (Capacitor.getPlatform() === 'android') {
+          try { await Filesystem.requestPermissions(); } catch {}
+        }
+
+        await Filesystem.writeFile({
+          path: fileName,
+          data: base64data,
+          directory: Directory.Documents,
+          recursive: true,
+        });
+
+        let shareUri = res.pdf_url;
+        try {
+          const cacheResult = await Filesystem.writeFile({
+            path: fileName,
+            data: base64data,
+            directory: Directory.Cache,
+            recursive: true,
+          });
+          if (cacheResult.uri) shareUri = cacheResult.uri;
+        } catch {}
+
+        try {
+          await Share.share({
+            title: fileName,
+            text: `Daily Newspaper A3 Edition - ${editionDate}`,
+            url: shareUri,
+            dialogTitle: 'Print or Save Daily Newspaper PDF',
+          });
+        } catch {}
+
+        setStep(4);
+      } catch (err: any) {
+        const msg = err?.response?.data?.detail || err?.message || 'Failed to save/print Daily Newspaper PDF.';
+        setErrorMsg(msg);
+      } finally {
+        setSavingPdf(false);
+      }
+      return;
+    }
+
+    // On Desktop / Web browser:
     if (!previewHtml) return;
     try {
       const iframe = document.querySelector('iframe[title="Daily Newspaper A3 Preview"]') as HTMLIFrameElement;
@@ -246,26 +336,7 @@ export const DailyNewspaperGeneratorModal: React.FC<Props> = ({ isOpen, onClose,
         iframe.contentWindow.print();
         return;
       }
-      
-      // If iframe not available, create hidden iframe to print
-      const hiddenIframe = document.createElement('iframe');
-      hiddenIframe.style.position = 'fixed';
-      hiddenIframe.style.right = '0';
-      hiddenIframe.style.bottom = '0';
-      hiddenIframe.style.width = '0';
-      hiddenIframe.style.height = '0';
-      hiddenIframe.style.border = '0';
-      document.body.appendChild(hiddenIframe);
-      
-      hiddenIframe.contentDocument?.open();
-      hiddenIframe.contentDocument?.write(previewHtml);
-      hiddenIframe.contentDocument?.close();
-      
-      setTimeout(() => {
-        hiddenIframe.contentWindow?.focus();
-        hiddenIframe.contentWindow?.print();
-        setTimeout(() => document.body.removeChild(hiddenIframe), 5000);
-      }, 800);
+      window.print();
     } catch (printErr) {
       console.error('Print preview error:', printErr);
     }
@@ -723,11 +794,13 @@ export const DailyNewspaperGeneratorModal: React.FC<Props> = ({ isOpen, onClose,
                     Edit
                   </button>
                   <button
-                    onClick={handlePrintPreview}
-                    className="px-4 py-2 bg-indigo-600 text-white rounded-xl text-xs font-bold hover:bg-indigo-700 transition-all shadow-md flex items-center gap-1.5"
-                    title="Directly print or save the 100% vector A3 newspaper from your device without server limits"
+                    onClick={handlePrintOrSavePDF}
+                    disabled={savingPdf || generating}
+                    className="px-4 py-2 bg-indigo-600 text-white rounded-xl text-xs font-bold hover:bg-indigo-700 disabled:opacity-50 transition-all shadow-md flex items-center gap-1.5"
+                    title="Directly print or save the A3 newspaper from your device"
                   >
-                    🖨️ Print / Save PDF
+                    {savingPdf ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
+                    {savingPdf ? 'Saving PDF...' : '🖨️ Print / Save PDF'}
                   </button>
                   <button
                     onClick={handleGeneratePDF}
