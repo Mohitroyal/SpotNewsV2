@@ -147,6 +147,59 @@ def build_newspaper_html(
         page_content_html = ""
 
         if is_first_page and count >= 1:
+            def render_article_images_html(imgs, max_width=320, is_lead=False):
+                if not imgs:
+                    return ""
+                if len(imgs) >= 2:
+                    opt1 = optimize_image_url(imgs[0], max_width=max_width, quality=65)
+                    opt2 = optimize_image_url(imgs[1], max_width=max_width, quality=65)
+                    if is_lead:
+                        return f"""
+                        <div style="width: 52%; float: left; margin-right: 18px; margin-bottom: 10px;">
+                            <div style="display: flex; gap: 8px;">
+                                <div style="flex: 1; text-align: center;">
+                                    <img src="{opt1}" style="width: 100%; max-height: 225px; object-fit: cover; border: 1px solid #ccc; padding: 2px; border-radius: 2px; display: block;" />
+                                    <div style="font-size: 9.5px; color: #555; margin-top: 3px; font-style: italic;">కార్యక్రమానికి సంబంధించిన ముఖ్య చిత్రం.</div>
+                                </div>
+                                <div style="flex: 1; text-align: center;">
+                                    <img src="{opt2}" style="width: 100%; max-height: 225px; object-fit: cover; border: 1px solid #ccc; padding: 2px; border-radius: 2px; display: block;" />
+                                    <div style="font-size: 9.5px; color: #555; margin-top: 3px; font-style: italic;">తాజా పరిణామంపై అదనపు దృశ్యం.</div>
+                                </div>
+                            </div>
+                        </div>
+                        """
+                    else:
+                        return f"""
+                        <div style="margin-bottom: 6px;">
+                            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 4px;">
+                                <div style="text-align: center;">
+                                    <img src="{opt1}" style="width: 100%; max-height: 125px; object-fit: cover; border: 1px solid #ddd; padding: 1px; border-radius: 2px; display: block;" />
+                                    <div style="font-size: 8.5px; color: #666; margin-top: 2px; font-style: italic; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">కార్యక్రమానికి ముఖ్య చిత్రం.</div>
+                                </div>
+                                <div style="text-align: center;">
+                                    <img src="{opt2}" style="width: 100%; max-height: 125px; object-fit: cover; border: 1px solid #ddd; padding: 1px; border-radius: 2px; display: block;" />
+                                    <div style="font-size: 8.5px; color: #666; margin-top: 2px; font-style: italic; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">అదనపు దృశ్యం.</div>
+                                </div>
+                            </div>
+                        </div>
+                        """
+                else:
+                    opt = optimize_image_url(imgs[0], max_width=max_width, quality=65)
+                    if is_lead:
+                        return f"""
+                        <div style="width: 44%; float: left; margin-right: 18px; margin-bottom: 10px; text-align: center;">
+                            <img src="{opt}" style="width: 100%; max-height: 270px; object-fit: cover; border: 1px solid #ccc; padding: 2px; border-radius: 2px; display: block;" />
+                            <div style="font-size: 10px; color: #555; margin-top: 3px; font-style: italic;">కార్యక్రమానికి సంబంధించిన ముఖ్య చిత్రం.</div>
+                        </div>
+                        """
+                    else:
+                        return f"""
+                        <div style="margin-bottom: 6px; text-align: center;">
+                            <img src="{opt}" style="width: 100%; max-height: 175px; object-fit: cover; border: 1px solid #ddd; padding: 1px; border-radius: 2px; display: block;" />
+                            <div style="font-size: 9px; color: #666; margin-top: 2px; font-style: italic;">కార్యక్రమానికి సంబంధించిన ముఖ్య చిత్రం.</div>
+                        </div>
+                        """
+
             lead_art = page_articles[0]
             lead_headline = sanitize_text(lead_art.get("headline") or lead_art.get("title") or "ముఖ్యాంశం")
             lead_content = sanitize_text(lead_art.get("content") or lead_art.get("summary") or "")
@@ -162,14 +215,7 @@ def build_newspaper_html(
             lead_byline = f"{lead_loc} &nbsp;|&nbsp; {lead_reporter}" if lead_loc and lead_reporter else (lead_loc or lead_reporter)
             lead_byline_html = f'<div style="font-size: 11.5px; font-weight: bold; color: #555; margin-bottom: 6px; padding-bottom: 3px; border-bottom: 1px solid #ddd;">{lead_byline}</div>'
 
-            lead_img_html = ""
-            if lead_imgs:
-                opt_lead_img = optimize_image_url(lead_imgs[0], max_width=480, quality=70)
-                lead_img_html = f"""
-                <div style="width: 44%; float: left; margin-right: 18px; margin-bottom: 10px;">
-                    <img src="{opt_lead_img}" style="width: 100%; max-height: 270px; object-fit: cover; border: 1px solid #ccc; padding: 2px; border-radius: 2px; display: block;" />
-                </div>
-                """
+            lead_img_html = render_article_images_html(lead_imgs, max_width=440, is_lead=True)
 
             lead_story_html = f"""
             <div class="lead-story-card" style="border-bottom: 3px solid #D60000; padding-bottom: 12px; margin-bottom: 10px; flex: 0 0 auto;">
@@ -190,56 +236,123 @@ def build_newspaper_html(
 
             if sec_count > 0:
                 grid_cols = min(4, sec_count)
-                sec_items_html = []
-                for s_idx, s_art in enumerate(sec_articles):
-                    s_head = sanitize_text(s_art.get("headline") or s_art.get("title") or "ముఖ్యాంశం")
-                    s_cont = sanitize_text(s_art.get("content") or s_art.get("summary") or "")
-                    s_rep = sanitize_text(s_art.get("reporter_name") or s_art.get("byline") or "రిపోర్టర్")
-                    s_loc = sanitize_text(s_art.get("location") or s_art.get("district") or "")
-                    s_imgs = s_art.get("image_urls") or []
-                    if not s_imgs and s_art.get("image_url"):
-                        s_imgs = [s_art.get("image_url")]
+                # Use column bin-packing if sec_count > 4, or direct columns if <= 4
+                if sec_count <= 4:
+                    sec_items_html = []
+                    for s_idx, s_art in enumerate(sec_articles):
+                        s_head = sanitize_text(s_art.get("headline") or s_art.get("title") or "ముఖ్యాంశం")
+                        s_cont = sanitize_text(s_art.get("content") or s_art.get("summary") or "")
+                        s_rep = sanitize_text(s_art.get("reporter_name") or s_art.get("byline") or "రిపోర్టర్")
+                        s_loc = sanitize_text(s_art.get("location") or s_art.get("district") or "")
+                        s_imgs = s_art.get("image_urls") or []
+                        if not s_imgs and s_art.get("image_url"):
+                            s_imgs = [s_art.get("image_url")]
 
-                    s_color = headline_colors[(global_idx) % len(headline_colors)]
-                    global_idx += 1
+                        s_color = headline_colors[(global_idx) % len(headline_colors)]
+                        global_idx += 1
 
-                    s_byline = f"{s_loc} &nbsp;|&nbsp; {s_rep}" if s_loc and s_rep else (s_loc or s_rep)
-                    s_byline_html = f'<div style="font-size: 10.5px; font-weight: bold; color: #666; margin-bottom: 5px; padding-bottom: 3px; border-bottom: 1px solid #eee;">{s_byline}</div>'
+                        s_byline = f"{s_loc} &nbsp;|&nbsp; {s_rep}" if s_loc and s_rep else (s_loc or s_rep)
+                        s_byline_html = f'<div style="font-size: 10.5px; font-weight: bold; color: #666; margin-bottom: 5px; padding-bottom: 3px; border-bottom: 1px solid #eee;">{s_byline}</div>'
 
-                    s_img_html = ""
-                    if s_imgs:
-                        opt_s_img = optimize_image_url(s_imgs[0], max_width=320, quality=65)
-                        s_img_html = f"""
-                        <div style="margin-bottom: 6px; text-align: center;">
-                            <img src="{opt_s_img}" style="width: 100%; max-height: 175px; object-fit: cover; border: 1px solid #ddd; padding: 1px; border-radius: 2px;" />
+                        s_img_html = render_article_images_html(s_imgs, max_width=320, is_lead=False)
+
+                        is_last_col = (s_idx == sec_count - 1)
+                        border_right = "none" if is_last_col else "1px solid #ccc"
+
+                        s_font_size = "12.8px" if len(s_cont) < 350 else "12px"
+                        s_line_height = "1.52" if len(s_cont) < 350 else "1.46"
+
+                        item_html = f"""
+                        <div class="news-card" style="border-right: {border_right}; padding: 0 10px; display: flex; flex-direction: column; box-sizing: border-box; overflow: hidden; flex: 1 1 0;">
+                            <h2 style="font-size: 17px; font-weight: 800; color: {s_color}; line-height: 1.25; margin-bottom: 4px;">
+                                {s_head}
+                            </h2>
+                            {s_byline_html}
+                            {s_img_html}
+                            <div style="font-size: {s_font_size}; line-height: {s_line_height}; text-align: justify; color: #111; flex: 1; overflow: hidden;">
+                                <p style="margin: 0; text-indent: 14px;">{s_cont}</p>
+                            </div>
                         </div>
                         """
+                        sec_items_html.append(item_html)
 
-                    is_last_col = (s_idx == sec_count - 1)
-                    border_right = "none" if is_last_col else "1px solid #ccc"
-
-                    item_html = f"""
-                    <div class="news-card" style="border-right: {border_right}; padding: 0 10px; display: flex; flex-direction: column; box-sizing: border-box; overflow: hidden;">
-                        <h2 style="font-size: 17px; font-weight: 800; color: {s_color}; line-height: 1.25; margin-bottom: 4px;">
-                            {s_head}
-                        </h2>
-                        {s_byline_html}
-                        {s_img_html}
-                        <div style="font-size: 12px; line-height: 1.48; text-align: justify; color: #111; flex: 1; overflow: hidden;">
-                            <p style="margin: 0; text-indent: 14px;">{s_cont}</p>
+                    page_content_html = f"""
+                    <div style="flex: 1 1 0; min-height: 0; display: flex; flex-direction: column;">
+                        {lead_story_html}
+                        <div class="secondary-grid" style="flex: 1 1 0; min-height: 0; display: flex; gap: 8px; align-items: stretch;">
+                            {"".join(sec_items_html)}
                         </div>
                     </div>
                     """
-                    sec_items_html.append(item_html)
+                else:
+                    # Packing secondary stories across 4 columns
+                    def est_sec_h(art):
+                        head = art.get("headline") or art.get("title") or ""
+                        cont = art.get("content") or art.get("summary") or ""
+                        imgs = art.get("image_urls") or []
+                        if not imgs and art.get("image_url"):
+                            imgs = [art.get("image_url")]
+                        return max(20, (len(head)//25+1)*20) + (130 if len(imgs)>=2 else (170 if imgs else 0)) + max(30, len(cont)/2.3)
 
-                page_content_html = f"""
-                <div style="flex: 1 1 0; min-height: 0; display: flex; flex-direction: column;">
-                    {lead_story_html}
-                    <div class="secondary-grid" style="flex: 1 1 0; min-height: 0; display: grid; grid-template-columns: repeat({grid_cols}, 1fr); gap: 10px; align-items: stretch;">
-                        {"".join(sec_items_html)}
+                    s_cols_data = [[] for _ in range(grid_cols)]
+                    s_col_heights = [0.0] * grid_cols
+                    sorted_sec = sorted(list(enumerate(sec_articles)), key=lambda x: est_sec_h(x[1]), reverse=True)
+                    for orig_s_idx, s_art in sorted_sec:
+                        min_c = s_col_heights.index(min(s_col_heights))
+                        s_cols_data[min_c].append((orig_s_idx, s_art))
+                        s_col_heights[min_c] += est_sec_h(s_art)
+
+                    sec_cols_html = []
+                    for c_idx in range(grid_cols):
+                        c_arts = s_cols_data[c_idx]
+                        if not c_arts:
+                            continue
+                        is_last_col = (c_idx == grid_cols - 1)
+                        border_right = "none" if is_last_col else "1px solid #ccc"
+                        c_cards = []
+                        for card_idx, (orig_s_idx, s_art) in enumerate(c_arts):
+                            s_head = sanitize_text(s_art.get("headline") or s_art.get("title") or "ముఖ్యాంశం")
+                            s_cont = sanitize_text(s_art.get("content") or s_art.get("summary") or "")
+                            s_rep = sanitize_text(s_art.get("reporter_name") or s_art.get("byline") or "రిపోర్టర్")
+                            s_loc = sanitize_text(s_art.get("location") or s_art.get("district") or "")
+                            s_imgs = s_art.get("image_urls") or []
+                            if not s_imgs and s_art.get("image_url"):
+                                s_imgs = [s_art.get("image_url")]
+                            s_color = headline_colors[(global_idx + orig_s_idx) % len(headline_colors)]
+                            s_byline = f"{s_loc} &nbsp;|&nbsp; {s_rep}" if s_loc and s_rep else (s_loc or s_rep)
+                            s_byline_html = f'<div style="font-size: 10px; font-weight: bold; color: #666; margin-bottom: 4px; padding-bottom: 2px; border-bottom: 1px solid #eee;">{s_byline}</div>'
+                            s_img_html = render_article_images_html(s_imgs, max_width=320, is_lead=False)
+                            is_last_card = (card_idx == len(c_arts) - 1)
+                            b_bot = "none" if is_last_card else "1.5px solid #bbb"
+                            m_bot = "0" if is_last_card else "8px"
+                            p_bot = "0" if is_last_card else "8px"
+                            fl = "flex: 1 1 0;" if is_last_card else "flex: 0 0 auto;"
+                            s_font_size = "12.5px" if len(s_cont) < 350 else "11.6px"
+                            s_line_height = "1.50" if len(s_cont) < 350 else "1.42"
+                            c_cards.append(f"""
+                            <div class="news-card" style="{fl} border-bottom: {b_bot}; margin-bottom: {m_bot}; padding-bottom: {p_bot}; display: flex; flex-direction: column; box-sizing: border-box; overflow: hidden;">
+                                <h2 style="font-size: 16px; font-weight: 800; color: {s_color}; line-height: 1.25; margin-bottom: 3px;">{s_head}</h2>
+                                {s_byline_html}
+                                {s_img_html}
+                                <div style="font-size: {s_font_size}; line-height: {s_line_height}; text-align: justify; color: #111; flex: 1; overflow: hidden;">
+                                    <p style="margin: 0; text-indent: 14px;">{s_cont}</p>
+                                </div>
+                            </div>
+                            """)
+                        sec_cols_html.append(f"""
+                        <div class="newspaper-col" style="flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; border-right: {border_right}; padding-right: {'0' if is_last_col else '8px'}; padding-left: {'0' if c_idx == 0 else '4px'}; box-sizing: border-box;">
+                            {"".join(c_cards)}
+                        </div>
+                        """)
+                    global_idx += sec_count
+                    page_content_html = f"""
+                    <div style="flex: 1 1 0; min-height: 0; display: flex; flex-direction: column;">
+                        {lead_story_html}
+                        <div class="secondary-grid" style="flex: 1 1 0; min-height: 0; display: flex; gap: 8px; align-items: stretch;">
+                            {"".join(sec_cols_html)}
+                        </div>
                     </div>
-                </div>
-                """
+                    """
             else:
                 page_content_html = f"""
                 <div style="flex: 1 1 0; min-height: 0; display: flex; flex-direction: column;">
@@ -247,53 +360,96 @@ def build_newspaper_html(
                 </div>
                 """
         else:
-            # Interior pages:
-            grid_cols = min(4, max(2, count))
-            items_html = []
-            for a_idx, art in enumerate(page_articles):
-                head = sanitize_text(art.get("headline") or art.get("title") or "ముఖ్యాంశం")
-                cont = sanitize_text(art.get("content") or art.get("summary") or "")
-                rep = sanitize_text(art.get("reporter_name") or art.get("byline") or "రిపోర్టర్")
-                loc = sanitize_text(art.get("location") or art.get("district") or "")
+            # Interior pages: Column-based Best-Fit packing to eliminate gaps (external fragmentation)
+            num_cols = min(4, max(2, count))
+            
+            def estimate_card_height(art):
+                head = art.get("headline") or art.get("title") or ""
+                cont = art.get("content") or art.get("summary") or ""
                 imgs = art.get("image_urls") or []
                 if not imgs and art.get("image_url"):
                     imgs = [art.get("image_url")]
+                h_head = max(24, (len(head) // 25 + 1) * 22)
+                h_byline = 22
+                h_img = 135 if len(imgs) >= 2 else (175 if len(imgs) == 1 else 0)
+                h_text = max(40, len(cont) / 2.3)
+                return h_head + h_byline + h_img + h_text
 
-                color = headline_colors[(global_idx) % len(headline_colors)]
-                global_idx += 1
+            columns_data = [[] for _ in range(num_cols)]
+            column_heights = [0.0] * num_cols
 
-                byline = f"{loc} &nbsp;|&nbsp; {rep}" if loc and rep else (loc or rep)
-                byline_html = f'<div style="font-size: 11px; font-weight: bold; color: #666; margin-bottom: 6px; padding-bottom: 4px; border-bottom: 1px solid #eee;">{byline}</div>'
+            sorted_arts = sorted(
+                list(enumerate(page_articles)),
+                key=lambda x: estimate_card_height(x[1]),
+                reverse=True
+            )
 
-                img_html = ""
-                if imgs:
-                    opt_img = optimize_image_url(imgs[0], max_width=320, quality=65)
-                    img_html = f"""
-                    <div style="margin-bottom: 6px; text-align: center;">
-                        <img src="{opt_img}" style="width: 100%; max-height: 190px; object-fit: cover; border: 1px solid #ddd; padding: 1px; border-radius: 2px;" />
+            for orig_idx, art in sorted_arts:
+                h_est = estimate_card_height(art)
+                min_col_idx = column_heights.index(min(column_heights))
+                columns_data[min_col_idx].append((orig_idx, art, h_est))
+                column_heights[min_col_idx] += h_est
+
+            cols_html = []
+            for c_idx in range(num_cols):
+                col_arts = columns_data[c_idx]
+                if not col_arts:
+                    continue
+                is_last_col = (c_idx == num_cols - 1)
+                border_right = "none" if is_last_col else "1px solid #ccc"
+                
+                col_cards_html = []
+                for card_idx, (orig_idx, art, h_est) in enumerate(col_arts):
+                    head = sanitize_text(art.get("headline") or art.get("title") or "ముఖ్యాంశం")
+                    cont = sanitize_text(art.get("content") or art.get("summary") or "")
+                    rep = sanitize_text(art.get("reporter_name") or art.get("byline") or "రిపోర్టర్")
+                    loc = sanitize_text(art.get("location") or art.get("district") or "")
+                    imgs = art.get("image_urls") or []
+                    if not imgs and art.get("image_url"):
+                        imgs = [art.get("image_url")]
+
+                    color = headline_colors[(global_idx + orig_idx) % len(headline_colors)]
+                    
+                    byline = f"{loc} &nbsp;|&nbsp; {rep}" if loc and rep else (loc or rep)
+                    byline_html = f'<div style="font-size: 10.5px; font-weight: bold; color: #666; margin-bottom: 5px; padding-bottom: 3px; border-bottom: 1px solid #eee;">{byline}</div>'
+                    
+                    img_block_html = render_article_images_html(imgs, max_width=320, is_lead=False)
+                    
+                    is_last_card_in_col = (card_idx == len(col_arts) - 1)
+                    card_border_bottom = "none" if is_last_card_in_col else "1.5px solid #bbb"
+                    card_margin_bottom = "0" if is_last_card_in_col else "10px"
+                    card_padding_bottom = "0" if is_last_card_in_col else "10px"
+                    card_flex = "flex: 1 1 0;" if is_last_card_in_col else "flex: 0 0 auto;"
+
+                    font_size = "13px" if len(cont) < 350 else ("12.2px" if len(cont) < 800 else "11.6px")
+                    line_height = "1.52" if len(cont) < 350 else ("1.46" if len(cont) < 800 else "1.42")
+
+                    card_html = f"""
+                    <div class="news-card" style="{card_flex} border-bottom: {card_border_bottom}; margin-bottom: {card_margin_bottom}; padding-bottom: {card_padding_bottom}; display: flex; flex-direction: column; box-sizing: border-box; overflow: hidden;">
+                        <h2 style="font-size: 17.5px; font-weight: 800; color: {color}; line-height: 1.25; margin-bottom: 4px;">
+                            {head}
+                        </h2>
+                        {byline_html}
+                        {img_block_html}
+                        <div style="font-size: {font_size}; line-height: {line_height}; text-align: justify; color: #111; flex: 1; overflow: hidden;">
+                            <p style="margin: 0; text-indent: 14px;">{cont}</p>
+                        </div>
                     </div>
                     """
+                    col_cards_html.append(card_html)
 
-                is_last_col = (a_idx == count - 1)
-                border_right = "none" if is_last_col else "1px solid #ccc"
-
-                item_html = f"""
-                <div class="news-card" style="border-right: {border_right}; padding: 0 10px; display: flex; flex-direction: column; box-sizing: border-box; overflow: hidden;">
-                    <h2 style="font-size: 18px; font-weight: 800; color: {color}; line-height: 1.25; margin-bottom: 5px;">
-                        {head}
-                    </h2>
-                    {byline_html}
-                    {img_html}
-                    <div style="font-size: 12.5px; line-height: 1.48; text-align: justify; color: #111; flex: 1; overflow: hidden;">
-                        <p style="margin: 0; text-indent: 14px;">{cont}</p>
-                    </div>
+                col_container_html = f"""
+                <div class="newspaper-col" style="flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; border-right: {border_right}; padding-right: {'0' if is_last_col else '10px'}; padding-left: {'0' if c_idx == 0 else '4px'}; box-sizing: border-box;">
+                    {"".join(col_cards_html)}
                 </div>
                 """
-                items_html.append(item_html)
+                cols_html.append(col_container_html)
+
+            global_idx += count
 
             page_content_html = f"""
-            <div style="flex: 1 1 0; min-height: 0; display: grid; grid-template-columns: repeat({grid_cols}, 1fr); gap: 12px; align-items: stretch;">
-                {"".join(items_html)}
+            <div style="flex: 1 1 0; min-height: 0; display: flex; gap: 8px; align-items: stretch;">
+                {"".join(cols_html)}
             </div>
             """
 

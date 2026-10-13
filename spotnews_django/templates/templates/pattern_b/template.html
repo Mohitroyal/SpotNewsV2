@@ -235,7 +235,15 @@
     <div class="newspaper-container">
         <!-- Top Section: Hero Image OR No-Image Layout -->
         {% set has_hero_image = (image_urls and image_urls|length > 0 and image_urls[0] != '') or (image_url and image_url != '') %}
-        {% if has_hero_image %}
+        {% if image_urls and image_urls|length >= 2 %}
+        <div class="hero-image-wrapper" style="display: flex; gap: 4px; padding: 0;">
+            <div style="flex: 1; height: 100%; position: relative;">
+                <img class="hero-img" src="{{ image_urls[0] }}" alt="Hero Image 1" style="width: 100%; height: 100%; object-fit: cover;" />
+            </div>
+            <div style="flex: 1; height: 100%; position: relative;">
+                <img class="hero-img" src="{{ image_urls[1] }}" alt="Hero Image 2" style="width: 100%; height: 100%; object-fit: cover;" />
+            </div>
+        {% elif has_hero_image %}
         <div class="hero-image-wrapper">
             {% set img_src = image_urls[0] if (image_urls and image_urls|length > 0) else image_url %}
             <img class="hero-img" src="{{ img_src }}" alt="Hero Image" onload="applyDynamicWidth()" />

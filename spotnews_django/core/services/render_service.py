@@ -324,7 +324,7 @@ class RenderService:
         
         _img_urls = data.get("image_urls") or ([data.get("image_url")] if data.get("image_url") else [])
         is_single_img = len(_img_urls) == 1
-        is_explicit_other_template = any(t in template_key or t in data_tid for t in ["bharath_reporter", "national_news", "custom"]) and raw_image_layout not in ["patternb", "heroimage", "singleimagepatternb"]
+        is_explicit_other_template = any(t in template_key or t in data_tid for t in ["bharath_reporter", "national_news", "custom", "rti_express"]) and raw_image_layout not in ["patternb", "heroimage", "singleimagepatternb"]
         
         is_pattern_b = (
             raw_image_layout in ["patternb", "heroimage", "singleimagepatternb"] or
@@ -451,6 +451,11 @@ class RenderService:
                 return False
 
         heading_bg = data.get('heading_bg')
+        if not heading_bg and ('rti_express' in template_key or 'rti_express' in str(data.get('logo_id', ''))):
+            heading_bg = "#CC2222"
+            data['heading_bg'] = "#CC2222"
+            data['border_color'] = data.get('border_color') or "#CC2222"
+
         if heading_bg:
             if is_dark_hex(heading_bg):
                 headline_text_color = "#FFFFFF" # Use white for dark backgrounds
@@ -673,11 +678,15 @@ class RenderService:
                 if (!isNaN(p) && p >= 1 && p <= 4 && s !== "0" && s !== "auto") {
                     return p;
                 }
+                const templateIdStr = String(data.template_id || "").toLowerCase().replace(/[^a-z0-9]/g, "");
                 const rawLayout = String(data.image_layout || "default").toLowerCase().replace(/[^a-z]/g, "");
                 if (rawLayout.includes('patternd')) {
                     return 3;
                 }
-                const isSingleSideLayout = (urls.length === 1) && (rawLayout.includes('patterna') || (!rawLayout.includes('patternb') && !rawLayout.includes('patternd') && !rawLayout.includes('single') && !rawLayout.includes('hero') && !rawLayout.includes('patternc') && !rawLayout.includes('patterng')));
+                if (urls.length === 2) {
+                    return 2;
+                }
+                const isSingleSideLayout = (urls.length === 1) && (rawLayout.includes('patterna') || templateIdStr.includes('rtiexpress') || (!rawLayout.includes('patternb') && !rawLayout.includes('patternd') && !rawLayout.includes('single') && !rawLayout.includes('hero') && !rawLayout.includes('patternc') && !rawLayout.includes('patterng')));
                 if (isSingleSideLayout) {
                     return 2;
                 }
@@ -712,14 +721,14 @@ class RenderService:
                     const isArticleStyle = rawLayout.includes('articlestyle');
                     let isPatternB = rawLayout.includes('patternb') || rawLayout.includes('patterna') || rawLayout.includes('patternd') || rawLayout.includes('patternc') || rawLayout.includes('patterne') || isArticleStyle || isCustom;
                     const isSinglePatternC = !isCustom && rawLayout.includes('patternc') && urls.length === 1;
-                    const isSinglePatternA = !isCustom && rawLayout.includes('patterna') && urls.length === 1;
+                    const isSinglePatternA = !isCustom && urls.length === 1 && (rawLayout.includes('patterna') || templateIdStr.includes('rtiexpress'));
                     if (isSinglePatternC || isSinglePatternA) {
                         isPatternB = false;
                     }
                     if (isCustom || rawLayout === "default" || rawLayout === "" || rawLayout === "auto") {
                         isPatternB = true;
                     }
-                    const isDoublePatternB = (isPatternB && urls.length === 2) && (rawLayout.includes('patternc') || rawLayout.includes('patterna') || rawLayout === "default");
+                    const isDoublePatternB = (urls.length === 2) && !rawLayout.includes('patternd');
                     const isTriplePatternB = isPatternB && urls.length >= 3;
 
                     const isSingleLeft75 = (urls.length === 1) && (rawLayout.includes('patterng') || rawLayout.includes('left75') || rawLayout.includes('pattern75') || rawLayout.includes('75left') || rawLayout.includes('75'));
@@ -858,70 +867,47 @@ class RenderService:
                         obstacles.push({ url: urls[1], caption: captions[1] || '', x: 0, y: yBottom, w: Math.round(w1), h: Math.round(sharedH), imgH: Math.round(sharedH), isCentered: false, visW: Math.round(w1), objectFit: 'cover', objectPosition: 'center center' });
                         obstacles.push({ url: urls[2], caption: captions[2] || '', x: Math.round(w1 + gap), y: yBottom, w: Math.round(w2), h: Math.round(sharedH), imgH: Math.round(sharedH), isCentered: false, visW: Math.round(w2), objectFit: 'cover', objectPosition: 'center center' });
                     } else if (isDoublePatternB) {
-                        let a0 = aspect0 || 1.0;
-                        let a1 = (aspectRatios && aspectRatios.length > 1 && aspectRatios[1]) ? aspectRatios[1] : 1.0;
-                        let gap = 16;
+                        let gap = 14;
                         let availW = W_canvas - gap;
+                        let w_img0 = Math.floor(availW / 2);
+                        let w_img1 = availW - w_img0;
                         
-                        // Exact height and proportional widths so both images fill their boxes with 0% crop and 0% white gaps!
-                        let H_calc = Math.round(availW / (a0 + a1));
-                        let maxAllowedH = Math.round(Math.max(H_canvas, 1400) * 0.60);
-                        let sharedH = Math.min(H_calc, maxAllowedH);
-                        sharedH = Math.max(sharedH, 180);
+                        // Both images share equal height, matching Image 5 model (50%/50% side-by-side)
+                        let sharedH = Math.min(Math.round(w_img0 / 1.35), Math.max(220, Math.round(H_canvas * 0.36)));
                         
-                        let w_img0 = Math.round(sharedH * a0);
-                        let w_img1 = Math.round(sharedH * a1);
-                        let totalGalW = w_img0 + gap + w_img1;
+                        let cap0 = String(captions[0] || (langKey === 'te' ? 'కార్యక్రమానికి సంబంధించిన ముఖ్య చిత్రం.' : 'Key photo of the event.')).trim();
+                        let cap1 = String(captions[1] || (langKey === 'te' ? 'తాజా పరిణామంపై అదనపు దృశ్యం.' : 'Additional photo of the development.')).trim();
                         
-                        if (totalGalW > W_canvas) {
-                            let scale = availW / (w_img0 + w_img1);
-                            w_img0 = Math.round(w_img0 * scale);
-                            w_img1 = availW - w_img0;
-                            sharedH = Math.round(w_img0 / a0);
-                            totalGalW = W_canvas;
-                        }
-                        
-                        let startX0 = 0;
-                        let startX1 = w_img0 + gap;
-                        if (totalGalW < W_canvas) {
-                            startX0 = Math.round((W_canvas - totalGalW) / 2);
-                            startX1 = startX0 + w_img0 + gap;
-                        }
-                        
-                        let cap0 = String(captions[0] || '').trim();
-                        let capAllowance0 = cap0 ? Math.ceil(cap0.length / Math.max(1, Math.floor(w_img0 / 6.5))) * 15 + 8 : 0;
-                        
-                        let cap1 = String(captions[1] || '').trim();
-                        let capAllowance1 = cap1 ? Math.ceil(cap1.length / Math.max(1, Math.floor(w_img1 / 6.5))) * 15 + 8 : 0;
-                        
+                        let capAllowance0 = cap0 ? Math.ceil(cap0.length / Math.max(1, Math.floor(w_img0 / 6.5))) * 15 + 10 : 0;
+                        let capAllowance1 = cap1 ? Math.ceil(cap1.length / Math.max(1, Math.floor(w_img1 / 6.5))) * 15 + 10 : 0;
                         let maxCapAllowance = Math.max(capAllowance0, capAllowance1);
                         let totalSharedH = Math.round(sharedH + maxCapAllowance);
                         
                         obstacles.push({
                             url: urls[0],
-                            caption: captions[0] || '',
-                            x: startX0,
+                            caption: cap0,
+                            x: 0,
                             y: 0,
                             w: Math.round(w_img0),
                             h: Math.round(totalSharedH),
                             imgH: Math.round(sharedH),
                             isCentered: false,
                             visW: Math.round(w_img0),
-                            objectFit: 'contain',
+                            objectFit: 'cover',
                             objectPosition: 'center center'
                         });
                         
                         obstacles.push({
                             url: urls[1],
-                            caption: captions[1] || '',
-                            x: startX1,
+                            caption: cap1,
+                            x: Math.round(w_img0 + gap),
                             y: 0,
                             w: Math.round(w_img1),
                             h: Math.round(totalSharedH),
                             imgH: Math.round(sharedH),
                             isCentered: false,
                             visW: Math.round(w_img1),
-                            objectFit: 'contain',
+                            objectFit: 'cover',
                             objectPosition: 'center center'
                         });
                     } else if (urls.length === 1 || rawLayout.includes('patternb') || rawLayout.includes('patternd') || rawLayout.includes('single') || rawLayout.includes('hero') || isSinglePatternC || rawLayout.includes('patternc')) {
@@ -937,12 +923,12 @@ class RenderService:
                         let imgY = 0;
                         let isPatternB_centered = true;
                         
-                        let cap0 = String(captions[0] || '').trim();
+                        let cap0 = String(captions[0] || (langKey === 'te' ? 'కార్యక్రమానికి సంబంధించిన ముఖ్య చిత్రం.' : '')).trim();
                         let capAllowance0 = cap0 ? Math.ceil(cap0.length / Math.max(1, Math.floor((isPatternB_centered ? w0 : w0) / 6.5))) * 15 + 8 : 0;
                         
                         obstacles.push({
                             url: urls[0],
-                            caption: captions[0] || '',
+                            caption: cap0,
                             x: imgX,
                             y: imgY,
                             w: Math.round(w0),
@@ -950,7 +936,7 @@ class RenderService:
                             imgH: Math.round(h0),
                             isCentered: isPatternB_centered,
                             visW: Math.round(w0),
-                            objectFit: 'contain',
+                            objectFit: 'cover',
                             objectPosition: 'center center'
                         });
                     } else if (isSinglePatternA || rawLayout.includes('patterna')) {
@@ -969,12 +955,12 @@ class RenderService:
                         let imgX = 0; // Left side
                         let isPatternB_centered = false;
                         
-                        let cap0 = String(captions[0] || '').trim();
+                        let cap0 = String(captions[0] || (langKey === 'te' ? 'కార్యక్రమానికి సంబంధించిన ముఖ్య చిత్రం.' : '')).trim();
                         let capAllowance0 = cap0 ? Math.ceil(cap0.length / Math.max(1, Math.floor((isPatternB_centered ? imgVisW : w0) / 6.5))) * 15 + 8 : 0;
                         
                         obstacles.push({
                             url: urls[0],
-                            caption: captions[0] || '',
+                            caption: cap0,
                             x: imgX,
                             y: 0,
                             w: Math.round(w0),
@@ -982,7 +968,7 @@ class RenderService:
                             imgH: Math.round(h0),
                             isCentered: isPatternB_centered,
                             visW: Math.round(imgVisW),
-                            objectFit: 'contain',
+                            objectFit: 'cover',
                             objectPosition: 'center center'
                         });
                     } else {
