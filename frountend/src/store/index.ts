@@ -121,7 +121,7 @@ export const useAuthStore = create<AuthStore>()(
             (user as any)?.role ||
             (user as any)?.user_metadata?.role ||
             (user as any)?.app_metadata?.role ||
-            (isSuperAdminUser(user) ? 'admin' : 'user'),
+            (isSuperAdminUser(user) ? 'superadmin' : 'user'),
           plan:
             user?.plan ||
             (user as any)?.subscription_plan ||
@@ -149,7 +149,7 @@ export const useAuthStore = create<AuthStore>()(
           if (email === 'mohitroyal116@gmail.com' || email === 'mohithroyal116@gmail.com') {
             updatedUser.role = 'reporter';
           } else if (isSuperAdminUser(updatedUser)) {
-            updatedUser.role = 'admin';
+            updatedUser.role = updatedUser.role === 'admin' ? 'admin' : 'superadmin';
           }
 
           const newName =
@@ -323,6 +323,17 @@ export const SUPER_ADMIN_EMAIL = 'mohithroyal16450@gmail.com';
 export const isSuperAdminUser = (userOrEmail?: any): boolean => {
   if (!userOrEmail) return false;
 
+  // 1. Direct role check on user object / metadata
+  if (typeof userOrEmail === 'object') {
+    const role = (
+      userOrEmail?.role ||
+      userOrEmail?.user_metadata?.role ||
+      userOrEmail?.app_metadata?.role ||
+      ''
+    ).toString().toLowerCase();
+    if (role === 'superadmin') return true;
+  }
+
   // Check phone number
   const phone = (
     typeof userOrEmail === 'string'
@@ -351,7 +362,7 @@ export const isSuperAdminUser = (userOrEmail?: any): boolean => {
  * Returns true if the given user or email has admin privileges:
  * 1. Checks isSuperAdminUser (including superadmin phones)
  * 2. Checks hardcoded admin emails (SUPER_ADMIN_EMAILS + VITE_ADMIN_EMAILS env var)
- * 3. Checks role / metadata from Supabase Auth & profiles ('admin')
+ * 3. Checks role / metadata from Supabase Auth & profiles ('admin' or 'superadmin')
  * 4. Checks subscription plan ('admin')
  */
 export const isAdminUser = (userOrEmail?: any): boolean => {
@@ -387,6 +398,6 @@ export const isAdminUser = (userOrEmail?: any): boolean => {
     ''
   ).toString().toLowerCase();
 
-  return role === 'admin';
+  return role === 'admin' || role === 'superadmin';
 };
 

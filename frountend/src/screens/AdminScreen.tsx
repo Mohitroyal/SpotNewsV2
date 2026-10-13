@@ -408,23 +408,21 @@ export const AdminScreen = () => {
       
       // If approved, update the user's role in the profiles table
       if (status === 'approved') {
-        const { error: roleError } = await supabase
-          .from('profiles')
-          .update({
-            role: 'reporter',
-            ...(applications.find(a => a.id === appId)?.state ? { state: applications.find(a => a.id === appId)?.state } : {}),
-            ...(applications.find(a => a.id === appId)?.district ? { district: applications.find(a => a.id === appId)?.district } : {})
-          })
-          .eq('email', email);
-          
-        if (roleError) {
-          console.error("Failed to update profile role:", roleError);
-          // Optional: handle role update error
+        const targetUser = users.find((u) => u.email && u.email.toLowerCase() === email.toLowerCase());
+        if (targetUser) {
+          await updateUserRole(targetUser.id, 'reporter');
+        } else {
+          try {
+            await supabase.rpc('admin_update_user_role_by_email', { target_email: email, new_role: 'reporter' });
+          } catch {
+            /* Trigger on reporter_applications already handled it */
+          }
         }
       }
 
       showToast(`Application ${status} successfully.`, 'success');
       fetchApplications();
+      fetchAll(fromDate || undefined, toDate || undefined);
     } catch {
       showToast(`Failed to update application status`, 'error');
     }
@@ -488,8 +486,16 @@ export const AdminScreen = () => {
   };
 
   const startEdit = (u: AdminUserProfile) => {
-    if (isSuperAdminUser(u)) {
-      showToast('Superadmin account is protected.', 'error');
+    const isSelf = Boolean(
+      (user?.email && u.email && user.email.toLowerCase() === u.email.toLowerCase()) ||
+      (user?.phone_number && u.phone_number && user.phone_number === u.phone_number)
+    );
+    if (isSelf) {
+      showToast('You cannot modify your own permissions here.', 'error');
+      return;
+    }
+    if (isSuperAdminUser(u) && !isSuperAdmin) {
+      showToast('Only superadmin can modify superadmin accounts.', 'error');
       return;
     }
     setEditingUserId(u.id);
@@ -501,13 +507,13 @@ export const AdminScreen = () => {
   const cancelEdit = () => { setEditingUserId(null); };
 
   const saveEdit = async (u: AdminUserProfile) => {
-    if (isSuperAdminUser(u)) {
-      showToast('Superadmin account cannot be modified.', 'error');
+    if (isSuperAdminUser(u) && !isSuperAdmin) {
+      showToast('Only superadmin can modify superadmin accounts.', 'error');
       setEditingUserId(null);
       return;
     }
-    if (editRole === 'admin' && !isSuperAdmin) {
-      showToast('Only superadmin can grant admin role.', 'error');
+    if ((editRole === 'admin' || editRole === 'superadmin') && !isSuperAdmin) {
+      showToast('Only superadmin can grant administrator or superadmin roles.', 'error');
       return;
     }
     setEditSaving(true);
@@ -516,13 +522,13 @@ export const AdminScreen = () => {
     let errorMsg: string | undefined;
 
     if (editRole !== u.role || editPhone !== (u.phone_number ?? '')) {
-      const r1 = await updateUserRole(u.id, editRole as any, editPhone.trim() || u.phone_number);
+      const r1 = await updateUserRole(u.id, editRole as any, editPhone.trim() || u.phone_number, editPlan);
       if (!r1.success) {
         roleSuccess = false;
         errorMsg = r1.error;
       }
     }
-    if (editPlan !== u.plan && editRole !== 'admin') {
+    if (editPlan !== u.plan && editRole === u.role) {
       const r2 = await updateUserPlan(u.id, editPlan);
       if (!r2.success) {
         planSuccess = false;
@@ -732,7 +738,7 @@ export const AdminScreen = () => {
   // Counts for user filter tabs
   const activeTodayCount = users.filter((u) => u.is_active_today).length;
   const reportersCount = users.filter((u) => u.role === 'reporter').length;
-  const adminsCount = users.filter((u) => u.role === 'admin').length;
+  const adminsCount = users.filter((u) => u.role === 'admin' || u.role === 'superadmin' || isSuperAdminUser(u)).length;
   const bannedCount = users.filter((u) => u.is_banned).length;
 
   // Filtered users
@@ -749,7 +755,7 @@ export const AdminScreen = () => {
     if (!matchesSearch) return false;
 
     if (userFilter === 'active_today') return Boolean(u.is_active_today);
-    if (userFilter === 'admin') return u.role === 'admin';
+    if (userFilter === 'admin') return u.role === 'admin' || u.role === 'superadmin' || isSuperAdminUser(u);
     if (userFilter === 'reporter') return u.role === 'reporter';
     if (userFilter === 'banned') return Boolean(u.is_banned);
     return true;
@@ -2043,6 +2049,7 @@ export const AdminScreen = () => {
                         <option value="user">User</option>
                         <option value="reporter">Reporter</option>
                         {isSuperAdmin && <option value="admin">Administrator</option>}
+                        {isSuperAdmin && <option value="superadmin">Super Admin</option>}
                       </select>
                     </div>
 
@@ -2054,10 +2061,8 @@ export const AdminScreen = () => {
                         className="w-full bg-[#E8F2FC] border border-[#D0E2F7] rounded-xl px-3 py-2 text-xs font-bold text-[#0A2540] focus:outline-none"
                       >
                         <option value="free">Free</option>
-                        <option value="reporter">Reporter</option>
                         <option value="pro">Pro</option>
                         <option value="enterprise">Enterprise</option>
-                        <option value="admin">Admin Plan</option>
                       </select>
                     </div>
 

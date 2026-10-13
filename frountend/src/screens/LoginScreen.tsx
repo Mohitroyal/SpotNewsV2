@@ -122,6 +122,9 @@ export const LoginScreen = () => {
               setLoading(false);
               return;
             }
+            if (appData.status === 'approved' && userObj.role !== 'admin' && userObj.role !== 'superadmin') {
+              userObj.role = 'reporter';
+            }
           }
         } catch (e) {
           // ignore if not found
@@ -137,6 +140,10 @@ export const LoginScreen = () => {
             userObj.role = profile.role;
           }
         } catch {}
+
+        if (appData?.status === 'approved' && (!userObj.role || userObj.role === 'user')) {
+          userObj.role = 'reporter';
+        }
 
         const finalPhoto = avatarUrl || getReporterPhoto(email) || (userObj as any)?.user_metadata?.avatar_url;
         if (finalPhoto) {

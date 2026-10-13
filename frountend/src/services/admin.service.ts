@@ -313,25 +313,29 @@ export const updateUserRole = async (
   phoneNumber?: string,
   plan?: string
 ): Promise<{ success: boolean; error?: string }> => {
-  const targetPlan = plan || (role === 'superadmin' ? 'superadmin' : (role === 'admin' ? 'admin' : (role === 'reporter' ? 'reporter' : 'free')));
+  const validPlans = ['free', 'pro', 'enterprise'];
+  const targetPlan = plan && validPlans.includes(plan.toLowerCase()) ? plan.toLowerCase() : undefined;
 
   // 1. Primary: Use Backend API (runs with service_role key, safely bypassing RLS)
   try {
-    const payload: any = { role, plan: targetPlan };
+    const payload: any = { role };
+    if (targetPlan) {
+      payload.plan = targetPlan;
+    }
     if (phoneNumber && phoneNumber.trim()) {
       payload.phone_number = phoneNumber.trim();
     }
     const res = await api.put(`/api/v1/admin/users/${userId}/role`, payload);
     if (res.status >= 200 && res.status < 300) {
       // Force-refresh the Supabase session so the promoted user's JWT picks
-      // up the new app_metadata.role immediately — no sign-out/in needed.
+      // up the new role immediately if they are the current user
       try {
         const { data: sessionData } = await supabase.auth.getSession();
         if (sessionData?.session?.user?.id === userId) {
           await supabase.auth.refreshSession();
         }
       } catch {
-        /* non-critical — session refresh failure doesn't block the update */
+        /* non-critical */
       }
       return { success: true };
     }
@@ -343,11 +347,29 @@ export const updateUserRole = async (
     }
   }
 
-  // 2. Fallback: direct Supabase upsert (may fail if RLS does not allow public update)
+  // 2. Fallback: Supabase RPC (admin_update_user_role)
   try {
+    const { error: rpcError } = await supabase.rpc('admin_update_user_role', {
+      target_user_id: userId,
+      new_role: role,
+      new_plan: targetPlan || null,
+    });
+    if (!rpcError) {
+      return { success: true };
+    }
+    console.warn('[AdminService] RPC role update error:', rpcError.message);
+  } catch {
+    /* fallback to direct update */
+  }
+
+  // 3. Fallback: direct Supabase update
+  try {
+    const updateData: any = { role };
+    if (targetPlan) updateData.plan = targetPlan;
     const { error } = await supabase
       .from('profiles')
-      .upsert({ id: userId, role, plan: targetPlan }, { onConflict: 'id' });
+      .update(updateData)
+      .eq('id', userId);
     if (error) return { success: false, error: error.message };
     // Force-refresh the Supabase session for the promoted user
     try {
@@ -366,9 +388,12 @@ export const updateUserPlan = async (
   userId: string,
   plan: string
 ): Promise<{ success: boolean; error?: string }> => {
+  const validPlans = ['free', 'pro', 'enterprise'];
+  const sanitizedPlan = validPlans.includes(plan.toLowerCase()) ? plan.toLowerCase() : 'free';
+
   // 1. Primary: Use Backend API (runs with service_role key, safely bypassing RLS)
   try {
-    const res = await api.put(`/api/v1/admin/users/${userId}/plan`, { plan });
+    const res = await api.put(`/api/v1/admin/users/${userId}/plan`, { plan: sanitizedPlan });
     if (res.status >= 200 && res.status < 300) {
       return { success: true };
     }
@@ -380,11 +405,12 @@ export const updateUserPlan = async (
     }
   }
 
-  // 2. Fallback: direct Supabase upsert
+  // 2. Fallback: direct Supabase update
   try {
     const { error } = await supabase
       .from('profiles')
-      .upsert({ id: userId, plan }, { onConflict: 'id' });
+      .update({ plan: sanitizedPlan })
+      .eq('id', userId);
     if (error) return { success: false, error: error.message };
     return { success: true };
   } catch (e: any) {

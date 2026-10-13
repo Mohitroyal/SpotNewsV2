@@ -367,6 +367,17 @@ function App() {
               .single();
             if (!error && data?.role && useAuthStore.getState().user?.id === session.user.id) {
               updateUser({ role: data.role });
+            } else if (email) {
+              const { data: appData } = await supabase
+                .from('reporter_applications')
+                .select('status')
+                .eq('email', email.trim())
+                .order('created_at', { ascending: false })
+                .limit(1)
+                .single();
+              if (appData?.status === 'approved' && useAuthStore.getState().user?.role !== 'admin' && useAuthStore.getState().user?.role !== 'superadmin') {
+                updateUser({ role: 'reporter' });
+              }
             }
           } catch (e) {
             console.error(e);
