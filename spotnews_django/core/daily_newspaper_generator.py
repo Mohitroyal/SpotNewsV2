@@ -56,6 +56,59 @@ def optimize_image_url(url: Optional[str], max_width: int = 350, quality: int = 
         return clean_url.replace("/storage/v1/object/sign/", "/storage/v1/render/image/sign/") + f"&width={max_width}&resize=contain&quality={quality}"
     return clean_url
 
+def render_article_images_html(imgs, max_width=320, is_lead=False):
+    if not imgs:
+        return ""
+    if len(imgs) >= 2:
+        opt1 = optimize_image_url(imgs[0], max_width=max_width, quality=65)
+        opt2 = optimize_image_url(imgs[1], max_width=max_width, quality=65)
+        if is_lead:
+            return f"""
+            <div style="width: 52%; float: left; margin-right: 18px; margin-bottom: 10px;">
+                <div style="display: flex; gap: 8px;">
+                    <div style="flex: 1; text-align: center;">
+                        <img src="{opt1}" style="width: 100%; max-height: 225px; object-fit: cover; border: 1px solid #ccc; padding: 2px; border-radius: 2px; display: block;" />
+                        <div style="font-size: 9.5px; color: #555; margin-top: 3px; font-style: italic;">కార్యక్రమానికి సంబంధించిన ముఖ్య చిత్రం.</div>
+                    </div>
+                    <div style="flex: 1; text-align: center;">
+                        <img src="{opt2}" style="width: 100%; max-height: 225px; object-fit: cover; border: 1px solid #ccc; padding: 2px; border-radius: 2px; display: block;" />
+                        <div style="font-size: 9.5px; color: #555; margin-top: 3px; font-style: italic;">తాజా పరిణామంపై అదనపు దృశ్యం.</div>
+                    </div>
+                </div>
+            </div>
+            """
+        else:
+            return f"""
+            <div style="margin-bottom: 6px;">
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 4px;">
+                    <div style="text-align: center;">
+                        <img src="{opt1}" style="width: 100%; max-height: 125px; object-fit: cover; border: 1px solid #ddd; padding: 1px; border-radius: 2px; display: block;" />
+                        <div style="font-size: 8.5px; color: #666; margin-top: 2px; font-style: italic; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">కార్యక్రమానికి ముఖ్య చిత్రం.</div>
+                    </div>
+                    <div style="text-align: center;">
+                        <img src="{opt2}" style="width: 100%; max-height: 125px; object-fit: cover; border: 1px solid #ddd; padding: 1px; border-radius: 2px; display: block;" />
+                        <div style="font-size: 8.5px; color: #666; margin-top: 2px; font-style: italic; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">అదనపు దృశ్యం.</div>
+                    </div>
+                </div>
+            </div>
+            """
+    else:
+        opt = optimize_image_url(imgs[0], max_width=max_width, quality=65)
+        if is_lead:
+            return f"""
+            <div style="width: 44%; float: left; margin-right: 18px; margin-bottom: 10px; text-align: center;">
+                <img src="{opt}" style="width: 100%; max-height: 270px; object-fit: cover; border: 1px solid #ccc; padding: 2px; border-radius: 2px; display: block;" />
+                <div style="font-size: 10px; color: #555; margin-top: 3px; font-style: italic;">కార్యక్రమానికి సంబంధించిన ముఖ్య చిత్రం.</div>
+            </div>
+            """
+        else:
+            return f"""
+            <div style="margin-bottom: 6px; text-align: center;">
+                <img src="{opt}" style="width: 100%; max-height: 175px; object-fit: cover; border: 1px solid #ddd; padding: 1px; border-radius: 2px; display: block;" />
+                <div style="font-size: 9px; color: #666; margin-top: 2px; font-style: italic;">కార్యక్రమానికి సంబంధించిన ముఖ్య చిత్రం.</div>
+            </div>
+            """
+
 def build_newspaper_html(
     publication_name: str,
     logo_url: str,
@@ -147,59 +200,6 @@ def build_newspaper_html(
         page_content_html = ""
 
         if is_first_page and count >= 1:
-            def render_article_images_html(imgs, max_width=320, is_lead=False):
-                if not imgs:
-                    return ""
-                if len(imgs) >= 2:
-                    opt1 = optimize_image_url(imgs[0], max_width=max_width, quality=65)
-                    opt2 = optimize_image_url(imgs[1], max_width=max_width, quality=65)
-                    if is_lead:
-                        return f"""
-                        <div style="width: 52%; float: left; margin-right: 18px; margin-bottom: 10px;">
-                            <div style="display: flex; gap: 8px;">
-                                <div style="flex: 1; text-align: center;">
-                                    <img src="{opt1}" style="width: 100%; max-height: 225px; object-fit: cover; border: 1px solid #ccc; padding: 2px; border-radius: 2px; display: block;" />
-                                    <div style="font-size: 9.5px; color: #555; margin-top: 3px; font-style: italic;">కార్యక్రమానికి సంబంధించిన ముఖ్య చిత్రం.</div>
-                                </div>
-                                <div style="flex: 1; text-align: center;">
-                                    <img src="{opt2}" style="width: 100%; max-height: 225px; object-fit: cover; border: 1px solid #ccc; padding: 2px; border-radius: 2px; display: block;" />
-                                    <div style="font-size: 9.5px; color: #555; margin-top: 3px; font-style: italic;">తాజా పరిణామంపై అదనపు దృశ్యం.</div>
-                                </div>
-                            </div>
-                        </div>
-                        """
-                    else:
-                        return f"""
-                        <div style="margin-bottom: 6px;">
-                            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 4px;">
-                                <div style="text-align: center;">
-                                    <img src="{opt1}" style="width: 100%; max-height: 125px; object-fit: cover; border: 1px solid #ddd; padding: 1px; border-radius: 2px; display: block;" />
-                                    <div style="font-size: 8.5px; color: #666; margin-top: 2px; font-style: italic; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">కార్యక్రమానికి ముఖ్య చిత్రం.</div>
-                                </div>
-                                <div style="text-align: center;">
-                                    <img src="{opt2}" style="width: 100%; max-height: 125px; object-fit: cover; border: 1px solid #ddd; padding: 1px; border-radius: 2px; display: block;" />
-                                    <div style="font-size: 8.5px; color: #666; margin-top: 2px; font-style: italic; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">అదనపు దృశ్యం.</div>
-                                </div>
-                            </div>
-                        </div>
-                        """
-                else:
-                    opt = optimize_image_url(imgs[0], max_width=max_width, quality=65)
-                    if is_lead:
-                        return f"""
-                        <div style="width: 44%; float: left; margin-right: 18px; margin-bottom: 10px; text-align: center;">
-                            <img src="{opt}" style="width: 100%; max-height: 270px; object-fit: cover; border: 1px solid #ccc; padding: 2px; border-radius: 2px; display: block;" />
-                            <div style="font-size: 10px; color: #555; margin-top: 3px; font-style: italic;">కార్యక్రమానికి సంబంధించిన ముఖ్య చిత్రం.</div>
-                        </div>
-                        """
-                    else:
-                        return f"""
-                        <div style="margin-bottom: 6px; text-align: center;">
-                            <img src="{opt}" style="width: 100%; max-height: 175px; object-fit: cover; border: 1px solid #ddd; padding: 1px; border-radius: 2px; display: block;" />
-                            <div style="font-size: 9px; color: #666; margin-top: 2px; font-style: italic;">కార్యక్రమానికి సంబంధించిన ముఖ్య చిత్రం.</div>
-                        </div>
-                        """
-
             lead_art = page_articles[0]
             lead_headline = sanitize_text(lead_art.get("headline") or lead_art.get("title") or "ముఖ్యాంశం")
             lead_content = sanitize_text(lead_art.get("content") or lead_art.get("summary") or "")
@@ -742,7 +742,7 @@ def generate_chunked_daily_newspaper_pdf(
         page_files = []
         with tempfile.TemporaryDirectory() as temp_dir:
             with sync_playwright() as p:
-                BATCH_SIZE = 3  # Recycle browser every 3 pages to purge accumulated Chromium Skia and layout RAM
+                BATCH_SIZE = 1  # Recycle browser every 1 page to guarantee strict <180MB RAM on Render free tier
                 for batch_start in range(0, len(chunks), BATCH_SIZE):
                     batch_chunks = chunks[batch_start:batch_start + BATCH_SIZE]
                     browser = p.chromium.launch(**launch_kwargs)

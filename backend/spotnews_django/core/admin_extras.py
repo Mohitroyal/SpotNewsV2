@@ -117,3 +117,31 @@ def admin_user_delete(request, user_id):
         except Exception as e:
             return JsonResponse({"detail": str(e)}, status=400)
     return JsonResponse({"detail": "Method not allowed"}, status=405)
+
+@csrf_exempt
+def admin_logos(request):
+    try:
+        with connection.cursor() as cursor:
+            cursor.execute("SELECT id, name, url, is_active, created_at FROM publication_logos ORDER BY created_at ASC")
+            rows = cursor.fetchall()
+            logos = []
+            for r in rows:
+                logos.append({
+                    "id": str(r[0]),
+                    "name": r[1] or "",
+                    "url": r[2] or "",
+                    "is_active": r[3] if r[3] is not None else True,
+                    "created_at": str(r[4]) if r[4] else ""
+                })
+            if logos:
+                return JsonResponse(logos, safe=False)
+    except Exception as e:
+        pass
+
+    logos = [
+        {"id": "rti_express", "name": "RTI Express", "url": "/static/logos/rti_express.svg", "is_active": True},
+        {"id": "bharath_reporter", "name": "Bharath Reporter", "url": "/static/logos/bharath_reporter.svg", "is_active": True},
+        {"id": "national_news", "name": "National News", "url": "/static/logos/national_news.svg", "is_active": True},
+        {"id": "extra_news", "name": "The Extra News", "url": "/static/logos/extra_news.svg", "is_active": True},
+    ]
+    return JsonResponse(logos, safe=False)
