@@ -311,22 +311,8 @@ def generate_daily_newspaper(request):
         if not success:
             return JsonResponse({"detail": "Failed to generate PDF. The server environment may lack Chromium dependencies (Playwright failed). Check server logs."}, status=500)
             
-        # Read PDF into memory and encode as base64 for direct download if within safe size limit (< 4MB)
-        # Giant base64 strings trigger Out-Of-Memory, proxy drops, and network errors on mobile
-        pdf_base64 = None
-        try:
-            with open(output_pdf_path, 'rb') as f:
-                pdf_bytes = f.read()
-            if len(pdf_bytes) <= 4 * 1024 * 1024:
-                pdf_base64 = base64.b64encode(pdf_bytes).decode('utf-8')
-            del pdf_bytes
-            import gc
-            gc.collect()
-            print(f"[PDF Generator] PDF read successfully (b64 included: {pdf_base64 is not None})")
-        except Exception as read_err:
-            print(f"[PDF Generator] Failed to read PDF: {read_err}")
-            
         pdf_url = request.build_absolute_uri(f"/api/editions/{filename}")
+        uploaded_cdn_url = None
         try:
             from core.services.storage_service import storage_service
             uploaded_cdn_url = storage_service.upload_file(output_pdf_path, f"editions/{filename}", content_type="application/pdf")
@@ -335,6 +321,28 @@ def generate_daily_newspaper(request):
                 print(f"[PDF Generator] Uploaded edition to Supabase Storage: {pdf_url}")
         except Exception as storage_err:
             print(f"[PDF Generator] Supabase storage upload note: {storage_err}")
+
+        # If uploaded to CDN, frontend fetches directly from pdf_url.
+        # Avoid creating huge base64 strings in RAM (prevents 25MB+ heap spikes on Render 512MB).
+        pdf_base64 = None
+        if not uploaded_cdn_url:
+            try:
+                file_size = os.path.getsize(output_pdf_path) if os.path.exists(output_pdf_path) else 0
+                if file_size <= 1.5 * 1024 * 1024:
+                    with open(output_pdf_path, 'rb') as f:
+                        pdf_base64 = base64.b64encode(f.read()).decode('utf-8')
+                    print(f"[PDF Generator] Fallback base64 encoded for small local file ({file_size} bytes)")
+            except Exception as read_err:
+                print(f"[PDF Generator] Failed to read fallback base64: {read_err}")
+
+        import gc
+        gc.collect()
+        try:
+            import ctypes
+            libc = ctypes.CDLL("libc.so.6")
+            libc.malloc_trim(0)
+        except Exception:
+            pass
 
         # Determine actual page count from generated PDF
         actual_page_count = total_pages

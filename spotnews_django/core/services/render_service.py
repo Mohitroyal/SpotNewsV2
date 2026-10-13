@@ -1942,9 +1942,21 @@ class RenderService:
                     "--disable-setuid-sandbox",
                     "--disable-dev-shm-usage",
                     "--disable-gpu",
-                    "--js-flags=--max-old-space-size=96",
+                    "--disable-software-rasterizer",
+                    "--no-zygote",
                     "--renderer-process-limit=1",
-                    "--disable-site-isolation-trials"
+                    "--single-process-network-service",
+                    "--js-flags=--max-old-space-size=48",
+                    "--disk-cache-size=1",
+                    "--media-cache-size=1",
+                    "--disable-site-isolation-trials",
+                    "--disable-features=AudioServiceOutOfProcess,IsolateOrigins,site-per-process,Translate,OptimizationHints,BackForwardCache,MediaRouter",
+                    "--disable-extensions",
+                    "--disable-background-networking",
+                    "--disable-default-apps",
+                    "--disable-sync",
+                    "--disable-translate",
+                    "--mute-audio"
                 ],
             }
             if chrome_path: launch_kwargs["executable_path"] = chrome_path
@@ -2168,7 +2180,12 @@ class RenderService:
                     except Exception:
                         pass
                     gc.collect()
-                    gc.collect()
+                    try:
+                        import ctypes
+                        libc = ctypes.CDLL("libc.so.6")
+                        libc.malloc_trim(0)
+                    except Exception:
+                        pass
 
     async def generate_png(self, html_content: str, output_path: str):
         await self.generate_clipping_assets(html_content, png_path=output_path)

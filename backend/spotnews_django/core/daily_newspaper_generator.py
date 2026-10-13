@@ -1,7 +1,21 @@
 import os
 import re
+import threading
 from datetime import datetime
 from typing import List, Dict, Any, Optional
+
+_PDF_LOCK = threading.Lock()
+
+def trim_memory():
+    """Forces Python garbage collection and instructs Linux glibc to release unused memory arenas back to the OS."""
+    import gc
+    gc.collect()
+    try:
+        import ctypes
+        libc = ctypes.CDLL("libc.so.6")
+        libc.malloc_trim(0)
+    except Exception:
+        pass
 
 TELUGU_DAYS = {
     0: "సోమవారం", 1: "మంగళవారం", 2: "బుధవారం",
@@ -27,17 +41,19 @@ def sanitize_text(text: str) -> str:
     text = re.sub(r'[\x00-\x1F\x7F]', '', str(text))
     return text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace('"', "&quot;").strip()
 
-def optimize_image_url(url: Optional[str], max_width: int = 500) -> str:
+def optimize_image_url(url: Optional[str], max_width: int = 350, quality: int = 65) -> str:
     """
     Supabase Storage on-the-fly image optimization:
-    Converts raw 12MP (4000x3000) camera photos into compact ~500px thumbnails.
-    Cuts image memory from 48MB per bitmap down to <0.8MB per bitmap in Chromium!
+    Converts raw 12MP (4000x3000) camera photos into compact ~350px thumbnails.
+    Cuts image memory from 48MB per bitmap down to <0.3MB per bitmap in Chromium!
     """
     if not url:
         return ""
     clean_url = str(url).strip()
     if "/storage/v1/object/public/" in clean_url:
-        return clean_url.replace("/storage/v1/object/public/", "/storage/v1/render/image/public/") + f"?width={max_width}&resize=contain&quality=80"
+        return clean_url.replace("/storage/v1/object/public/", "/storage/v1/render/image/public/") + f"?width={max_width}&resize=contain&quality={quality}"
+    if "/storage/v1/object/sign/" in clean_url:
+        return clean_url.replace("/storage/v1/object/sign/", "/storage/v1/render/image/sign/") + f"&width={max_width}&resize=contain&quality={quality}"
     return clean_url
 
 def build_newspaper_html(
@@ -67,11 +83,11 @@ def build_newspaper_html(
     price = edition_info.get("price", "రూ. 1.50/-") if edition_info else "రూ. 1.50/-"
     location = edition_info.get("location", "హైదరాబాద్ / ఆంధ్రప్రదేశ్ & తెలంగాణ") if edition_info else "హైదరాబాద్ / ఆంధ్రప్రదేశ్ & తెలంగాణ"
 
-    opt_logo_url = optimize_image_url(logo_url, max_width=350)
+    opt_logo_url = optimize_image_url(logo_url, max_width=250, quality=70)
 
     ad_html = ""
     if advertisement_config and advertisement_config.get("image_url"):
-        opt_ad_url = optimize_image_url(advertisement_config['image_url'], max_width=350)
+        opt_ad_url = optimize_image_url(advertisement_config['image_url'], max_width=250, quality=70)
         ad_html = f"""
         <div style="width: 25%; padding-left: 10px; text-align: center;">
             <img src="{opt_ad_url}" style="max-height: 85px; max-width: 100%; border: 1px solid #ccc; padding: 2px;" />
@@ -148,7 +164,7 @@ def build_newspaper_html(
 
             lead_img_html = ""
             if lead_imgs:
-                opt_lead_img = optimize_image_url(lead_imgs[0], max_width=750)
+                opt_lead_img = optimize_image_url(lead_imgs[0], max_width=480, quality=70)
                 lead_img_html = f"""
                 <div style="width: 44%; float: left; margin-right: 18px; margin-bottom: 10px;">
                     <img src="{opt_lead_img}" style="width: 100%; max-height: 270px; object-fit: cover; border: 1px solid #ccc; padding: 2px; border-radius: 2px; display: block;" />
@@ -192,7 +208,7 @@ def build_newspaper_html(
 
                     s_img_html = ""
                     if s_imgs:
-                        opt_s_img = optimize_image_url(s_imgs[0], max_width=450)
+                        opt_s_img = optimize_image_url(s_imgs[0], max_width=320, quality=65)
                         s_img_html = f"""
                         <div style="margin-bottom: 6px; text-align: center;">
                             <img src="{opt_s_img}" style="width: 100%; max-height: 175px; object-fit: cover; border: 1px solid #ddd; padding: 1px; border-radius: 2px;" />
@@ -251,7 +267,7 @@ def build_newspaper_html(
 
                 img_html = ""
                 if imgs:
-                    opt_img = optimize_image_url(imgs[0], max_width=450)
+                    opt_img = optimize_image_url(imgs[0], max_width=320, quality=65)
                     img_html = f"""
                     <div style="margin-bottom: 6px; text-align: center;">
                         <img src="{opt_img}" style="width: 100%; max-height: 190px; object-fit: cover; border: 1px solid #ddd; padding: 1px; border-radius: 2px;" />
@@ -309,7 +325,7 @@ def build_newspaper_html(
     <title>{sanitize_text(publication_name)} - {edition_date}</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+Telugu:wght@400;600;700;800;900&family=Noto+Sans+Telugu:wght@400;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+Telugu:wght@400;700&family=Noto+Sans+Telugu:wght@400;700&display=swap" rel="stylesheet">
     <style>
         @page {{
             size: 297mm 420mm;
@@ -385,6 +401,10 @@ def _get_chromium_executable() -> Optional[str]:
 
 def render_html_to_pdf(html_content: str, output_path: str) -> bool:
     """Render HTML string to A3 PDF file using Playwright Chromium with guaranteed styling and low memory."""
+    acquired = _PDF_LOCK.acquire(timeout=120)
+    if not acquired:
+        print("[PDF Generator] Concurrency lock timeout: another PDF generation is currently active.")
+        return False
     try:
         from playwright.sync_api import sync_playwright
 
@@ -400,11 +420,16 @@ def render_html_to_pdf(html_content: str, output_path: str) -> bool:
                 "--no-zygote",
                 "--renderer-process-limit=1",
                 "--single-process-network-service",
-                "--js-flags=--max-old-space-size=48",
+                "--js-flags=--max-old-space-size=32",
+                "--disk-cache-size=1",
+                "--media-cache-size=1",
                 "--disable-site-isolation-trials",
-                "--disable-features=AudioServiceOutOfProcess,IsolateOrigins,site-per-process",
+                "--disable-features=AudioServiceOutOfProcess,IsolateOrigins,site-per-process,Translate,OptimizationHints,BackForwardCache,MediaRouter",
                 "--disable-extensions",
                 "--disable-background-networking",
+                "--disable-default-apps",
+                "--disable-sync",
+                "--disable-translate",
                 "--mute-audio"
             ]
         }
@@ -470,8 +495,9 @@ def render_html_to_pdf(html_content: str, output_path: str) -> bool:
         print(f"Playwright PDF rendering error: {e}")
         return False
     finally:
-        import gc
-        gc.collect()
+        if _PDF_LOCK.locked():
+            _PDF_LOCK.release()
+        trim_memory()
 
 def generate_chunked_daily_newspaper_pdf(
     publication_name: str,
@@ -484,146 +510,165 @@ def generate_chunked_daily_newspaper_pdf(
     edition_info: Optional[Dict[str, Any]] = None,
     max_articles_per_chunk: int = 8
 ) -> bool:
-    import gc
-    import io
+    import tempfile
     import pypdf
     from playwright.sync_api import sync_playwright
 
-    total_articles = len(articles)
-    ordered_articles = list(articles)
-    if lead_story_id:
-        lead_idx = next((i for i, a in enumerate(ordered_articles) if str(a.get("id")) == str(lead_story_id)), None)
-        if lead_idx is not None:
-            lead_item = ordered_articles.pop(lead_idx)
-            ordered_articles.insert(0, lead_item)
-
-    # For small edition (<= 10 articles, 1 page), render in single shot
-    if total_articles <= 10:
-        full_html = build_newspaper_html(
-            publication_name=publication_name,
-            logo_url=logo_url,
-            edition_date=edition_date,
-            articles=ordered_articles,
-            lead_story_id=lead_story_id,
-            advertisement_config=advertisement_config,
-            edition_info=edition_info
-        )
-        return render_html_to_pdf(full_html, output_path)
-
-    # For larger editions (50-90+ articles), render Page-by-Page in a single browser session.
-    # Closing each page immediately frees all decoded image bitmaps and DOM trees.
-    # Memory stays strictly under 150MB across the entire generation!
-    target_pages = max(1, (total_articles + 7) // 8)
-    articles_per_page = max(1, (total_articles + target_pages - 1) // target_pages)
-
-    chunks = []
-    for p in range(target_pages):
-        start = p * articles_per_page
-        end = min(start + articles_per_page, total_articles)
-        page_slice = ordered_articles[start:end]
-        if page_slice:
-            chunks.append((p, page_slice))
-
-    print(f"[PDF Generator] Rendering {total_articles} articles across {len(chunks)} pages in low-memory session...")
-
-    chrome_path = _get_chromium_executable()
-    launch_kwargs = {
-        "headless": True,
-        "args": [
-            "--no-sandbox",
-            "--disable-setuid-sandbox",
-            "--disable-dev-shm-usage",
-            "--disable-gpu",
-            "--disable-software-rasterizer",
-            "--no-zygote",
-            "--renderer-process-limit=1",
-            "--single-process-network-service",
-            "--js-flags=--max-old-space-size=48",
-            "--disable-site-isolation-trials",
-            "--disable-features=AudioServiceOutOfProcess,IsolateOrigins,site-per-process",
-            "--disable-extensions",
-            "--disable-background-networking",
-            "--mute-audio"
-        ]
-    }
-    if chrome_path:
-        launch_kwargs["executable_path"] = chrome_path
+    acquired = _PDF_LOCK.acquire(timeout=120)
+    if not acquired:
+        print("[PDF Generator] Concurrency lock timeout: another generation is active.")
+        return False
 
     try:
-        with sync_playwright() as p:
-            browser = p.chromium.launch(**launch_kwargs)
-            context = browser.new_context(
-                viewport={"width": 1123, "height": 1587},
-                device_scale_factor=1
+        total_articles = len(articles)
+        ordered_articles = list(articles)
+        if lead_story_id:
+            lead_idx = next((i for i, a in enumerate(ordered_articles) if str(a.get("id")) == str(lead_story_id)), None)
+            if lead_idx is not None:
+                lead_item = ordered_articles.pop(lead_idx)
+                ordered_articles.insert(0, lead_item)
+
+        # For small edition (<= 10 articles, 1 page), render in single shot
+        if total_articles <= 10:
+            full_html = build_newspaper_html(
+                publication_name=publication_name,
+                logo_url=logo_url,
+                edition_date=edition_date,
+                articles=ordered_articles,
+                lead_story_id=lead_story_id,
+                advertisement_config=advertisement_config,
+                edition_info=edition_info
             )
-            merger = pypdf.PdfWriter()
+            _PDF_LOCK.release()
+            return render_html_to_pdf(full_html, output_path)
 
-            for chunk_idx, (page_idx, chunk_articles) in enumerate(chunks):
-                chunk_html = build_newspaper_html(
-                    publication_name=publication_name,
-                    logo_url=logo_url,
-                    edition_date=edition_date,
-                    articles=chunk_articles,
-                    lead_story_id=lead_story_id if chunk_idx == 0 else None,
-                    advertisement_config=advertisement_config,
-                    edition_info=edition_info,
-                    page_offset=page_idx,
-                    total_pages_override=1
-                )
+        target_pages = max(1, (total_articles + 7) // 8)
+        articles_per_page = max(1, (total_articles + target_pages - 1) // target_pages)
 
-                page = context.new_page()
-                page.emulate_media(media="screen")
-                page.set_content(chunk_html, wait_until="domcontentloaded", timeout=20000)
+        chunks = []
+        for p in range(target_pages):
+            start = p * articles_per_page
+            end = min(start + articles_per_page, total_articles)
+            page_slice = ordered_articles[start:end]
+            if page_slice:
+                chunks.append((p, page_slice))
 
-                # Wait for fonts on first page only
-                if chunk_idx == 0:
+        print(f"[PDF Generator] Rendering {total_articles} articles across {len(chunks)} pages in low-memory batched session...")
+
+        chrome_path = _get_chromium_executable()
+        launch_kwargs = {
+            "headless": True,
+            "args": [
+                "--no-sandbox",
+                "--disable-setuid-sandbox",
+                "--disable-dev-shm-usage",
+                "--disable-gpu",
+                "--disable-software-rasterizer",
+                "--no-zygote",
+                "--renderer-process-limit=1",
+                "--single-process-network-service",
+                "--js-flags=--max-old-space-size=32",
+                "--disk-cache-size=1",
+                "--media-cache-size=1",
+                "--disable-site-isolation-trials",
+                "--disable-features=AudioServiceOutOfProcess,IsolateOrigins,site-per-process,Translate,OptimizationHints,BackForwardCache,MediaRouter",
+                "--disable-extensions",
+                "--disable-background-networking",
+                "--disable-default-apps",
+                "--disable-sync",
+                "--disable-translate",
+                "--mute-audio"
+            ]
+        }
+        if chrome_path:
+            launch_kwargs["executable_path"] = chrome_path
+
+        page_files = []
+        with tempfile.TemporaryDirectory() as temp_dir:
+            with sync_playwright() as p:
+                BATCH_SIZE = 3  # Recycle browser every 3 pages to purge accumulated Chromium Skia and layout RAM
+                for batch_start in range(0, len(chunks), BATCH_SIZE):
+                    batch_chunks = chunks[batch_start:batch_start + BATCH_SIZE]
+                    browser = p.chromium.launch(**launch_kwargs)
+                    context = browser.new_context(
+                        viewport={"width": 1123, "height": 1587},
+                        device_scale_factor=1
+                    )
+
+                    for chunk_idx, (page_idx, chunk_articles) in enumerate(batch_chunks, start=batch_start):
+                        chunk_html = build_newspaper_html(
+                            publication_name=publication_name,
+                            logo_url=logo_url,
+                            edition_date=edition_date,
+                            articles=chunk_articles,
+                            lead_story_id=lead_story_id if chunk_idx == 0 else None,
+                            advertisement_config=advertisement_config,
+                            edition_info=edition_info,
+                            page_offset=page_idx,
+                            total_pages_override=1
+                        )
+
+                        page = context.new_page()
+                        page.emulate_media(media="screen")
+                        page.set_content(chunk_html, wait_until="domcontentloaded", timeout=20000)
+
+                        if chunk_idx == 0:
+                            try:
+                                page.evaluate("Promise.race([document.fonts ? document.fonts.ready : Promise.resolve(), new Promise(r => setTimeout(r, 1500))])")
+                            except Exception:
+                                pass
+
+                        try:
+                            page.evaluate("""
+                                Promise.race([
+                                    Promise.all(
+                                        Array.from(document.images)
+                                            .filter(img => !img.complete)
+                                            .map(img => new Promise(res => { img.onload = img.onerror = res; }))
+                                    ),
+                                    new Promise(res => setTimeout(res, 600))
+                                ])
+                            """)
+                        except Exception:
+                            pass
+
+                        page_pdf_path = os.path.join(temp_dir, f"chunk_{chunk_idx}.pdf")
+                        page.pdf(
+                            path=page_pdf_path,
+                            format="A3",
+                            print_background=True,
+                            prefer_css_page_size=True,
+                            display_header_footer=False,
+                            margin={"top": "0mm", "bottom": "0mm", "left": "0mm", "right": "0mm"}
+                        )
+                        try:
+                            page.close()
+                        except Exception:
+                            pass
+
+                        page_files.append(page_pdf_path)
+                        print(f"[PDF Generator] Page {chunk_idx + 1}/{len(chunks)} rendered to disk ({os.path.getsize(page_pdf_path)} bytes)")
+
                     try:
-                        page.evaluate("Promise.race([document.fonts ? document.fonts.ready : Promise.resolve(), new Promise(r => setTimeout(r, 1500))])")
+                        context.close()
                     except Exception:
                         pass
+                    try:
+                        browser.close()
+                    except Exception:
+                        pass
+                    trim_memory()
 
-                # Fast non-blocking image load guard (up to 600ms)
-                try:
-                    page.evaluate("""
-                        Promise.race([
-                            Promise.all(
-                                Array.from(document.images)
-                                    .filter(img => !img.complete)
-                                    .map(img => new Promise(res => { img.onload = img.onerror = res; }))
-                            ),
-                            new Promise(res => setTimeout(res, 600))
-                        ])
-                    """)
-                except Exception:
-                    pass
-
-                pdf_bytes = page.pdf(
-                    format="A3",
-                    print_background=True,
-                    prefer_css_page_size=True,
-                    display_header_footer=False,
-                    margin={"top": "0mm", "bottom": "0mm", "left": "0mm", "right": "0mm"}
-                )
-                try:
-                    page.close()  # Destroy page & free RAM immediately!
-                except Exception:
-                    pass
-                gc.collect()
-
-                merger.append(io.BytesIO(pdf_bytes))
-                print(f"[PDF Generator] Page {chunk_idx + 1}/{len(chunks)} rendered ({len(pdf_bytes)} bytes)")
+            # Merge disk-backed PDF files cleanly into destination
+            merger = pypdf.PdfWriter()
+            for pf in page_files:
+                merger.append(pf)
 
             with open(output_path, "wb") as f_out:
                 merger.write(f_out)
             merger.close()
-            try:
-                context.close()
-            except Exception:
-                pass
-            try:
-                browser.close()
-            except Exception:
-                pass
+            del merger
+            trim_memory()
 
         file_size = os.path.getsize(output_path) if os.path.exists(output_path) else 0
         print(f"[PDF Generator] Successfully rendered all {len(chunks)} pages into {output_path} ({file_size} bytes)")
@@ -632,4 +677,6 @@ def generate_chunked_daily_newspaper_pdf(
         print(f"[PDF Generator] Rendering error: {e}")
         return False
     finally:
-        gc.collect()
+        if _PDF_LOCK.locked():
+            _PDF_LOCK.release()
+        trim_memory()

@@ -175,6 +175,24 @@ class RenderService:
             valid_imgs = [image_url_raw.strip()]
 
         if not valid_imgs:
+            video_url = data.get("video_url")
+            if video_url:
+                try:
+                    import subprocess, base64
+                    from imageio_ffmpeg import get_ffmpeg_exe
+                    ffmpeg_exe = get_ffmpeg_exe()
+                    cmd = [
+                        ffmpeg_exe, "-ss", "00:00:00", "-i", video_url,
+                        "-vframes", "1", "-q:v", "2", "-f", "image2pipe", "-vcodec", "mjpeg", "pipe:1"
+                    ]
+                    proc = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=15)
+                    if proc.returncode == 0 and proc.stdout:
+                        b64 = base64.b64encode(proc.stdout).decode('utf-8')
+                        valid_imgs = [f"data:image/jpeg;base64,{b64}"]
+                except Exception as e:
+                    print(f"[BACKGROUND ERROR] Failed to extract video thumbnail: {e}")
+
+        if not valid_imgs:
             try:
                 from core.renderer.default_image import get_default_image_data_url
             except ImportError:
@@ -1916,9 +1934,32 @@ class RenderService:
         """Uses Playwright to render HTML and take both a PNG screenshot and/or a PDF print."""
         async with self.semaphore:
             _log_memory("generate_clipping_assets: Enter")
+            chrome_path = _get_chromium_executable()
             launch_kwargs = {
                 "headless": True,
+                "args": [
+                    "--no-sandbox",
+                    "--disable-setuid-sandbox",
+                    "--disable-dev-shm-usage",
+                    "--disable-gpu",
+                    "--disable-software-rasterizer",
+                    "--no-zygote",
+                    "--renderer-process-limit=1",
+                    "--single-process-network-service",
+                    "--js-flags=--max-old-space-size=48",
+                    "--disk-cache-size=1",
+                    "--media-cache-size=1",
+                    "--disable-site-isolation-trials",
+                    "--disable-features=AudioServiceOutOfProcess,IsolateOrigins,site-per-process,Translate,OptimizationHints,BackForwardCache,MediaRouter",
+                    "--disable-extensions",
+                    "--disable-background-networking",
+                    "--disable-default-apps",
+                    "--disable-sync",
+                    "--disable-translate",
+                    "--mute-audio"
+                ],
             }
+            if chrome_path: launch_kwargs["executable_path"] = chrome_path
 
             max_attempts = 2
             for attempt in range(max_attempts):
@@ -1926,7 +1967,7 @@ class RenderService:
                 page = None
                 try:
                     async with async_playwright() as p:
-                        browser = await p.webkit.launch(**launch_kwargs)
+                        browser = await p.chromium.launch(**launch_kwargs)
                         page = await browser.new_page(viewport={"width": 1060, "height": 1400}, device_scale_factor=1.0)
                         def handle_console(msg):
                             if "net::ERR_UNKNOWN_URL_SCHEME" in msg.text or "Not allowed to load local resource" in msg.text:
@@ -2088,7 +2129,7 @@ class RenderService:
                                 finalCont.style.setProperty('max-height', finalHeight + 'px', 'important');
                                 
                                 let heroBox = null;
-                                const heroImg = document.querySelector('#compositor-canvas img') || document.querySelector('.featured-image img, .article-image img, .hero-img');
+                                const heroImg = document.querySelector('.hero-img') || document.querySelector('#compositor-canvas img') || document.querySelector('.featured-image img, .article-image img');
                                 if (heroImg) {
                                     const rect = heroImg.getBoundingClientRect();
                                     const contRect = finalCont.getBoundingClientRect();
@@ -2106,7 +2147,7 @@ class RenderService:
                             return { width: 1200, height: document.documentElement.scrollHeight, heroBox: null };
                         }""")
                         
-                        await page.set_viewport_size({"width": max(1200, layout_info.get("width", 1060) + 100), "height": max(1600, layout_info.get("height", 1600) + 100)})
+                        await page.set_viewport_size({"width": int(layout_info.get("width", 1060) + 50), "height": int(layout_info.get("height", 1600) + 50)})
 
                         final_h_px = None
                         if png_path:
@@ -2139,7 +2180,12 @@ class RenderService:
                     except Exception:
                         pass
                     gc.collect()
-                    gc.collect()
+                    try:
+                        import ctypes
+                        libc = ctypes.CDLL("libc.so.6")
+                        libc.malloc_trim(0)
+                    except Exception:
+                        pass
 
     async def generate_png(self, html_content: str, output_path: str):
         await self.generate_clipping_assets(html_content, png_path=output_path)
