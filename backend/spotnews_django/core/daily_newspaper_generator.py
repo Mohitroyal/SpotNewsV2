@@ -63,16 +63,23 @@ def estimate_article_card_height(art: Dict[str, Any], is_lead: bool = False) -> 
     if not imgs and art.get("image_url"):
         imgs = [art.get("image_url")]
 
-    h_head = 45 if is_lead else 36
-    h_byline = 18
+    h_head = 40 if is_lead else 28
+    h_byline = 14
+    char_count = len(cont)
+
     if len(imgs) >= 2:
-        h_img = 150 if is_lead else 115
+        h_img = 135 if is_lead else 110
+        # Text block sits under the dual images
+        h_text = max(30, char_count / 5.2)
     elif len(imgs) == 1:
-        h_img = 170 if is_lead else 125
+        h_img = 150 if is_lead else 115
+        # Text flows beside float image
+        h_text = max(10, (char_count - 180) / 4.2)
     else:
         h_img = 0
-    h_text = max(30, len(cont) / 3.2)
-    return h_head + h_byline + h_img + h_text + 14
+        h_text = max(30, char_count / 4.2)
+
+    return h_head + h_byline + h_img + h_text + 10
 
 def render_article_card_html(art: Dict[str, Any], is_lead: bool = False) -> str:
     head = sanitize_text(art.get("headline") or art.get("title") or "ముఖ్యాంశం")
@@ -84,34 +91,34 @@ def render_article_card_html(art: Dict[str, Any], is_lead: bool = False) -> str:
         imgs = [art.get("image_url")]
 
     byline = f"{loc} &nbsp;|&nbsp; {rep}" if loc and rep else (loc or rep)
-    byline_html = f'<div style="font-size: 9.5px; font-weight: bold; color: #555; margin-bottom: 4px; padding-bottom: 2px; border-bottom: 1px solid #eee;">{byline}</div>' if byline else ''
+    byline_html = f'<div style="font-size: 9px; font-weight: bold; color: #555; margin-bottom: 2px; padding-bottom: 1px; border-bottom: 1px solid #eee;">{byline}</div>' if byline else ''
 
-    banner_fs = "22px" if is_lead else "14px"
-    banner_pad = "6px 8px" if is_lead else "3.5px 6px"
+    banner_fs = "21px" if is_lead else "13.5px"
+    banner_pad = "5px 7px" if is_lead else "3px 5px"
     headline_html = f"""
-    <div style="background-color: #CC2222; border: 1.5px solid #CC2222; border-radius: 2px; text-align: center; padding: {banner_pad}; margin-bottom: 3px; box-sizing: border-box;">
-        <h2 style="font-size: {banner_fs}; font-weight: 800; line-height: 1.2; color: #FFFFFF; margin: 0;">{head}</h2>
+    <div style="background-color: #CC2222; border: 1.5px solid #CC2222; border-radius: 2px; text-align: center; padding: {banner_pad}; margin-bottom: 2px; box-sizing: border-box;">
+        <h2 style="font-size: {banner_fs}; font-weight: 800; line-height: 1.18; color: #FFFFFF; margin: 0;">{head}</h2>
     </div>
     """
 
-    font_size = "11.5px" if len(cont) < 250 else ("11px" if len(cont) < 650 else "10.2px")
-    line_height = "1.44" if len(cont) < 250 else ("1.38" if len(cont) < 650 else "1.32")
+    font_size = "11px" if len(cont) < 250 else ("10.5px" if len(cont) < 650 else "9.8px")
+    line_height = "1.38" if len(cont) < 250 else ("1.32" if len(cont) < 650 else "1.26")
 
     # Complete uncropped images with object-fit: contain so 100% of the image is shown without half/cropped images!
     if len(imgs) >= 2:
-        img_max_h = "150px" if is_lead else "105px"
+        img_max_h = "140px" if is_lead else "95px"
         opt1 = optimize_image_url(imgs[0], max_width=400, quality=65)
         opt2 = optimize_image_url(imgs[1], max_width=400, quality=65)
         img_block = f"""
-        <div style="margin-bottom: 3px; width: 100%;">
+        <div style="margin-bottom: 2px; width: 100%;">
             <div style="display: flex; gap: 5px; justify-content: center; align-items: center;">
                 <div style="flex: 1; text-align: center; min-width: 0;">
                     <img src="{opt1}" style="max-width: 100%; max-height: {img_max_h}; width: auto; height: auto; object-fit: contain; border: 1px solid #ccc; padding: 1px; display: inline-block; vertical-align: middle;" />
-                    <div style="font-size: 8px; color: #555; font-style: italic; margin-top: 1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">కార్యక్రమానికి సంబంధించిన ముఖ్య చిత్రం.</div>
+                    <div style="font-size: 7.8px; color: #555; font-style: italic; margin-top: 1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">కార్యక్రమానికి సంబంధించిన ముఖ్య చిత్రం.</div>
                 </div>
                 <div style="flex: 1; text-align: center; min-width: 0;">
                     <img src="{opt2}" style="max-width: 100%; max-height: {img_max_h}; width: auto; height: auto; object-fit: contain; border: 1px solid #ccc; padding: 1px; display: inline-block; vertical-align: middle;" />
-                    <div style="font-size: 8px; color: #555; font-style: italic; margin-top: 1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">తాజా పరిణామంపై అదనపు దృశ్యం.</div>
+                    <div style="font-size: 7.8px; color: #555; font-style: italic; margin-top: 1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">తాజా పరిణామంపై అదనపు దృశ్యం.</div>
                 </div>
             </div>
         </div>
@@ -130,13 +137,13 @@ def render_article_card_html(art: Dict[str, Any], is_lead: bool = False) -> str:
             """
         body_html = f"{img_block}{text_block}"
     elif len(imgs) == 1:
-        img_max_h = "180px" if is_lead else "120px"
+        img_max_h = "165px" if is_lead else "110px"
         opt = optimize_image_url(imgs[0], max_width=400, quality=65)
         body_html = f"""
         <div style="font-size: {font_size}; line-height: {line_height}; text-align: justify; color: #111;">
-            <div style="width: 46%; float: left; margin-right: 7px; margin-bottom: 2px; text-align: center;">
+            <div style="width: 45%; float: left; margin-right: 7px; margin-bottom: 2px; text-align: center;">
                 <img src="{opt}" style="max-width: 100%; max-height: {img_max_h}; width: auto; height: auto; object-fit: contain; border: 1px solid #ccc; padding: 1px; display: inline-block; vertical-align: middle;" />
-                <div style="font-size: 8px; color: #555; font-style: italic; margin-top: 1px;">కార్యక్రమానికి సంబంధించిన ముఖ్య చిత్రం.</div>
+                <div style="font-size: 7.8px; color: #555; font-style: italic; margin-top: 1px;">కార్యక్రమానికి సంబంధించిన ముఖ్య చిత్రం.</div>
             </div>
             <p style="margin: 0; text-indent: 8px;">{cont}</p>
             <div style="clear: both;"></div>
@@ -156,7 +163,7 @@ def render_article_card_html(art: Dict[str, Any], is_lead: bool = False) -> str:
             </div>
             """
 
-    card_border = "border: 1px solid #d0d0d0; background: #fff; padding: 5px 7px; border-radius: 2px; box-sizing: border-box;"
+    card_border = "border: 1px solid #d0d0d0; background: #fff; padding: 4px 6px; border-radius: 2px; box-sizing: border-box;"
 
     return f"""
     <div class="news-card" style="{card_border} display: block; overflow: hidden; flex: 0 0 auto;">
@@ -172,7 +179,9 @@ def balance_into_two_columns(articles_list: List[Dict[str, Any]]) -> tuple:
     h_left = 0.0
     h_right = 0.0
 
-    for art in articles_list:
+    # Distribute tall cards (e.g. dual images) evenly by sorting largest first
+    sorted_arts = sorted(articles_list, key=lambda a: estimate_article_card_height(a, is_lead=False), reverse=True)
+    for art in sorted_arts:
         h = estimate_article_card_height(art, is_lead=False)
         if h_left <= h_right:
             col_left.append(art)
@@ -192,24 +201,28 @@ def partition_articles_into_pages(ordered_articles: List[Dict[str, Any]]) -> Lis
         return [ordered_articles]
 
     # Page 1 holds up to 9 articles (lead + 4 in each column)
-    # Subsequent pages hold up to 12 articles (6 in each column)
-    subsequent_pages = max(1, (total - 9 + 11) // 12)
+    # Subsequent pages hold up to 10 articles (5 in each column)
+    subsequent_pages = max(1, (total - 9 + 9) // 10)
     total_pages = 1 + subsequent_pages
 
     if total_pages == 2:
         p1_count = min(9, max(5, total // 2))
         return [ordered_articles[:p1_count], ordered_articles[p1_count:]]
 
-    p1_count = min(9, max(8, (total + total_pages - 1) // total_pages))
+    p1_count = min(9, max(7, total // total_pages))
     remaining = ordered_articles[p1_count:]
     rem_total = len(remaining)
-    rem_per_page = max(1, (rem_total + subsequent_pages - 1) // subsequent_pages)
+
+    # Evenly distribute remaining articles across subsequent_pages
+    base = rem_total // subsequent_pages
+    extra = rem_total % subsequent_pages
 
     pages = [ordered_articles[:p1_count]]
+    start = 0
     for i in range(subsequent_pages):
-        start = i * rem_per_page
-        end = min(start + rem_per_page, rem_total)
-        page_slice = remaining[start:end]
+        count = base + (1 if i < extra else 0)
+        page_slice = remaining[start:start + count]
+        start += count
         if page_slice:
             pages.append(page_slice)
     return pages
@@ -305,14 +318,16 @@ def build_newspaper_html(
                 </div>
                 """
                 cards_left, cards_right = balance_into_two_columns(sec_articles)
+                col_justify_left = "space-between" if len(cards_left) >= 4 else "flex-start"
+                col_justify_right = "space-between" if len(cards_right) >= 4 else "flex-start"
                 page_content_html = f"""
                 <div style="flex: 1 1 0; min-height: 0; display: flex; flex-direction: column;">
                     {lead_story_html}
                     <div class="secondary-grid" style="flex: 1 1 0; min-height: 0; display: flex; gap: 8px; align-items: stretch;">
-                        <div class="newspaper-col" style="flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; justify-content: space-between;">
+                        <div class="newspaper-col" style="flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; justify-content: {col_justify_left}; gap: 5px;">
                             {''.join(cards_left)}
                         </div>
-                        <div class="newspaper-col" style="flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; justify-content: space-between;">
+                        <div class="newspaper-col" style="flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; justify-content: {col_justify_right}; gap: 5px;">
                             {''.join(cards_right)}
                         </div>
                     </div>
@@ -333,12 +348,14 @@ def build_newspaper_html(
                 """
             else:
                 cards_left, cards_right = balance_into_two_columns(page_articles)
+                col_justify_left = "space-between" if len(cards_left) >= 4 else "flex-start"
+                col_justify_right = "space-between" if len(cards_right) >= 4 else "flex-start"
                 page_content_html = f"""
                 <div class="secondary-grid" style="flex: 1 1 0; min-height: 0; display: flex; gap: 8px; align-items: stretch;">
-                    <div class="newspaper-col" style="flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; justify-content: space-between;">
+                    <div class="newspaper-col" style="flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; justify-content: {col_justify_left}; gap: 5px;">
                         {''.join(cards_left)}
                     </div>
-                    <div class="newspaper-col" style="flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; justify-content: space-between;">
+                    <div class="newspaper-col" style="flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; justify-content: {col_justify_right}; gap: 5px;">
                         {''.join(cards_right)}
                     </div>
                 </div>
