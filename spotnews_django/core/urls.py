@@ -11,6 +11,13 @@ from .daily_newspaper_views import (
 )
 
 from .clipping_views import create_clipping, list_clippings, upload_image
+from .reporter_payment_views import (
+    get_payment_config,
+    create_payment_order,
+    verify_payment,
+    check_payment_status,
+    razorpay_webhook
+)
 
 urlpatterns = [
     path('health', health_check, name='health_check'),
@@ -27,6 +34,18 @@ urlpatterns = [
     path('v1/admin/users/<uuid:user_id>/ban', admin_user_ban, name='admin_user_ban'),
     path('v1/admin/users/<uuid:user_id>', admin_user_delete, name='admin_user_delete'),
     
+    # Reporter Approval & Payment Endpoints
+    path('v1/reporter/payment/config', get_payment_config, name='get_payment_config'),
+    path('v1/reporter/payment/config/', get_payment_config),
+    path('v1/reporter/payment/create-order', create_payment_order, name='create_payment_order'),
+    path('v1/reporter/payment/create-order/', create_payment_order),
+    path('v1/reporter/payment/verify', verify_payment, name='verify_payment'),
+    path('v1/reporter/payment/verify/', verify_payment),
+    path('v1/reporter/payment/status', check_payment_status, name='check_payment_status'),
+    path('v1/reporter/payment/status/', check_payment_status),
+    path('v1/reporter/payment/webhook', razorpay_webhook, name='razorpay_webhook'),
+    path('v1/reporter/payment/webhook/', razorpay_webhook),
+
     # Daily Newspaper PDF Generator Endpoints
     path('v1/admin/daily-newspaper/clippings', get_eligible_clippings, name='daily_newspaper_clippings'),
     path('v1/admin/daily-newspaper/clippings/', get_eligible_clippings),

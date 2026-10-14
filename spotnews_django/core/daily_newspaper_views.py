@@ -16,6 +16,50 @@ from .daily_newspaper_generator import (
     generate_chunked_daily_newspaper_pdf
 )
 
+def _verify_jwt_signature(token: str) -> bool:
+    """
+    Check the token's signature when SUPABASE_JWT_SECRET (Supabase project JWT secret, HS256) is configured.
+    Without this check anyone can craft a token with any email/phone and pass as superadmin.
+    Returns True when the signature is valid, or when no secret is configured (old behaviour, logged).
+    """
+    secret = os.getenv("SUPABASE_JWT_SECRET")
+    if not secret:
+        print("[Auth WARNING] SUPABASE_JWT_SECRET not set - JWT signatures are NOT being verified.")
+        return True
+    import hmac, hashlib
+    try:
+        head_b64, payload_b64, sig_b64 = token.split(".")
+        pad = lambda x: x + "=" * ((4 - len(x) % 4) % 4)
+        header = json.loads(base64.urlsafe_b64decode(pad(head_b64)).decode("utf-8"))
+        if header.get("alg") != "HS256":
+            print(f"[Auth] Unsupported JWT alg {header.get('alg')} for secret verification")
+            return False
+        expected = hmac.new(secret.encode(), f"{head_b64}.{payload_b64}".encode(), hashlib.sha256).digest()
+        return hmac.compare_digest(expected, base64.urlsafe_b64decode(pad(sig_b64)))
+    except Exception as e:
+        print(f"[Auth] JWT signature check failed: {e}")
+        return False
+
+
+def _parse_list(raw):
+    """image_urls / image_captions may arrive as a list, JSON text, a Postgres array literal '{a,b}' or a single string."""
+    if raw is None:
+        return []
+    if isinstance(raw, (list, tuple)):
+        return [str(x).strip() for x in raw if x and str(x).strip()]
+    s = str(raw).strip()
+    if not s:
+        return []
+    if s.startswith("["):
+        try:
+            return _parse_list(json.loads(s))
+        except Exception:
+            pass
+    if s.startswith("{") and s.endswith("}"):
+        return [p.strip().strip('"') for p in s[1:-1].split(",") if p.strip().strip('"')]
+    return [s]
+
+
 def verify_superadmin_request(request):
     """
     Enforces backend authorization.
@@ -30,6 +74,8 @@ def verify_superadmin_request(request):
         return False, None, None, JsonResponse({"detail": "Missing Authorization header"}, status=401)
     
     token = auth_header.split(" ")[1]
+    if not _verify_jwt_signature(token):
+        return False, None, None, JsonResponse({"detail": "Invalid token signature"}, status=401)
     user_id = None
     email = None
     
@@ -100,12 +146,20 @@ def get_eligible_clippings(request):
 
     try:
         with connection.cursor() as cursor:
+            # Does the clippings table store photo captions? (used under photos in the newspaper)
+            has_captions = False
+            try:
+                cursor.execute("SELECT 1 FROM information_schema.columns WHERE table_name = 'clippings' AND column_name = 'image_captions' LIMIT 1")
+                has_captions = cursor.fetchone() is not None
+            except Exception:
+                has_captions = False
+            cap_col = "c.image_captions" if has_captions else "NULL"
             # Query clippings published on specified date
             query = """
                 SELECT 
                     c.id, c.headline, c.article_content,
                     c.image_url, c.image_urls, c.created_at,
-                    c.user_id, p.full_name as reporter_name, c.state, c.district
+                    c.user_id, p.full_name as reporter_name, c.state, c.district, """ + cap_col + """ AS image_captions
                 FROM clippings c
                 LEFT JOIN profiles p ON c.user_id = p.id
                 WHERE (c.is_posted = true OR c.is_posted IS NULL OR c.status IN ('completed', 'published', 'posted'))
@@ -118,6 +172,7 @@ def get_eligible_clippings(request):
             """
             cursor.execute(query, [date_str, date_str])
             rows = cursor.fetchall()
+            is_fallback = False
             
             # If no results found for exact date, fetch recent published feed items as fallback
             if not rows:
@@ -125,7 +180,7 @@ def get_eligible_clippings(request):
                     SELECT 
                         c.id, c.headline, c.article_content,
                         c.image_url, c.image_urls, c.created_at,
-                        c.user_id, p.full_name as reporter_name, c.state, c.district
+                        c.user_id, p.full_name as reporter_name, c.state, c.district, """ + cap_col + """ AS image_captions
                     FROM clippings c
                     LEFT JOIN profiles p ON c.user_id = p.id
                     WHERE (c.is_posted = true OR c.is_posted IS NULL OR c.status IN ('completed', 'published', 'posted'))
@@ -135,19 +190,17 @@ def get_eligible_clippings(request):
                 """
                 cursor.execute(fallback_query)
                 rows = cursor.fetchall()
+                is_fallback = True   # NOTE: these are NOT from the requested date - the admin screen should warn
 
             articles = []
             for r in rows:
-                raw_imgs = r[4]
-                if isinstance(raw_imgs, str):
-                    try:
-                        raw_imgs = json.loads(raw_imgs)
-                    except:
-                        raw_imgs = [raw_imgs]
-                elif not raw_imgs and r[3]:
-                    raw_imgs = [r[3]]
-                elif not raw_imgs:
-                    raw_imgs = []
+                # image_urls = the reporter's photos (1 or 2, sometimes more). Keep ALL of them so
+                # two-photo stories print both photos. image_url is only a fallback.
+                raw_imgs = []
+                for u in _parse_list(r[4]) or _parse_list(r[3]):
+                    if u not in raw_imgs:
+                        raw_imgs.append(u)
+                captions = _parse_list(r[10]) if len(r) > 10 else []
 
                 articles.append({
                     "id": str(r[0]),
@@ -158,6 +211,8 @@ def get_eligible_clippings(request):
                     "subheadline": "",
                     "image_url": r[3] or (raw_imgs[0] if raw_imgs else ""),
                     "image_urls": raw_imgs,
+                    "image_captions": captions,
+                    "image_count": len(raw_imgs),
                     "highlight_list": [],
                     "created_at": str(r[5]) if r[5] else "",
                     "user_id": str(r[6]) if r[6] else "",
@@ -170,6 +225,7 @@ def get_eligible_clippings(request):
             return JsonResponse({
                 "date": date_str,
                 "total_eligible": len(articles),
+                "is_fallback": is_fallback,
                 "articles": articles
             })
     except Exception as e:
@@ -216,7 +272,9 @@ def preview_daily_newspaper(request):
         )
 
         total_articles = len(articles)
-        total_pages = max(1, (total_articles + 9) // 10)
+        # The preview HTML paginates itself in the browser (needs scripts allowed in the preview iframe:
+        # <iframe sandbox="allow-scripts allow-same-origin">). This number is only an estimate.
+        total_pages = max(1, (total_articles + 7) // 8)
 
         return JsonResponse({
             "success": True,
