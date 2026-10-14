@@ -1,5 +1,6 @@
 import os
 import re
+import math
 import threading
 from datetime import datetime
 from typing import List, Dict, Any, Optional
@@ -200,34 +201,72 @@ def balance_into_two_columns(articles_list: List[Dict[str, Any]]) -> tuple:
 
 def partition_articles_into_pages(ordered_articles: List[Dict[str, Any]]) -> List[List[Dict[str, Any]]]:
     total = len(ordered_articles)
-    if total <= 9:
+    if total <= 1:
         return [ordered_articles]
 
-    # Page 1 holds up to 9 articles (lead + 4 in each column)
-    # Subsequent pages hold up to 10 articles (5 in each column)
-    subsequent_pages = max(1, (total - 9 + 9) // 10)
-    total_pages = 1 + subsequent_pages
+    lead = ordered_articles[0]
+    sec = ordered_articles[1:]
 
-    if total_pages == 2:
-        p1_count = min(9, max(5, total // 2))
-        return [ordered_articles[:p1_count], ordered_articles[p1_count:]]
+    P1_COL_CAP = 1050.0   # Maximum secondary column height on Page 1
+    SUB_COL_CAP = 1450.0  # Maximum column height on Subsequent pages
+    P1_TOTAL_CAP = P1_COL_CAP * 2    # 2100.0px secondary capacity
+    SUB_TOTAL_CAP = SUB_COL_CAP * 2  # 2900.0px secondary capacity
 
-    p1_count = min(9, max(7, total // total_pages))
-    remaining = ordered_articles[p1_count:]
-    rem_total = len(remaining)
+    total_sec_h = sum(estimate_article_card_height(a, is_lead=False) for a in sec)
 
-    # Evenly distribute remaining articles across subsequent_pages
-    base = rem_total // subsequent_pages
-    extra = rem_total % subsequent_pages
+    # For compact editions (<= 10 articles total and fits within Page 1 capacity), single page
+    if total <= 10 and total_sec_h <= P1_TOTAL_CAP * 1.05:
+        return [ordered_articles]
 
-    pages = [ordered_articles[:p1_count]]
-    start = 0
-    for i in range(subsequent_pages):
-        count = base + (1 if i < extra else 0)
-        page_slice = remaining[start:start + count]
-        start += count
-        if page_slice:
-            pages.append(page_slice)
+    rem_h = max(0.0, total_sec_h - P1_TOTAL_CAP * 0.90)
+    num_sub = max(1, math.ceil(rem_h / (SUB_TOTAL_CAP * 0.90)))
+    num_pages = 1 + num_sub
+
+    # Target fill ratio so all pages are balanced and packed tightly without empty pages
+    total_capacity = P1_TOTAL_CAP + (num_pages - 1) * SUB_TOTAL_CAP
+    fill_ratio = min(0.95, total_sec_h / total_capacity)
+
+    p1_target = P1_TOTAL_CAP * fill_ratio
+    sub_target = SUB_TOTAL_CAP * fill_ratio
+
+    pages = []
+    pool = list(sec)
+
+    # Page 1
+    p1_articles = []
+    cur_h = 0.0
+    while pool:
+        next_h = estimate_article_card_height(pool[0], is_lead=False)
+        if cur_h > 0 and len(p1_articles) >= 4:
+            if (cur_h + next_h > P1_TOTAL_CAP) or (cur_h >= p1_target and (cur_h + next_h - p1_target) > (cur_h - p1_target)):
+                break
+        p1_articles.append(pool.pop(0))
+        cur_h += next_h
+
+    pages.append([lead] + p1_articles)
+
+    # Subsequent pages
+    for p in range(1, num_pages):
+        is_last = (p == num_pages - 1)
+        p_articles = []
+        cur_h = 0.0
+        while pool:
+            next_h = estimate_article_card_height(pool[0], is_lead=False)
+            if not is_last and cur_h > 0 and len(p_articles) >= 4:
+                if (cur_h + next_h > SUB_TOTAL_CAP) or (cur_h >= sub_target and (cur_h + next_h - sub_target) > (cur_h - sub_target)):
+                    break
+            p_articles.append(pool.pop(0))
+            cur_h += next_h
+        if p_articles:
+            pages.append(p_articles)
+
+    # Any leftover articles distributed to last page
+    if pool:
+        if pages:
+            pages[-1].extend(pool)
+        else:
+            pages.append(pool)
+
     return pages
 
 def build_newspaper_html(
@@ -321,16 +360,14 @@ def build_newspaper_html(
                 </div>
                 """
                 cards_left, cards_right = balance_into_two_columns(sec_articles)
-                col_justify_left = "space-between" if len(cards_left) >= 4 else "flex-start"
-                col_justify_right = "space-between" if len(cards_right) >= 4 else "flex-start"
                 page_content_html = f"""
                 <div style="flex: 1 1 0; min-height: 0; display: flex; flex-direction: column;">
                     {lead_story_html}
                     <div class="secondary-grid" style="flex: 1 1 0; min-height: 0; display: flex; gap: 8px; align-items: stretch;">
-                        <div class="newspaper-col" style="flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; justify-content: {col_justify_left}; gap: 5px;">
+                        <div class="newspaper-col" style="flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; justify-content: flex-start; gap: 6px;">
                             {''.join(cards_left)}
                         </div>
-                        <div class="newspaper-col" style="flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; justify-content: {col_justify_right}; gap: 5px;">
+                        <div class="newspaper-col" style="flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; justify-content: flex-start; gap: 6px;">
                             {''.join(cards_right)}
                         </div>
                     </div>
@@ -351,14 +388,12 @@ def build_newspaper_html(
                 """
             else:
                 cards_left, cards_right = balance_into_two_columns(page_articles)
-                col_justify_left = "space-between" if len(cards_left) >= 4 else "flex-start"
-                col_justify_right = "space-between" if len(cards_right) >= 4 else "flex-start"
                 page_content_html = f"""
                 <div class="secondary-grid" style="flex: 1 1 0; min-height: 0; display: flex; gap: 8px; align-items: stretch;">
-                    <div class="newspaper-col" style="flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; justify-content: {col_justify_left}; gap: 5px;">
+                    <div class="newspaper-col" style="flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; justify-content: flex-start; gap: 6px;">
                         {''.join(cards_left)}
                     </div>
-                    <div class="newspaper-col" style="flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; justify-content: {col_justify_right}; gap: 5px;">
+                    <div class="newspaper-col" style="flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; justify-content: flex-start; gap: 6px;">
                         {''.join(cards_right)}
                     </div>
                 </div>
