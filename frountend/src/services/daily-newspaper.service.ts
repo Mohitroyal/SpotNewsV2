@@ -316,7 +316,7 @@ export const dailyNewspaperService = {
 
       let { data: clippings } = await supabase
         .from('clippings')
-        .select('id, user_id, headline, subheadline, kicker, content, image_url, image_urls, highlight_list, created_at, reporter_name, district, location, state, status')
+        .select('id, user_id, headline, article_content, image_url, image_urls, created_at, district, state, status')
         .gte('created_at', startUTC)
         .lte('created_at', endUTC)
         .not('status', 'eq', 'draft')
@@ -330,7 +330,7 @@ export const dailyNewspaperService = {
       if (clippingsList.length === 0) {
         const { data: recent } = await supabase
           .from('clippings')
-          .select('id, user_id, headline, subheadline, kicker, content, image_url, image_urls, highlight_list, created_at, reporter_name, district, location, state, status')
+          .select('id, user_id, headline, article_content, image_url, image_urls, created_at, district, state, status')
           .not('status', 'eq', 'draft')
           .not('status', 'eq', 'rejected')
           .order('created_at', { ascending: false })
@@ -351,22 +351,23 @@ export const dailyNewspaperService = {
 
       const articles: EligibleArticle[] = clippingsList.map((c: any) => {
         const prof = profileMap[c.user_id] || {};
+        const text = c.article_content || '';
         return {
           id: c.id,
           headline: c.headline || 'శీర్షిక లేదు',
-          summary: c.summary || c.content || '',
-          content: c.content || c.summary || '',
-          kicker: c.kicker || '',
-          subheadline: c.subheadline || '',
+          summary: text,
+          content: text,
+          kicker: '',
+          subheadline: '',
           image_url: c.image_url || (Array.isArray(c.image_urls) ? c.image_urls[0] : ''),
           image_urls: Array.isArray(c.image_urls) ? c.image_urls : (c.image_url ? [c.image_url] : []),
-          highlight_list: Array.isArray(c.highlight_list) ? c.highlight_list : [],
+          highlight_list: [],
           created_at: c.created_at || '',
           published_at: c.published_at || c.created_at || '',
           user_id: c.user_id || '',
-          reporter_name: c.reporter_name || prof.full_name || prof.email?.split('@')[0] || 'రిపోర్టర్',
+          reporter_name: prof.full_name || prof.email?.split('@')[0] || 'రిపోర్టర్',
           district: c.district || '',
-          location: c.location || c.district || 'హైదరాబాద్',
+          location: c.district || 'హైదరాబాద్',
           state: c.state || '',
         };
       });

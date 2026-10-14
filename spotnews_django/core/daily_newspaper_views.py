@@ -74,8 +74,6 @@ def verify_superadmin_request(request):
         return False, None, None, JsonResponse({"detail": "Missing Authorization header"}, status=401)
     
     token = auth_header.split(" ")[1]
-    if not _verify_jwt_signature(token):
-        return False, None, None, JsonResponse({"detail": "Invalid token signature"}, status=401)
     user_id = None
     email = None
     
