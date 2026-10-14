@@ -41,11 +41,13 @@ def sanitize_text(text: str) -> str:
     text = re.sub(r'[\x00-\x1F\x7F]', '', str(text))
     return text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace('"', "&quot;").strip()
 
-def optimize_image_url(url: Optional[str], max_width: int = 350, quality: int = 65) -> str:
+def optimize_image_url(url: Optional[str], max_width: int = 160, quality: int = 45) -> str:
     """
     Supabase Storage on-the-fly image optimization:
-    Converts raw 12MP (4000x3000) camera photos into compact ~350px thumbnails.
-    Cuts image memory from 48MB per bitmap down to <0.3MB per bitmap in Chromium!
+    Converts raw 12MP (4000x3000) camera photos into compact ~160px thumbnails.
+    Cuts image memory from 48MB per bitmap down to ~80KB per bitmap in Chromium!
+    Default: 160px / q45 to keep total PDF render RAM under 512MB on Render free tier.
+    Use max_width=250+ only for hero/masthead images where quality matters more.
     """
     if not url:
         return ""
@@ -104,11 +106,12 @@ def render_article_card_html(art: Dict[str, Any], is_lead: bool = False) -> str:
     font_size = "11px" if len(cont) < 250 else ("10.5px" if len(cont) < 650 else "9.8px")
     line_height = "1.38" if len(cont) < 250 else ("1.32" if len(cont) < 650 else "1.26")
 
-    # Complete uncropped images with object-fit: contain so 100% of the image is shown without half/cropped images!
+    # Images: use 160px/q45 for article cards (cuts bitmap RAM 6× vs 400px/q65)
+    # Lead images use 220px/q55 for slightly better quality in the lead slot
     if len(imgs) >= 2:
-        img_max_h = "140px" if is_lead else "95px"
-        opt1 = optimize_image_url(imgs[0], max_width=400, quality=65)
-        opt2 = optimize_image_url(imgs[1], max_width=400, quality=65)
+        img_max_h = "130px" if is_lead else "85px"
+        opt1 = optimize_image_url(imgs[0], max_width=220 if is_lead else 160, quality=55 if is_lead else 45)
+        opt2 = optimize_image_url(imgs[1], max_width=220 if is_lead else 160, quality=55 if is_lead else 45)
         img_block = f"""
         <div style="margin-bottom: 2px; width: 100%;">
             <div style="display: flex; gap: 5px; justify-content: center; align-items: center;">
@@ -137,8 +140,8 @@ def render_article_card_html(art: Dict[str, Any], is_lead: bool = False) -> str:
             """
         body_html = f"{img_block}{text_block}"
     elif len(imgs) == 1:
-        img_max_h = "165px" if is_lead else "110px"
-        opt = optimize_image_url(imgs[0], max_width=400, quality=65)
+        img_max_h = "145px" if is_lead else "100px"
+        opt = optimize_image_url(imgs[0], max_width=220 if is_lead else 160, quality=55 if is_lead else 45)
         body_html = f"""
         <div style="font-size: {font_size}; line-height: {line_height}; text-align: justify; color: #111;">
             <div style="width: 45%; float: left; margin-right: 7px; margin-bottom: 2px; text-align: center;">
@@ -623,17 +626,25 @@ def generate_chunked_daily_newspaper_pdf(
                 "--no-zygote",
                 "--renderer-process-limit=1",
                 "--single-process-network-service",
-                "--js-flags=--max-old-space-size=32",
+                # Keep V8 heap small — HTML+CSS render doesn't need much JS heap
+                "--js-flags=--max-old-space-size=32 --lite-mode",
+                # Disable all caches — pages are rendered once and discarded
                 "--disk-cache-size=1",
                 "--media-cache-size=1",
+                # Aggressive memory trimming
+                "--memory-pressure-off",
                 "--disable-site-isolation-trials",
-                "--disable-features=AudioServiceOutOfProcess,IsolateOrigins,site-per-process,Translate,OptimizationHints,BackForwardCache,MediaRouter",
+                "--disable-features=AudioServiceOutOfProcess,IsolateOrigins,site-per-process,Translate,OptimizationHints,BackForwardCache,MediaRouter,ImageDecodeThreads",
                 "--disable-extensions",
                 "--disable-background-networking",
                 "--disable-default-apps",
                 "--disable-sync",
                 "--disable-translate",
-                "--mute-audio"
+                "--mute-audio",
+                # Force GPU image raster off (uses CPU but no GPU VRAM)
+                "--disable-accelerated-2d-canvas",
+                "--disable-accelerated-jpeg-decoding",
+                "--disable-accelerated-video-decode",
             ]
         }
         if chrome_path:
@@ -682,7 +693,7 @@ def generate_chunked_daily_newspaper_pdf(
                                             .filter(img => !img.complete)
                                             .map(img => new Promise(res => { img.onload = img.onerror = res; }))
                                     ),
-                                    new Promise(res => setTimeout(res, 2500))
+                                    new Promise(res => setTimeout(res, 800))
                                 ])
                             """)
                         except Exception:
