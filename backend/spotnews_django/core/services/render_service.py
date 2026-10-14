@@ -324,12 +324,11 @@ class RenderService:
         
         _img_urls = data.get("image_urls") or ([data.get("image_url")] if data.get("image_url") else [])
         is_single_img = len(_img_urls) == 1
-        is_explicit_other_template = any(t in template_key or t in data_tid for t in ["bharath_reporter", "national_news", "custom", "rti_express"]) and raw_image_layout not in ["patternb", "heroimage", "singleimagepatternb"]
         
         is_pattern_b = (
             raw_image_layout in ["patternb", "heroimage", "singleimagepatternb"] or
             template_key in ["pattern_b", "hero-image", "hero_image"] or
-            (is_single_img and not is_explicit_other_template)
+            is_single_img
         )
 
         if is_pattern_b:
@@ -683,11 +682,7 @@ class RenderService:
                 if (rawLayout.includes('patternd')) {
                     return 3;
                 }
-                if (urls.length === 2) {
-                    return 2;
-                }
-                const isSingleSideLayout = (urls.length === 1) && (rawLayout.includes('patterna') || templateIdStr.includes('rtiexpress') || (!rawLayout.includes('patternb') && !rawLayout.includes('patternd') && !rawLayout.includes('single') && !rawLayout.includes('hero') && !rawLayout.includes('patternc') && !rawLayout.includes('patterng')));
-                if (isSingleSideLayout) {
+                if (urls.length === 1 || urls.length === 2) {
                     return 2;
                 }
                 if (charLen < 800) {
@@ -721,7 +716,7 @@ class RenderService:
                     const isArticleStyle = rawLayout.includes('articlestyle');
                     let isPatternB = rawLayout.includes('patternb') || rawLayout.includes('patterna') || rawLayout.includes('patternd') || rawLayout.includes('patternc') || rawLayout.includes('patterne') || isArticleStyle || isCustom;
                     const isSinglePatternC = !isCustom && rawLayout.includes('patternc') && urls.length === 1;
-                    const isSinglePatternA = !isCustom && urls.length === 1 && (rawLayout.includes('patterna') || templateIdStr.includes('rtiexpress'));
+                    const isSinglePatternA = !isCustom && urls.length === 1 && rawLayout.includes('patterna');
                     if (isSinglePatternC || isSinglePatternA) {
                         isPatternB = false;
                     }
@@ -731,37 +726,7 @@ class RenderService:
                     const isDoublePatternB = (urls.length === 2) && !rawLayout.includes('patternd');
                     const isTriplePatternB = isPatternB && urls.length >= 3;
 
-                    const isSingleLeft75 = (urls.length === 1) && (rawLayout.includes('patterng') || rawLayout.includes('left75') || rawLayout.includes('pattern75') || rawLayout.includes('75left') || rawLayout.includes('75'));
-                    
-                    if (isSingleLeft75) {
-                        // Single image: Left side covering ~58% width, dynamic height based on text content
-                        let w0 = Math.round(W_canvas * 0.58);
-                        let cap0 = String(captions[0] || '').trim();
-                        let capAllowance0 = cap0 ? Math.ceil(cap0.length / Math.max(1, Math.floor(w0 / 6.5))) * 15 + 8 : 0;
-                        
-                        let h0;
-                        if (totalChars <= 1400) {
-                            // Short/medium articles: image covers full height of right column
-                            h0 = Math.max(200, H_canvas - capAllowance0);
-                        } else {
-                            // Longer articles: image covers ~72% height, remaining text flows below
-                            h0 = Math.max(300, Math.round(H_canvas * 0.72));
-                        }
-                        
-                        obstacles.push({
-                            url: urls[0],
-                            caption: captions[0] || '',
-                            x: 0,
-                            y: 0,
-                            w: w0,
-                            h: Math.round(h0 + capAllowance0),
-                            imgH: Math.round(h0),
-                            isCentered: false,
-                            visW: w0,
-                            objectFit: 'contain',
-                            objectPosition: 'center center'
-                        });
-                    } else if (rawLayout.includes('patterng')) {
+                    if (rawLayout.includes('patterng') && urls.length > 1) {
                         // Pattern G ALWAYS forces a horizontal gallery of ALL images at the top!
                         let count = urls.length;
                         if (count > 0) {
@@ -875,8 +840,8 @@ class RenderService:
                         // Both images share equal height, matching Image 5 model (50%/50% side-by-side)
                         let sharedH = Math.min(Math.round(w_img0 / 1.35), Math.max(220, Math.round(H_canvas * 0.36)));
                         
-                        let cap0 = String(captions[0] || (langKey === 'te' ? 'కార్యక్రమానికి సంబంధించిన ముఖ్య చిత్రం.' : 'Key photo of the event.')).trim();
-                        let cap1 = String(captions[1] || (langKey === 'te' ? 'తాజా పరిణామంపై అదనపు దృశ్యం.' : 'Additional photo of the development.')).trim();
+                        let cap0 = String(captions[0] || '').trim();
+                        let cap1 = String(captions[1] || '').trim();
                         
                         let capAllowance0 = cap0 ? Math.ceil(cap0.length / Math.max(1, Math.floor(w_img0 / 6.5))) * 15 + 10 : 0;
                         let capAllowance1 = cap1 ? Math.ceil(cap1.length / Math.max(1, Math.floor(w_img1 / 6.5))) * 15 + 10 : 0;
@@ -910,33 +875,30 @@ class RenderService:
                             objectFit: 'cover',
                             objectPosition: 'center center'
                         });
-                    } else if (urls.length === 1 || rawLayout.includes('patternb') || rawLayout.includes('patternd') || rawLayout.includes('single') || rawLayout.includes('hero') || isSinglePatternC || rawLayout.includes('patternc')) {
+                    } else if (urls.length === 1 || rawLayout.includes('patternb') || rawLayout.includes('single') || rawLayout.includes('hero') || isSinglePatternC || rawLayout.includes('patternc')) {
                         let dynamicH = Math.round(W_canvas / aspect0);
-                        let maxAllowedH = Math.round(Math.max(H_canvas, 1200) * 0.60);
+                        let maxAllowedH = Math.round(Math.max(H_canvas, 1200) * 0.55);
                         let h0 = Math.min(dynamicH, maxAllowedH);
-                        let w0 = Math.round(h0 * aspect0);
-                        if (w0 > W_canvas) {
-                            w0 = W_canvas;
-                            h0 = Math.round(w0 / aspect0);
+                        let visW0 = Math.min(W_canvas, Math.round(h0 * aspect0));
+                        if (visW0 > W_canvas) {
+                            visW0 = W_canvas;
+                            h0 = Math.round(visW0 / aspect0);
                         }
-                        let imgX = Math.round((W_canvas - w0) / 2);
-                        let imgY = 0;
-                        let isPatternB_centered = true;
                         
-                        let cap0 = String(captions[0] || (langKey === 'te' ? 'కార్యక్రమానికి సంబంధించిన ముఖ్య చిత్రం.' : '')).trim();
-                        let capAllowance0 = cap0 ? Math.ceil(cap0.length / Math.max(1, Math.floor((isPatternB_centered ? w0 : w0) / 6.5))) * 15 + 8 : 0;
+                        let cap0 = String(captions[0] || '').trim();
+                        let capAllowance0 = cap0 ? Math.ceil(cap0.length / Math.max(1, Math.floor(visW0 / 6.5))) * 15 + 8 : 0;
                         
                         obstacles.push({
                             url: urls[0],
                             caption: cap0,
-                            x: imgX,
-                            y: imgY,
-                            w: Math.round(w0),
+                            x: 0,
+                            y: 0,
+                            w: W_canvas,
                             h: Math.round(h0 + capAllowance0),
                             imgH: Math.round(h0),
-                            isCentered: isPatternB_centered,
-                            visW: Math.round(w0),
-                            objectFit: 'cover',
+                            isCentered: true,
+                            visW: Math.round(visW0),
+                            objectFit: 'contain',
                             objectPosition: 'center center'
                         });
                     } else if (isSinglePatternA || rawLayout.includes('patterna')) {
@@ -1165,7 +1127,7 @@ class RenderService:
                 });
                 
                 const rawLayoutStr = String(data.image_layout || "default").toLowerCase().replace(/[^a-z]/g, "");
-                if (urls.length === 2 && !rawLayoutStr.includes('patternd') && (rawLayoutStr.includes('patternc') || rawLayoutStr.includes('patterna') || rawLayoutStr.includes('patternb') || rawLayoutStr === 'default' || rawLayoutStr === '')) {
+                if ((urls.length === 1 || urls.length === 2) && !rawLayoutStr.includes('patternd') && !rawLayoutStr.includes('patterna')) {
                     let maxH = 0;
                     obstacles.forEach(o => {
                         if (o.y === 0 && o.h > maxH && o.type !== 'summary_bullets') {
@@ -1184,64 +1146,7 @@ class RenderService:
 
                 // Flow layout function
                 const regions = [];
-                const rawLayoutStrPass = String(data.image_layout || "default").toLowerCase().replace(/[^a-z]/g, "");
-                const isSingleLeft75Pass = (urls.length === 1) && (rawLayoutStrPass.includes('patterng') || rawLayoutStrPass.includes('left75') || rawLayoutStrPass.includes('pattern75') || rawLayoutStrPass.includes('75left') || rawLayoutStrPass.includes('75'));
-
-                if (isSingleLeft75Pass && obstacles.length > 0) {
-                    const obs0 = obstacles[0];
-                    const G_side = 24;
-                    const rightX = obs0.w + G_side;
-                    const rightW = W_canvas - rightX;
-                    const rightH = obs0.h;
-                    
-                    // 1. Right Column next to the 75% left image
-                    const colRight = document.createElement('div');
-                    colRight.className = 'nc-column col-right';
-                    colRight.style.position = 'absolute';
-                    colRight.style.left = `${rightX}px`;
-                    colRight.style.top = '0px';
-                    colRight.style.width = `${rightW}px`;
-                    
-                    const rBoxRight = document.createElement('div');
-                    rBoxRight.className = 'nc-text-region-box';
-                    rBoxRight.style.position = 'absolute';
-                    rBoxRight.style.left = '0px';
-                    rBoxRight.style.top = '0px';
-                    rBoxRight.style.width = `${rightW}px`;
-                    rBoxRight.style.height = `${rightH}px`;
-                    rBoxRight.style.boxSizing = 'border-box';
-                    rBoxRight.style.overflow = 'hidden';
-                    colRight.appendChild(rBoxRight);
-                    canvas.appendChild(colRight);
-                    regions.push({ rBox: rBoxRight, height: rightH, y: 0, col: 0 });
-                    
-                    // 2. Full-Width Bottom Section spanning across under the image (only when canvas height allows)
-                    const botY = obs0.h + 16;
-                    const botH = Math.max(0, H_canvas - botY);
-                    
-                    if (botH > 25) {
-                        const colBot = document.createElement('div');
-                        colBot.className = 'nc-column col-bottom';
-                        colBot.style.position = 'absolute';
-                        colBot.style.left = '0px';
-                        colBot.style.top = `${botY}px`;
-                        colBot.style.width = `${W_canvas}px`;
-                        
-                        const rBoxBot = document.createElement('div');
-                        rBoxBot.className = 'nc-text-region-box';
-                        rBoxBot.style.position = 'absolute';
-                        rBoxBot.style.left = '0px';
-                        rBoxBot.style.top = '0px';
-                        rBoxBot.style.width = `${W_canvas}px`;
-                        rBoxBot.style.height = `${botH}px`;
-                        rBoxBot.style.boxSizing = 'border-box';
-                        rBoxBot.style.overflow = 'hidden';
-                        colBot.appendChild(rBoxBot);
-                        canvas.appendChild(colBot);
-                        regions.push({ rBox: rBoxBot, height: botH, y: botY, col: 1 });
-                    }
-                } else {
-                    for (let c = 0; c < N; c++) {
+                for (let c = 0; c < N; c++) {
                         const L_c = c * (W_col + G);
                         const R_c = L_c + W_col;
                         
@@ -1348,7 +1253,6 @@ class RenderService:
                             regions.push({ rBox, height: h, y: int.yStart, col: c });
                         });
                     }
-                }
                 
                 // Strict multi-column newspaper reading flow:
                 // Column by column (Column 0 -> Column 1 -> Column 2), and top-to-bottom within each column.
@@ -1469,30 +1373,7 @@ class RenderService:
                 // Third image is now handled as an absolute obstacle at bottom-right
                 
                 if (isFinal) {
-                    if (isSingleLeft75Pass && obstacles.length > 0) {
-                        const rBoxRight = regions[0] ? regions[0].rBox : null;
-                        const rBoxBot = regions[1] ? regions[1].rBox : null;
-                        const hasBottomText = rBoxBot && rBoxBot.lastElementChild && rBoxBot.innerText.trim() !== '';
-                        
-                        if (rBoxRight && !hasBottomText) {
-                            // All text fits cleanly in the right column! Align image height exactly to the right column
-                            const textBottomY = rBoxRight.scrollHeight;
-                            if (textBottomY > 120) {
-                                const imgDomEl = canvas.querySelector('.nc-absolute-image');
-                                if (imgDomEl) {
-                                    let capEl = imgDomEl.querySelector('.nc-image-caption');
-                                    let capH = capEl ? capEl.offsetHeight + 4 : 0;
-                                    let targetImgH = Math.max(100, textBottomY - capH);
-                                    let imgTag = imgDomEl.querySelector('img');
-                                    if (imgTag) {
-                                        imgTag.style.height = `${targetImgH}px`;
-                                    }
-                                    imgDomEl.style.height = `${textBottomY}px`;
-                                    obstacles[0].h = textBottomY;
-                                }
-                            }
-                        }
-                    }
+
 
                     let maxY = 0;
                     regions.forEach(r => {
@@ -1689,9 +1570,7 @@ class RenderService:
                     }
                 }
 
-                const rawLayoutStr = String(data.image_layout || "default").toLowerCase().replace(/[^a-z]/g, "");
-                const isSingleLeft75Layout = (urls.length === 1) && (rawLayoutStr.includes('patterng') || rawLayoutStr.includes('left75') || rawLayoutStr.includes('pattern75') || rawLayoutStr.includes('75left') || rawLayoutStr.includes('75'));
-                let low = isSingleLeft75Layout ? Math.max(200, Math.round(totalChars * 0.42)) : Math.max(300, Math.round(maxObstacleY + 30));
+                let low = Math.max(300, Math.round(maxObstacleY + 30));
                 let high = H_avail;
                 let H_best = high;
 

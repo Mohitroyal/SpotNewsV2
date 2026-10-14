@@ -71,7 +71,8 @@ class GrokService:
         is_groq = bool(self.api_key and self.api_key.startswith("gsk_"))
         if is_groq:
             models_to_try = [
-                "llama3-70b-8192",
+                "llama-3.3-70b-versatile",
+                "llama-3.1-8b-instant",
                 "llama3-8b-8192",
                 "mixtral-8x7b-32768"
             ]
@@ -113,27 +114,13 @@ class GrokService:
             clean_sum, clean_bps = self._extract_summary_and_bullets(content)
             sections = [p.strip() for p in content.split("\n\n") if p.strip()] or [content]
             
-            caption_fallbacks = {
-                "te": ["కార్యక్రమానికి సంబంధించిన ముఖ్య చిత్రం.", "తాజా పరిణామంపై అదనపు దృశ్యం."],
-                "hi": ["इवेंट के मुख्य क्षण की फोटो।", "नवीनतम विकास पर अतिरिक्त दृष्टिकोण।"],
-                "kn": ["ಕಾರ್ಯಕ್ರಮದ ಪ್ರಮುಖ ಕ್ಷಣವನ್ನು ಸೆರೆಹಿಡಿಯುವ ಫೋಟೋ.", "ಇತ್ತೀಚಿನ ಬೆಳವಣಿಗೆಯ ಕುರಿತು ಹೆಚ್ಚುವರಿ ನೋಟ."],
-                "ta": ["நிகழ்வின் முக்கிய தருணத்தை படம்பிடிக்கும் புகைப்படம்.", "சமீபத்திய வளர்ச்சியின் கூடுதல் பார்வை."],
-                "ml": ["ഇവന്റിന്റെ പ്രധാന നിമിഷം പകർത്തുന്ന ഫോട്ടോ.", "സമീപകാല വികസനത്തെക്കുറിച്ചുള്ള അധിക കാഴ്ചപ്പാട്."],
-                "en": ["Photo capturing the key moment of the event.", "Additional perspective on the recent development."]
-            }
-            lang_key = language.lower()
-            reverse_map = {v.lower(): k for k, v in language_map.items()}
-            if lang_key in reverse_map:
-                lang_key = reverse_map[lang_key]
-            caps = caption_fallbacks.get(lang_key, caption_fallbacks["en"])
-
             return {
                 "headline": sections[0][:60] + "..." if len(sections[0]) > 60 else sections[0],
                 "subheadline": "",
                 "sections": sections,
                 "dateline": "",
                 "byline": "",
-                "image_captions": caps,
+                "image_captions": [],
                 "summary": clean_sum,
                 "bullet_points": clean_bps
             }

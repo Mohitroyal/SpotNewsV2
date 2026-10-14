@@ -324,12 +324,11 @@ class RenderService:
         
         _img_urls = data.get("image_urls") or ([data.get("image_url")] if data.get("image_url") else [])
         is_single_img = len(_img_urls) == 1
-        is_explicit_other_template = any(t in template_key or t in data_tid for t in ["bharath_reporter", "national_news", "custom", "rti_express"]) and raw_image_layout not in ["patternb", "heroimage", "singleimagepatternb"]
         
         is_pattern_b = (
             raw_image_layout in ["patternb", "heroimage", "singleimagepatternb"] or
             template_key in ["pattern_b", "hero-image", "hero_image"] or
-            (is_single_img and not is_explicit_other_template)
+            is_single_img
         )
 
         if is_pattern_b:
@@ -919,24 +918,24 @@ class RenderService:
                             w0 = W_canvas;
                             h0 = Math.round(w0 / aspect0);
                         }
-                        let imgX = Math.round((W_canvas - w0) / 2);
-                        let imgY = 0;
+                        let visW0 = Math.min(w0, W_canvas);
+                        let imgX = 0;
                         let isPatternB_centered = true;
                         
                         let cap0 = String(captions[0] || (langKey === 'te' ? 'కార్యక్రమానికి సంబంధించిన ముఖ్య చిత్రం.' : '')).trim();
-                        let capAllowance0 = cap0 ? Math.ceil(cap0.length / Math.max(1, Math.floor((isPatternB_centered ? w0 : w0) / 6.5))) * 15 + 8 : 0;
+                        let capAllowance0 = cap0 ? Math.ceil(cap0.length / Math.max(1, Math.floor(W_canvas / 6.5))) * 15 + 8 : 0;
                         
                         obstacles.push({
                             url: urls[0],
                             caption: cap0,
-                            x: imgX,
+                            x: 0,
                             y: imgY,
-                            w: Math.round(w0),
+                            w: W_canvas,
                             h: Math.round(h0 + capAllowance0),
                             imgH: Math.round(h0),
-                            isCentered: isPatternB_centered,
-                            visW: Math.round(w0),
-                            objectFit: 'cover',
+                            isCentered: true,
+                            visW: Math.round(visW0),
+                            objectFit: 'contain',
                             objectPosition: 'center center'
                         });
                     } else if (isSinglePatternA || rawLayout.includes('patterna')) {
@@ -1165,7 +1164,7 @@ class RenderService:
                 });
                 
                 const rawLayoutStr = String(data.image_layout || "default").toLowerCase().replace(/[^a-z]/g, "");
-                if (urls.length === 2 && !rawLayoutStr.includes('patternd') && (rawLayoutStr.includes('patternc') || rawLayoutStr.includes('patterna') || rawLayoutStr.includes('patternb') || rawLayoutStr === 'default' || rawLayoutStr === '')) {
+                if ((urls.length === 1 || urls.length === 2) && !rawLayoutStr.includes('patternd') && !rawLayoutStr.includes('patterna')) {
                     let maxH = 0;
                     obstacles.forEach(o => {
                         if (o.y === 0 && o.h > maxH && o.type !== 'summary_bullets') {
