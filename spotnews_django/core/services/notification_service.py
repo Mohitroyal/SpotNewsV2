@@ -58,6 +58,9 @@ def get_firebase_app():
     raise FileNotFoundError("firebase_service_account.json could not be found and FIREBASE_SERVICE_ACCOUNT_JSON env var is not set.")
 
 
+DEFAULT_APP_LOGO = "https://rffrqokpnqoycpozrjuc.supabase.co/storage/v1/object/public/newscraft-clippings/assets/app_logo.png"
+
+
 def send_topic_notification(
     title: str,
     body: str,
@@ -72,21 +75,21 @@ def send_topic_notification(
     """
     get_firebase_app()
 
+    if not image_url:
+        image_url = DEFAULT_APP_LOGO
+
     data_payload = {
         "url": url or "/",
         "channel_id": channel_id,
         "title": title,
         "body": body,
+        "image_url": image_url,
     }
-    if image_url:
-        data_payload["image_url"] = image_url
     if extra_data:
         for k, v in extra_data.items():
             data_payload[str(k)] = str(v)
 
-    notification_kwargs = {"title": title, "body": body}
-    if image_url:
-        notification_kwargs["image"] = image_url
+    notification_kwargs = {"title": title, "body": body, "image": image_url}
 
     message = messaging.Message(
         topic=topic,
@@ -97,8 +100,9 @@ def send_topic_notification(
             notification=messaging.AndroidNotification(
                 channel_id=channel_id,
                 sound="default",
-                color="#D61F3A",
-                image=image_url if image_url else None,
+                color="#015BB3",
+                image=image_url,
+                icon="ic_launcher",
             ),
         ),
     )
@@ -126,21 +130,21 @@ def send_token_notification(
     """
     get_firebase_app()
 
+    if not image_url:
+        image_url = DEFAULT_APP_LOGO
+
     data_payload = {
         "url": url or "/",
         "channel_id": channel_id,
         "title": title,
         "body": body,
+        "image_url": image_url,
     }
-    if image_url:
-        data_payload["image_url"] = image_url
     if extra_data:
         for k, v in extra_data.items():
             data_payload[str(k)] = str(v)
 
-    notification_kwargs = {"title": title, "body": body}
-    if image_url:
-        notification_kwargs["image"] = image_url
+    notification_kwargs = {"title": title, "body": body, "image": image_url}
 
     message = messaging.Message(
         token=token,
@@ -151,8 +155,9 @@ def send_token_notification(
             notification=messaging.AndroidNotification(
                 channel_id=channel_id,
                 sound="default",
-                color="#D61F3A",
-                image=image_url if image_url else None,
+                color="#015BB3",
+                image=image_url,
+                icon="ic_launcher",
             ),
         ),
     )
