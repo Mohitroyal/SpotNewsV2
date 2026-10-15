@@ -148,6 +148,36 @@ def run_clipping_generation_background(clipping_id, data, user_id):
             
         print(f"[BACKGROUND] Finished clipping generation for {clipping_id}")
         
+        # Trigger Push Notification on completion
+        try:
+            from .services.notification_service import send_user_notification, send_topic_notification
+            headline = data.get("headline") or "Spot News 24x7"
+            
+            # 1. Notify the creator that their clipping is ready
+            if user_id:
+                send_user_notification(
+                    user_id=str(user_id),
+                    title="Spot News 24x7",
+                    body=f"✅ మీ న్యూస్ క్లిప్పింగ్ సిద్ధంగా ఉంది: {headline[:60]}",
+                    url=f"/preview/{clipping_id}",
+                    image_url=png_url,
+                    channel_id="news",
+                )
+            
+            # 2. If it is marked as posted, also broadcast to all users
+            if data.get("is_posted") or data.get("publish_immediately"):
+                snippet = (data.get("article_content") or "కొత్త వార్త పబ్లిష్ చేయబడింది.")[:100]
+                send_topic_notification(
+                    title=f"🚨 {headline[:50]}",
+                    body=snippet,
+                    topic="all",
+                    url="/feed",
+                    image_url=png_url,
+                    channel_id="news",
+                )
+        except Exception as notif_err:
+            print(f"[BACKGROUND] Push notification dispatch note: {notif_err}")
+        
     except Exception as e:
         print(f"[BACKGROUND ERROR] Error generating clipping {clipping_id}: {e}")
         import traceback

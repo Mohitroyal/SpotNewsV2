@@ -137,3 +137,90 @@ def admin_auth_users(request):
         print(f"Error fetching auth.users: {e}")
         return JsonResponse({"detail": str(e)}, status=500)
     return JsonResponse(users, safe=False)
+
+@csrf_exempt
+def send_notification_view(request):
+    if request.method != "POST":
+        return JsonResponse({"error": "Method not allowed. Use POST."}, status=405)
+
+    try:
+        body_data = json.loads(request.body.decode("utf-8")) if request.body else {}
+    except Exception:
+        body_data = {}
+
+    title = body_data.get("title", "").strip()
+    body = body_data.get("body", "").strip()
+    if not title or not body:
+        return JsonResponse({"error": "'title' and 'body' are required fields."}, status=400)
+
+    topic = body_data.get("topic")
+    user_id = body_data.get("user_id")
+    token = body_data.get("token")
+    url = body_data.get("url", "/")
+    image_url = body_data.get("image_url")
+    channel_id = body_data.get("channel_id", "news")
+    extra_data = body_data.get("data")
+
+    from core.services.notification_service import (
+        send_topic_notification,
+        send_token_notification,
+        send_user_notification,
+    )
+
+    try:
+        if token:
+            result = send_token_notification(
+                token=token,
+                title=title,
+                body=body,
+                url=url,
+                image_url=image_url,
+                channel_id=channel_id,
+                extra_data=extra_data,
+            )
+        elif user_id:
+            result = send_user_notification(
+                user_id=user_id,
+                title=title,
+                body=body,
+                url=url,
+                image_url=image_url,
+                channel_id=channel_id,
+                extra_data=extra_data,
+            )
+        else:
+            target_topic = topic or "all"
+            result = send_topic_notification(
+                title=title,
+                body=body,
+                topic=target_topic,
+                url=url,
+                image_url=image_url,
+                channel_id=channel_id,
+                extra_data=extra_data,
+            )
+
+        status_code = 200 if result.get("success") else 500
+        return JsonResponse(result, status=status_code)
+    except Exception as e:
+        return JsonResponse({"error": str(e)}, status=500)
+
+@csrf_exempt
+def device_tokens_stats_view(request):
+    try:
+        with connection.cursor() as cursor:
+            cursor.execute("SELECT COUNT(*), COUNT(DISTINCT user_id) FROM public.device_tokens;")
+            row = cursor.fetchone()
+            total_tokens = row[0] if row else 0
+            unique_users = row[1] if row else 0
+
+            cursor.execute("SELECT district_id, COUNT(*) FROM public.device_tokens GROUP BY district_id;")
+            districts = {str(r[0]): r[1] for r in cursor.fetchall()}
+
+        return JsonResponse({
+            "total_device_tokens": total_tokens,
+            "unique_registered_users": unique_users,
+            "tokens_by_district": districts,
+        })
+    except Exception as e:
+        return JsonResponse({"error": str(e)}, status=500)

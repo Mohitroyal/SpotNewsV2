@@ -1,5 +1,8 @@
 from django.urls import path
-from .views import health_check, health_msg91, admin_stats, admin_auth_users
+from .views import (
+    health_check, health_msg91, admin_stats, admin_auth_users,
+    send_notification_view, device_tokens_stats_view
+)
 from .admin_extras import admin_generations, admin_user_role, admin_user_plan, admin_user_ban, admin_user_delete, admin_logos
 
 from .daily_newspaper_views import (
@@ -63,5 +66,11 @@ urlpatterns = [
     path('v1/generate', create_clipping, name='create_clipping'),
     path('v1/generate/', list_clippings, name='list_clippings'),
     path('v1/uploads/image', upload_image, name='upload_image'),
+
+    # Push Notification Endpoints (FCM HTTP v1)
+    path('v1/notifications/send', send_notification_view, name='send_notification'),
+    path('v1/notifications/send/', send_notification_view),
+    path('v1/notifications/tokens', device_tokens_stats_view, name='device_tokens_stats'),
+    path('v1/notifications/tokens/', device_tokens_stats_view),
 ]
 

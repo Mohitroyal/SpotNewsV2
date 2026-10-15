@@ -442,6 +442,19 @@ def generate_daily_newspaper(request):
         except Exception as db_err:
             print(f"Warning: daily_editions database insert fallback: {db_err}")
 
+        # Send broadcast push notification to all users for today's new edition!
+        try:
+            from core.services.notification_service import send_topic_notification
+            send_topic_notification(
+                title=f"📰 {publication_name} - ఈ-పేపర్ సిద్ధంగా ఉంది!",
+                body=f"{edition_date} తేదినాటి దినపత్రిక సిద్ధంగా ఉంది. ఇప్పుడే చదవండి! ({total_articles} వార్తలు, {actual_page_count} పేజీలు)",
+                topic="all",
+                url=f"/newspaper?date={edition_date}",
+                channel_id="news",
+            )
+        except Exception as notif_err:
+            print(f"Daily newspaper push notification note: {notif_err}")
+
         return JsonResponse({
             "success": True,
             "edition_id": str(new_id),

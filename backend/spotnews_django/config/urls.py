@@ -9,4 +9,5 @@ urlpatterns = [
     path('dashboard/', include('dashboard.urls')),
     path('api/auth/', include('otp.urls')),
     path('api/', include('core.urls')),
+    path('', include('core.urls')),
 ]
