@@ -102,7 +102,7 @@ def send_topic_notification(
                 sound="default",
                 color="#015BB3",
                 image=image_url,
-                icon="ic_launcher",
+                icon="ic_stat_logo",
             ),
         ),
     )
@@ -157,7 +157,7 @@ def send_token_notification(
                 sound="default",
                 color="#015BB3",
                 image=image_url,
-                icon="ic_launcher",
+                icon="ic_stat_logo",
             ),
         ),
     )
