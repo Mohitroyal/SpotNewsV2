@@ -222,11 +222,16 @@ def verify_payment(request):
     razorpay_signature = (data.get('razorpay_signature') or '').strip()
     application_id = (data.get('application_id') or data.get('ref_no') or '').strip()
 
-    if not razorpay_order_id or not razorpay_payment_id:
-        return JsonResponse({"error": "razorpay_order_id and razorpay_payment_id are required"}, status=400)
+    if not razorpay_payment_id:
+        return JsonResponse({"error": "Payment ID or UPI UTR number is required"}, status=400)
 
-    # 1. Signature Verification
-    if not is_test_dummy_key() and razorpay_signature:
+    if not razorpay_order_id:
+        razorpay_order_id = f"upi_order_{uuid.uuid4().hex[:12]}"
+
+    is_upi = razorpay_payment_id.startswith('upi_') or razorpay_payment_id.startswith('utr_') or 'upi' in razorpay_payment_id.lower() or not razorpay_signature
+
+    # 1. Signature Verification (Only for Razorpay gateway with signature)
+    if not is_upi and not is_test_dummy_key() and razorpay_signature:
         generated_signature = hmac.new(
             RAZORPAY_KEY_SECRET.encode('utf-8'),
             f"{razorpay_order_id}|{razorpay_payment_id}".encode('utf-8'),
@@ -243,9 +248,9 @@ def verify_payment(request):
             cur.execute("""
                 SELECT id, name, email, phone, status, state, district, reporter_id, valid_until
                 FROM public.reporter_applications
-                WHERE id::text = %s OR order_id = %s
+                WHERE id::text = %s OR email = %s OR phone = %s OR order_id = %s
                 LIMIT 1
-            """, (application_id, razorpay_order_id))
+            """, (application_id, application_id, application_id, razorpay_order_id))
         else:
             cur.execute("""
                 SELECT id, name, email, phone, status, state, district, reporter_id, valid_until
@@ -288,7 +293,7 @@ def verify_payment(request):
         reporter_id = existing_reporter_id or f"SNP-{state_prefix}-{current_year}-{uuid.uuid4().hex[:6].upper()}"
         valid_until = datetime.now(timezone.utc) + timedelta(days=365)
 
-        # 3. Update payments record
+        # 3. Update payments record or insert for direct UPI payments
         cur.execute("""
             UPDATE public.payments
             SET payment_status = 'captured',
@@ -297,6 +302,24 @@ def verify_payment(request):
                 razorpay_signature = %s
             WHERE razorpay_order_id = %s OR application_id::text = %s
         """, (razorpay_payment_id, razorpay_signature, razorpay_order_id, app_id))
+
+        if cur.rowcount == 0:
+            try:
+                cur.execute("""
+                    INSERT INTO public.payments (
+                        application_id, amount, currency, status, payment_method,
+                        razorpay_payment_id, razorpay_order_id, razorpay_signature, created_at
+                    ) VALUES (
+                        %s, %s, 'INR', 'success', %s,
+                        %s, %s, %s, NOW()
+                    )
+                """, (
+                    app_id, DEFAULT_PRICE_INR * 100,
+                    'upi_qr' if is_upi else 'razorpay',
+                    razorpay_payment_id, razorpay_order_id, razorpay_signature
+                ))
+            except Exception as e_pay:
+                print(f"Non-critical payments insert notice: {e_pay}")
 
         # 4. Activate reporter_applications
         cur.execute("""
