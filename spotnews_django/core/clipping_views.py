@@ -31,9 +31,10 @@ def run_clipping_generation_background(clipping_id, data, user_id):
             image_urls = data.get("image_urls", [])
             image_url = data.get("image_url", "")
             
+            video_url = data.get("video_url") or data.get("videoUrl")
             # If video exists but no images exist, inject a transparent 1x1 PNG
             # This forces the template to render the hero-image-wrapper so we get hero_box coordinates
-            if data.get("video_url") and not image_urls and not image_url:
+            if video_url and not image_urls and not image_url:
                 image_url = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII="
                 image_urls = [image_url]
 
@@ -72,7 +73,7 @@ def run_clipping_generation_background(clipping_id, data, user_id):
                 "publication_name": data.get("publication_name", "Newsflow"),
                 "publication_date": data.get("publication_date", ""),
                 "image_urls": image_urls,
-                "video_url": data.get("video_url"),
+                "video_url": data.get("video_url") or data.get("videoUrl"),
                 "language": language,
                 "layout_columns": data.get("layout_columns", "auto"),
                 "font_family": data.get("font_family", "playfair"),
@@ -123,7 +124,7 @@ def run_clipping_generation_background(clipping_id, data, user_id):
         pdf_url = storage_service.upload_file(temp_pdf, f"clippings/{clipping_id}_{timestamp}.pdf")
         
         mp4_url = None
-        video_url = data.get("video_url")
+        video_url = data.get("video_url") or data.get("videoUrl")
         print(f"[DEBUG VIDEO] video_url: {video_url}")
         print(f"[DEBUG VIDEO] hero_box: {hero_box}")
         if video_url and hero_box:
@@ -323,7 +324,8 @@ def create_clipping(request):
         # Insert into Database with 'processing' status
         custom_layout_data = {
             **data,
-            "videoUrl": data.get("video_url"),
+            "videoUrl": data.get("video_url") or data.get("videoUrl"),
+            "video_url": data.get("video_url") or data.get("videoUrl"),
             "reporterName": data.get("reporter_name"),
             "imageUrls": data.get("image_urls", [])
         }

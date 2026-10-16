@@ -175,7 +175,7 @@ class RenderService:
             valid_imgs = [image_url_raw.strip()]
 
         if not valid_imgs:
-            video_url = data.get("video_url")
+            video_url = data.get("video_url") or data.get("videoUrl")
             if video_url:
                 try:
                     import subprocess, base64
