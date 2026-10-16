@@ -320,8 +320,10 @@ export const FeedScreen: React.FC = () => {
           <div className="h-full w-full overflow-y-auto snap-y snap-mandatory no-scrollbar relative bg-black">
             {clippings.map((clip: any, idx: number) => {
               const isLiked = likedIds.has(clip.id);
-              const shouldShowLocalAd = (idx + 1) % 10 === 0 && localAds.length > 0;
-              const localAdIndex = Math.floor(idx / 10) % (localAds.length || 1);
+              const isAdInterval = (idx + 1) % 10 === 0 || idx === 4;
+              const isShortFeedEnd = clippings.length < 5 && idx === clippings.length - 1;
+              const shouldShowLocalAd = (isAdInterval || isShortFeedEnd) && localAds.length > 0;
+              const localAdIndex = Math.floor(idx / 5) % (localAds.length || 1);
               const localAd = localAds[localAdIndex];
 
               return (
@@ -633,6 +635,7 @@ export const FeedScreen: React.FC = () => {
           onComment={openComments}
           onShare={handleShareClick}
           onEndReached={fetchFeed}
+          localAds={localAds}
         />
       )}
     </div>
