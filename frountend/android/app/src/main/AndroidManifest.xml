@@ -58,7 +58,10 @@
             android:grantUriPermissions="true">
             <meta-data android:name="android.support.FILE_PROVIDER_PATHS" android:resource="@xml/file_paths" />
         </provider>
-
+        <!-- Google AdMob Application ID (RTI EXPRESS Spot news 24x7) -->
+        <meta-data
+            android:name="com.google.android.gms.ads.APPLICATION_ID"
+            android:value="ca-app-pub-5229942501184833~5967466877" />
 
     </application>
 
