@@ -11,7 +11,6 @@ from django.core.files.storage import FileSystemStorage
 import os
 
 import asyncio
-import base64
 
 # Import services once adapted for Django
 from .services.grok_service import grok_service
@@ -31,8 +30,37 @@ def run_clipping_generation_background(clipping_id, data, user_id):
             language = data.get("language", "te")
             image_urls = data.get("image_urls", [])
             image_url = data.get("image_url", "")
+            
+            # If video exists but no images exist, inject a transparent 1x1 PNG
+            # This forces the template to render the hero-image-wrapper so we get hero_box coordinates
+            if data.get("video_url") and not image_urls and not image_url:
+                image_url = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII="
+                image_urls = [image_url]
+
             image_count = len(image_urls) if image_urls else (1 if image_url else 0)
             
+            # Insert helper to update stage
+            from asgiref.sync import sync_to_async
+            
+            @sync_to_async
+            def update_stage(stage_msg, progress):
+                try:
+                    with connection.cursor() as cursor:
+                        cursor.execute("SELECT custom_layout FROM clippings WHERE id = %s", [clipping_id])
+                        row = cursor.fetchone()
+                        cl = {}
+                        if row and row[0]:
+                            cl = row[0] if isinstance(row[0], dict) else json.loads(row[0])
+                        cl['stage'] = stage_msg
+                        cl['progress'] = progress
+                        cursor.execute("UPDATE clippings SET custom_layout = %s::jsonb WHERE id = %s", [json.dumps(cl), clipping_id])
+                        # connection.commit() is usually not needed inside an autocommit thread, but let's be safe:
+                        if not connection.in_atomic_block:
+                            connection.commit()
+                except Exception as e:
+                    print(f"[DEBUG STAGE UPDATE] {e}")
+                    
+            await update_stage("Formatting Article with AI...", 15)
             # 2. Text Translation & Formatting via Grok
             formatted_data = await grok_service.format_article(content, language, image_count)
             
@@ -43,8 +71,8 @@ def run_clipping_generation_background(clipping_id, data, user_id):
                 "headline": data.get("headline") or formatted_data.get("headline"),
                 "publication_name": data.get("publication_name", "Newsflow"),
                 "publication_date": data.get("publication_date", ""),
-                "image_url": image_url,
                 "image_urls": image_urls,
+                "video_url": data.get("video_url"),
                 "language": language,
                 "layout_columns": data.get("layout_columns", "auto"),
                 "font_family": data.get("font_family", "playfair"),
@@ -72,6 +100,23 @@ def run_clipping_generation_background(clipping_id, data, user_id):
         temp_png, temp_pdf, hero_box = asyncio.run(_generate())
         
         # 5. Upload to Supabase Storage
+        def _update_stage_sync(stage_msg, progress):
+            try:
+                with connection.cursor() as cursor:
+                    cursor.execute("SELECT custom_layout FROM clippings WHERE id = %s", [clipping_id])
+                    row = cursor.fetchone()
+                    cl = {}
+                    if row and row[0]:
+                        cl = row[0] if isinstance(row[0], dict) else json.loads(row[0])
+                    cl['stage'] = stage_msg
+                    cl['progress'] = progress
+                    cursor.execute("UPDATE clippings SET custom_layout = %s::jsonb WHERE id = %s", [json.dumps(cl), clipping_id])
+                    if not connection.in_atomic_block:
+                        connection.commit()
+            except Exception as e:
+                print(f"[DEBUG STAGE UPDATE] {e}")
+
+        _update_stage_sync("Uploading images to storage...", 75)
         import time
         timestamp = int(time.time())
         png_url = storage_service.upload_file(temp_png, f"clippings/{clipping_id}_{timestamp}.png")
@@ -79,46 +124,106 @@ def run_clipping_generation_background(clipping_id, data, user_id):
         
         mp4_url = None
         video_url = data.get("video_url")
+        print(f"[DEBUG VIDEO] video_url: {video_url}")
+        print(f"[DEBUG VIDEO] hero_box: {hero_box}")
         if video_url and hero_box:
+            temp_video = None
+            temp_mp4 = None
+            temp_bg_video = None
             try:
+                _update_stage_sync("Generating Video (This takes 1-2 minutes)...", 90)
                 import urllib.request
                 import subprocess
+                import gc
+                from PIL import Image
                 from imageio_ffmpeg import get_ffmpeg_exe
                 
+                gc.collect()
+
                 temp_video = f"temp_{clipping_id}.mp4"
                 temp_mp4 = f"temp_out_{clipping_id}.mp4"
                 print(f"[BACKGROUND] Downloading video from {video_url}...")
-                urllib.request.urlretrieve(video_url, temp_video)
+                req = urllib.request.Request(video_url, headers={'User-Agent': 'Mozilla/5.0'})
+                with urllib.request.urlopen(req, timeout=60) as response, open(temp_video, 'wb') as out_file:
+                    import shutil
+                    shutil.copyfileobj(response, out_file)
                 
+                # Low-memory video optimization:
+                # Downscale background PNG to max width 720 to prevent FFmpeg OOM on Render 512MB RAM
                 scale_factor = 1.0
-                x, y = int(hero_box['x'] * scale_factor), int(hero_box['y'] * scale_factor)
-                w, h = int(hero_box['width'] * scale_factor), int(hero_box['height'] * scale_factor)
+                temp_bg_video = temp_png
+                try:
+                    with Image.open(temp_png) as im:
+                        orig_w, orig_h = im.size
+                        if orig_w > 720:
+                            scale_factor = 720.0 / float(orig_w)
+                            target_w = int(orig_w * scale_factor)
+                            target_h = int(orig_h * scale_factor)
+                            target_w -= target_w % 2
+                            target_h -= target_h % 2
+                            resized_bg = im.resize((target_w, target_h), Image.Resampling.LANCZOS)
+                            temp_bg_video = f"temp_bg_{clipping_id}.png"
+                            resized_bg.save(temp_bg_video)
+                except Exception as resize_err:
+                    print(f"[BACKGROUND VIDEO WARN] Could not downscale bg image: {resize_err}")
+                    temp_bg_video = temp_png
+                    scale_factor = 1.0
+
+                x = int(float(hero_box['x']) * scale_factor)
+                y = int(float(hero_box['y']) * scale_factor)
+                w = int(float(hero_box['width']) * scale_factor)
+                h = int(float(hero_box['height']) * scale_factor)
+                # Ensure even dimensions for yuv420p
+                x -= x % 2
+                y -= y % 2
+                w = max(2, w - (w % 2))
+                h = max(2, h - (h % 2))
                 
-                print(f"[BACKGROUND] Running FFmpeg overlay at {x},{y} ({w}x{h})")
+                print(f"[BACKGROUND] Running FFmpeg overlay at {x},{y} ({w}x{h}) on {temp_bg_video}")
                 ffmpeg_exe = get_ffmpeg_exe()
-                # Scale the video, crop it to exact width/height, then overlay on the looped PNG
+                gc.collect()
+
+                # Low-memory FFmpeg flags:
+                # -tune zerolatency, -bf 0: Eliminates lookahead and B-frame buffers in RAM
+                # -threads 1: Avoids multi-thread buffer bloat
+                # fps=24: Reduces decoding frame queue from 60fps
+                # -t 60: Caps maximum render duration
                 cmd = [
                     ffmpeg_exe, "-y",
-                    "-loop", "1", "-i", temp_png,
+                    "-loop", "1", "-i", temp_bg_video,
+                    "-t", "60",
                     "-i", temp_video,
                     "-filter_complex",
-                    f"[1:v]scale={w}:{h}:force_original_aspect_ratio=increase,crop={w}:{h}[vid];[0:v][vid]overlay={x}:{y}:shortest=1,pad=ceil(iw/2)*2:ceil(ih/2)*2[outv]",
+                    f"[1:v]fps=24,scale={w}:{h}:force_original_aspect_ratio=increase,crop={w}:{h}[vid];[0:v][vid]overlay={x}:{y},pad=ceil(iw/2)*2:ceil(ih/2)*2[outv]",
                     "-map", "[outv]", "-map", "1:a?",
                     "-c:v", "libx264",
+                    "-preset", "ultrafast",
+                    "-tune", "zerolatency",
+                    "-bf", "0",
+                    "-threads", "1",
+                    "-max_muxing_queue_size", "1024",
+                    "-bufsize", "1M",
+                    "-maxrate", "1.5M",
+                    "-crf", "26",
                     "-c:a", "aac",
+                    "-b:a", "96k",
                     "-shortest",
                     "-pix_fmt", "yuv420p",
                     temp_mp4
                 ]
-                subprocess.run(cmd, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+                subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, timeout=180)
                 
                 mp4_url = storage_service.upload_file(temp_mp4, f"clippings/{clipping_id}_{timestamp}.mp4", "video/mp4")
-                if os.path.exists(temp_video): os.remove(temp_video)
-                if os.path.exists(temp_mp4): os.remove(temp_mp4)
             except Exception as vid_err:
                 print(f"[BACKGROUND ERROR] Failed to generate MP4: {vid_err}")
                 import traceback
                 traceback.print_exc()
+            finally:
+                if temp_video and os.path.exists(temp_video): os.remove(temp_video)
+                if temp_mp4 and os.path.exists(temp_mp4): os.remove(temp_mp4)
+                if temp_bg_video and temp_bg_video != temp_png and os.path.exists(temp_bg_video): os.remove(temp_bg_video)
+                import gc
+                gc.collect()
 
         if os.path.exists(temp_png):
             os.remove(temp_png)
@@ -127,56 +232,42 @@ def run_clipping_generation_background(clipping_id, data, user_id):
         
         # 6. Update Database Status to 'completed'
         with connection.cursor() as cursor:
-            # Need to update mp4_url if it exists. We might need to alter table if mp4_url column doesn't exist.
-            # Assuming mp4_url exists, since the frontend poll requested it.
             try:
                 cursor.execute(
                     "UPDATE clippings SET status = %s, png_url = %s, pdf_url = %s, mp4_url = %s WHERE id = %s",
                     ['completed', png_url, pdf_url, mp4_url, clipping_id]
                 )
             except Exception as db_err:
-                print(f"[BACKGROUND ERROR] Missing mp4_url column, updating custom_layout instead: {db_err}")
-                import json
+                print(f"[BACKGROUND ERROR] Failed to update mp4_url column: {db_err}")
+                connection.rollback()
+                cursor.execute(
+                    "UPDATE clippings SET status = %s, png_url = %s, pdf_url = %s WHERE id = %s",
+                    ['completed', png_url, pdf_url, clipping_id]
+                )
+            if not connection.in_atomic_block:
+                connection.commit()
+            
+        try:
+            with connection.cursor() as cursor:
                 cursor.execute("SELECT custom_layout FROM clippings WHERE id = %s", [clipping_id])
                 row = cursor.fetchone()
-                custom_layout = json.loads(row[0]) if row and row[0] else {}
-                custom_layout['mp4_url'] = mp4_url
+                custom_layout = {}
+                if row and row[0]:
+                    custom_layout = row[0] if isinstance(row[0], dict) else json.loads(row[0])
+                custom_layout['stage'] = 'Complete'
+                custom_layout['progress'] = 100
+                if mp4_url:
+                    custom_layout['mp4_url'] = mp4_url
                 cursor.execute(
-                    "UPDATE clippings SET status = %s, png_url = %s, pdf_url = %s, custom_layout = %s::jsonb WHERE id = %s",
-                    ['completed', png_url, pdf_url, json.dumps(custom_layout), clipping_id]
+                    "UPDATE clippings SET custom_layout = %s::jsonb WHERE id = %s",
+                    [json.dumps(custom_layout), clipping_id]
                 )
+                if not connection.in_atomic_block:
+                    connection.commit()
+        except Exception as cl_err:
+            print(f"[STAGE COMPLETE ERROR] {cl_err}")
             
         print(f"[BACKGROUND] Finished clipping generation for {clipping_id}")
-        
-        # Trigger Push Notification on completion
-        try:
-            from .services.notification_service import send_user_notification, send_topic_notification
-            headline = data.get("headline") or "Spot News 24x7"
-            
-            # 1. Notify the creator that their clipping is ready
-            if user_id:
-                send_user_notification(
-                    user_id=str(user_id),
-                    title="Spot News 24x7",
-                    body=f"✅ మీ న్యూస్ క్లిప్పింగ్ సిద్ధంగా ఉంది: {headline[:60]}",
-                    url=f"/preview/{clipping_id}",
-                    image_url=png_url,
-                    channel_id="news",
-                )
-            
-            # 2. If it is marked as posted, also broadcast to all users
-            if data.get("is_posted") or data.get("publish_immediately"):
-                snippet = (data.get("article_content") or "కొత్త వార్త పబ్లిష్ చేయబడింది.")[:100]
-                send_topic_notification(
-                    title=f"🚨 {headline[:50]}",
-                    body=snippet,
-                    topic="all",
-                    url="/feed",
-                    image_url=png_url,
-                    channel_id="news",
-                )
-        except Exception as notif_err:
-            print(f"[BACKGROUND] Push notification dispatch note: {notif_err}")
         
     except Exception as e:
         print(f"[BACKGROUND ERROR] Error generating clipping {clipping_id}: {e}")
@@ -188,6 +279,8 @@ def run_clipping_generation_background(clipping_id, data, user_id):
                     "UPDATE clippings SET status = %s, custom_layout = %s::jsonb WHERE id = %s",
                     ['failed', json.dumps({"error": str(e), "stage": "Processing Error"}), clipping_id]
                 )
+                if not connection.in_atomic_block:
+                    connection.commit()
         except Exception as db_err:
             print(f"Failed to update error status: {db_err}")
 
@@ -219,6 +312,7 @@ def create_clipping(request):
         auth_header = request.headers.get("Authorization")
         token = auth_header.split(" ")[1]
         parts = token.split(".")
+        import base64
         payload_b64 = parts[1] + "=" * ((4 - len(parts[1]) % 4) % 4)
         payload = json.loads(base64.urlsafe_b64decode(payload_b64).decode('utf-8'))
         user_id = payload.get("sub")
@@ -227,12 +321,18 @@ def create_clipping(request):
         clipping_id = str(uuid.uuid4())
         
         # Insert into Database with 'processing' status
+        custom_layout_data = {
+            **data,
+            "videoUrl": data.get("video_url"),
+            "reporterName": data.get("reporter_name"),
+            "imageUrls": data.get("image_urls", [])
+        }
         with connection.cursor() as cursor:
             cursor.execute("""
                 INSERT INTO clippings (
-                    id, user_id, headline, article_content, language, template_id, status, created_at
-                ) VALUES (%s, %s, %s, %s, %s, %s, %s, NOW())
-            """, [clipping_id, user_id, headline, article_content, language, template_id, 'processing'])
+                    id, user_id, headline, article_content, language, template_id, status, created_at, custom_layout
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s, NOW(), %s::jsonb)
+            """, [clipping_id, user_id, headline, article_content, language, template_id, 'processing', json.dumps(custom_layout_data)])
             
         # Spawn background thread for processing (Django synchronous environment)
         thread = threading.Thread(target=run_clipping_generation_background, args=(clipping_id, data, user_id))
@@ -273,6 +373,7 @@ def list_clippings(request):
         auth_header = request.headers.get("Authorization")
         token = auth_header.split(" ")[1]
         parts = token.split(".")
+        import base64
         payload_b64 = parts[1] + "=" * ((4 - len(parts[1]) % 4) % 4)
         payload = json.loads(base64.urlsafe_b64decode(payload_b64).decode('utf-8'))
         user_id = payload.get("sub")

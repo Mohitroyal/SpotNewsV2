@@ -127,12 +127,19 @@ def run_clipping_generation_background(clipping_id, data, user_id):
         print(f"[DEBUG VIDEO] video_url: {video_url}")
         print(f"[DEBUG VIDEO] hero_box: {hero_box}")
         if video_url and hero_box:
+            temp_video = None
+            temp_mp4 = None
+            temp_bg_video = None
             try:
                 _update_stage_sync("Generating Video (This takes 1-2 minutes)...", 90)
                 import urllib.request
                 import subprocess
+                import gc
+                from PIL import Image
                 from imageio_ffmpeg import get_ffmpeg_exe
                 
+                gc.collect()
+
                 temp_video = f"temp_{clipping_id}.mp4"
                 temp_mp4 = f"temp_out_{clipping_id}.mp4"
                 print(f"[BACKGROUND] Downloading video from {video_url}...")
@@ -141,40 +148,82 @@ def run_clipping_generation_background(clipping_id, data, user_id):
                     import shutil
                     shutil.copyfileobj(response, out_file)
                 
-                x, y = int(hero_box['x']), int(hero_box['y'])
-                w, h = int(hero_box['width']), int(hero_box['height'])
+                # Low-memory video optimization:
+                # Downscale background PNG to max width 720 to prevent FFmpeg OOM on Render 512MB RAM
+                scale_factor = 1.0
+                temp_bg_video = temp_png
+                try:
+                    with Image.open(temp_png) as im:
+                        orig_w, orig_h = im.size
+                        if orig_w > 720:
+                            scale_factor = 720.0 / float(orig_w)
+                            target_w = int(orig_w * scale_factor)
+                            target_h = int(orig_h * scale_factor)
+                            target_w -= target_w % 2
+                            target_h -= target_h % 2
+                            resized_bg = im.resize((target_w, target_h), Image.Resampling.LANCZOS)
+                            temp_bg_video = f"temp_bg_{clipping_id}.png"
+                            resized_bg.save(temp_bg_video)
+                except Exception as resize_err:
+                    print(f"[BACKGROUND VIDEO WARN] Could not downscale bg image: {resize_err}")
+                    temp_bg_video = temp_png
+                    scale_factor = 1.0
+
+                x = int(float(hero_box['x']) * scale_factor)
+                y = int(float(hero_box['y']) * scale_factor)
+                w = int(float(hero_box['width']) * scale_factor)
+                h = int(float(hero_box['height']) * scale_factor)
+                # Ensure even dimensions for yuv420p
+                x -= x % 2
+                y -= y % 2
+                w = max(2, w - (w % 2))
+                h = max(2, h - (h % 2))
                 
-                print(f"[BACKGROUND] Running FFmpeg overlay at {x},{y} ({w}x{h})")
+                print(f"[BACKGROUND] Running FFmpeg overlay at {x},{y} ({w}x{h}) on {temp_bg_video}")
                 ffmpeg_exe = get_ffmpeg_exe()
-                # Scale the video, crop it to exact width/height, then overlay on the looped PNG
-                # Also pad the final output to even dimensions to satisfy libx264 yuv420p requirements
+                gc.collect()
+
+                # Low-memory FFmpeg flags:
+                # -tune zerolatency, -bf 0: Eliminates lookahead and B-frame buffers in RAM
+                # -threads 1: Avoids multi-thread buffer bloat
+                # fps=24: Reduces decoding frame queue from 60fps
+                # -t 60: Caps maximum render duration
                 cmd = [
                     ffmpeg_exe, "-y",
-                    "-loop", "1", "-i", temp_png,
+                    "-loop", "1", "-i", temp_bg_video,
+                    "-t", "60",
                     "-i", temp_video,
                     "-filter_complex",
-                    f"[1:v]scale={w}:{h}:force_original_aspect_ratio=increase,crop={w}:{h}[vid];[0:v][vid]overlay={x}:{y},pad=ceil(iw/2)*2:ceil(ih/2)*2[outv]",
+                    f"[1:v]fps=24,scale={w}:{h}:force_original_aspect_ratio=increase,crop={w}:{h}[vid];[0:v][vid]overlay={x}:{y},pad=ceil(iw/2)*2:ceil(ih/2)*2[outv]",
                     "-map", "[outv]", "-map", "1:a?",
                     "-c:v", "libx264",
                     "-preset", "ultrafast",
+                    "-tune", "zerolatency",
+                    "-bf", "0",
                     "-threads", "1",
                     "-max_muxing_queue_size", "1024",
-                    "-bufsize", "2M",
-                    "-maxrate", "2M",
+                    "-bufsize", "1M",
+                    "-maxrate", "1.5M",
+                    "-crf", "26",
                     "-c:a", "aac",
+                    "-b:a", "96k",
                     "-shortest",
                     "-pix_fmt", "yuv420p",
                     temp_mp4
                 ]
-                subprocess.run(cmd, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=240)
+                subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, timeout=180)
                 
                 mp4_url = storage_service.upload_file(temp_mp4, f"clippings/{clipping_id}_{timestamp}.mp4", "video/mp4")
-                if os.path.exists(temp_video): os.remove(temp_video)
-                if os.path.exists(temp_mp4): os.remove(temp_mp4)
             except Exception as vid_err:
                 print(f"[BACKGROUND ERROR] Failed to generate MP4: {vid_err}")
                 import traceback
                 traceback.print_exc()
+            finally:
+                if temp_video and os.path.exists(temp_video): os.remove(temp_video)
+                if temp_mp4 and os.path.exists(temp_mp4): os.remove(temp_mp4)
+                if temp_bg_video and temp_bg_video != temp_png and os.path.exists(temp_bg_video): os.remove(temp_bg_video)
+                import gc
+                gc.collect()
 
         if os.path.exists(temp_png):
             os.remove(temp_png)
@@ -183,27 +232,40 @@ def run_clipping_generation_background(clipping_id, data, user_id):
         
         # 6. Update Database Status to 'completed'
         with connection.cursor() as cursor:
-            # Need to update mp4_url if it exists. We might need to alter table if mp4_url column doesn't exist.
-            # Assuming mp4_url exists, since the frontend poll requested it.
             try:
                 cursor.execute(
                     "UPDATE clippings SET status = %s, png_url = %s, pdf_url = %s, mp4_url = %s WHERE id = %s",
                     ['completed', png_url, pdf_url, mp4_url, clipping_id]
                 )
             except Exception as db_err:
-                print(f"[BACKGROUND ERROR] Missing mp4_url column, updating custom_layout instead: {db_err}")
+                print(f"[BACKGROUND ERROR] Failed to update mp4_url column: {db_err}")
+                connection.rollback()
+                cursor.execute(
+                    "UPDATE clippings SET status = %s, png_url = %s, pdf_url = %s WHERE id = %s",
+                    ['completed', png_url, pdf_url, clipping_id]
+                )
+            if not connection.in_atomic_block:
+                connection.commit()
+            
+        try:
+            with connection.cursor() as cursor:
                 cursor.execute("SELECT custom_layout FROM clippings WHERE id = %s", [clipping_id])
                 row = cursor.fetchone()
                 custom_layout = {}
                 if row and row[0]:
                     custom_layout = row[0] if isinstance(row[0], dict) else json.loads(row[0])
-                custom_layout['mp4_url'] = mp4_url
+                custom_layout['stage'] = 'Complete'
+                custom_layout['progress'] = 100
+                if mp4_url:
+                    custom_layout['mp4_url'] = mp4_url
                 cursor.execute(
-                    "UPDATE clippings SET status = %s, png_url = %s, pdf_url = %s, custom_layout = %s::jsonb WHERE id = %s",
-                    ['completed', png_url, pdf_url, json.dumps(custom_layout), clipping_id]
+                    "UPDATE clippings SET custom_layout = %s::jsonb WHERE id = %s",
+                    [json.dumps(custom_layout), clipping_id]
                 )
-            if not connection.in_atomic_block:
-                connection.commit()
+                if not connection.in_atomic_block:
+                    connection.commit()
+        except Exception as cl_err:
+            print(f"[STAGE COMPLETE ERROR] {cl_err}")
             
         print(f"[BACKGROUND] Finished clipping generation for {clipping_id}")
         
