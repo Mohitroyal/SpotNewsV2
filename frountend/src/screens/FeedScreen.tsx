@@ -1,11 +1,12 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { useSearchParams } from 'react-router-dom';
 import { Newspaper, MapPin, RefreshCw, X, Send, Share2, Copy, Check } from 'lucide-react';
 import { useAuthStore, useUIStore } from '@/store';
 import { supabase } from '@/lib/supabase';
-import { StarRating } from '@/features/rating/StarRating';
-import { useAdvisory } from '@/features/weather/useAdvisory';
-import { AdvisoryCard, AdvisoryStrip } from '@/features/weather/AdvisoryCard';
+import { NewsDetailCardStack } from '@/components/NewsDetailCardStack';
+import { admobService } from '@/services/admob.service';
+import { localAdsService } from '@/services/localAds.service';
+import { LocalAdFeedCard } from '@/components/LocalAdFeedCard';
+import type { LocalAd } from '@/types/localAds';
 
 interface Comment {
   id: string;
@@ -17,17 +18,14 @@ interface Comment {
 }
 
 export const FeedScreen: React.FC = () => {
-  const [searchParams] = useSearchParams();
-  const targetClipId = searchParams.get('clipId');
   const { user } = useAuthStore();
   const district = useAuthStore((state) => state.district) || '';
   const userState = useAuthStore((state) => state.userState) || '';
-  const { advisory } = useAdvisory(district || 'హైదరాబాద్');
-  const [showWeatherSheet, setShowWeatherSheet] = useState(false);
   const isFullScreenFeed = useUIStore((state) => state.isFullScreenFeed);
-  const toggleFullScreenFeed = useUIStore((state) => state.toggleFullScreenFeed);
   const [clippings, setClippings] = useState<any[]>([]);
+  const [localAds, setLocalAds] = useState<LocalAd[]>([]);
   const [loading, setLoading] = useState(true);
+  const [activeDetailIndex, setActiveDetailIndex] = useState<number | null>(null);
 
   // In-memory session guard (prevents firing twice within a single scroll session)
   const viewedIds = useRef<Set<string>>(new Set());
@@ -122,26 +120,7 @@ export const FeedScreen: React.FC = () => {
       const { data, error } = await query;
       if (error) throw error;
 
-      let postedClippings = (data || []).filter((c) => c.is_posted === true);
-
-      // If a specific clipping was opened via link / deep link
-      if (targetClipId) {
-        const existingIndex = postedClippings.findIndex((c) => c.id === targetClipId);
-        if (existingIndex > -1) {
-          const [targeted] = postedClippings.splice(existingIndex, 1);
-          postedClippings = [targeted, ...postedClippings];
-        } else {
-          const { data: targetData } = await supabase
-            .from('clippings')
-            .select('*')
-            .eq('id', targetClipId)
-            .maybeSingle();
-          if (targetData) {
-            postedClippings = [targetData, ...postedClippings];
-          }
-        }
-      }
-
+      const postedClippings = (data || []).filter((c) => c.is_posted === true);
       setClippings(postedClippings);
     } catch (err) {
       console.error('Failed to fetch feed', err);
@@ -237,7 +216,7 @@ export const FeedScreen: React.FC = () => {
   // The clipping_views table has PRIMARY KEY (clipping_id, user_id) so the
   // same user can NEVER insert twice — uniqueness is enforced at DB level.
   useEffect(() => {
-    if (clippings.length === 0 || !user?.id) return;
+    if (clippings.length === 0) return;
     const observer = new IntersectionObserver(
       (entries) => {
         entries.forEach(async (entry) => {
@@ -247,26 +226,31 @@ export const FeedScreen: React.FC = () => {
             if (!id || viewedIds.current.has(id)) return;
             viewedIds.current.add(id);
 
-            try {
-              // Insert into clipping_views — will silently fail on duplicate
-              const { error } = await supabase
-                .from('clipping_views')
-                .insert({ clipping_id: id, user_id: user.id });
+            // 🎯 Trigger AdMob: displays an ad after every 5 clippings viewed
+            admobService.onClippingViewed();
 
-              if (error) {
-                // Error code 23505 = unique violation = already viewed → skip
-                return;
+            if (user?.id) {
+              try {
+                // Insert into clipping_views — will silently fail on duplicate
+                const { error } = await supabase
+                  .from('clipping_views')
+                  .insert({ clipping_id: id, user_id: user.id });
+
+                if (error) {
+                  // Error code 23505 = unique violation = already viewed → skip
+                  return;
+                }
+
+                // New unique view — optimistic UI update
+                setClippings((prev) =>
+                  prev.map((c) =>
+                    c.id === id ? { ...c, views_count: (c.views_count || 0) + 1 } : c
+                  )
+                );
+                // DB trigger (trg_sync_views_count) auto-increments views_count
+              } catch (err) {
+                console.error('View tracking failed', err);
               }
-
-              // New unique view — optimistic UI update
-              setClippings((prev) =>
-                prev.map((c) =>
-                  c.id === id ? { ...c, views_count: (c.views_count || 0) + 1 } : c
-                )
-              );
-              // DB trigger (trg_sync_views_count) auto-increments views_count
-            } catch (err) {
-              console.error('View tracking failed', err);
             }
           }
         });
@@ -281,7 +265,12 @@ export const FeedScreen: React.FC = () => {
 
   useEffect(() => {
     fetchFeed();
-  }, [district, userState, targetClipId]);
+    const loadAds = async () => {
+      const ads = await localAdsService.fetchActiveLocalAds(district);
+      setLocalAds(ads);
+    };
+    loadAds();
+  }, [district, userState]);
 
   return (
     <div className={`flex flex-col h-[100dvh] bg-black ${!isFullScreenFeed ? 'pb-[60px]' : ''}`}>
@@ -302,14 +291,11 @@ export const FeedScreen: React.FC = () => {
               <span>Refresh</span>
             </button>
           </div>
-          <div className="px-4 mt-3 flex flex-col gap-2.5">
-            <div className="inline-flex items-center gap-1.5 bg-[#015BB3] text-white px-3 py-1.5 rounded-full text-xs font-bold shadow-sm self-start">
+          <div className="px-4 mt-3">
+            <div className="inline-flex items-center gap-1.5 bg-[#015BB3] text-white px-3 py-1.5 rounded-full text-xs font-bold shadow-sm">
               <MapPin className="w-3.5 h-3.5" />
               Showing news for: {district || 'All Regions'}{userState ? `, ${userState}` : ''}
             </div>
-            {advisory && (
-              <AdvisoryStrip row={advisory} onOpen={() => setShowWeatherSheet(true)} />
-            )}
           </div>
         </div>
       )}
@@ -332,139 +318,55 @@ export const FeedScreen: React.FC = () => {
           </div>
         ) : (
           <div className="h-full w-full overflow-y-auto snap-y snap-mandatory no-scrollbar relative bg-black">
-            {clippings.map((clip: any, index: number) => {
+            {clippings.map((clip: any, idx: number) => {
               const isLiked = likedIds.has(clip.id);
+              const shouldShowLocalAd = (idx + 1) % 10 === 0 && localAds.length > 0;
+              const localAdIndex = Math.floor(idx / 10) % (localAds.length || 1);
+              const localAd = localAds[localAdIndex];
 
               return (
                 <React.Fragment key={clip.id}>
                   <div
                     data-clip-id={clip.id}
-                    ref={(el) => {
-                      if (el) cardRefs.current.set(clip.id, el);
-                      else cardRefs.current.delete(clip.id);
-                    }}
-                    className="w-full h-full snap-start snap-always flex flex-col bg-black border-b border-gray-800 relative"
-                  >
+                  ref={(el) => {
+                    if (el) cardRefs.current.set(clip.id, el);
+                    else cardRefs.current.delete(clip.id);
+                  }}
+                  className="w-full h-full snap-start snap-always flex flex-col bg-black border-b border-gray-800 relative cursor-pointer"
+                >
                   {/* Full Screen Generated Image */}
                   <div
                     className="flex-1 w-full bg-black relative flex items-center justify-center overflow-hidden pb-[56px]"
-                    onClick={toggleFullScreenFeed}
+                    onClick={() => setActiveDetailIndex(idx)}
                   >
-                    {(() => {
-                      let parsedMp4Url = clip.mp4_url;
-                      if (!parsedMp4Url && clip.custom_layout) {
-                        try {
-                          const layout = typeof clip.custom_layout === 'string' ? JSON.parse(clip.custom_layout) : clip.custom_layout;
-                          parsedMp4Url = layout?.mp4_url;
-                        } catch (e) {}
-                      }
-                      
-                      if (parsedMp4Url && clip.png_url) {
-                        return (
-                          <div 
-                            className="w-full h-full relative z-10 bg-black group"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              const video = e.currentTarget.querySelector('video');
-                              const thumbnail = e.currentTarget.querySelector('.thumbnail-container');
-                              if (video) {
-                                if (video.paused) {
-                                  video.play();
-                                  if (thumbnail) thumbnail.classList.add('hidden');
-                                  video.classList.remove('hidden');
-                                  e.currentTarget.classList.add('is-playing');
-                                } else {
-                                  video.pause();
-                                  if (thumbnail) thumbnail.classList.remove('hidden');
-                                  video.classList.add('hidden');
-                                  e.currentTarget.classList.remove('is-playing');
-                                }
-                              }
-                            }}
-                          >
-                            <video
-                              src={parsedMp4Url}
-                              playsInline
-                              loop
-                              className="w-full h-full object-contain hidden relative z-20"
-                            />
-                            <div className="thumbnail-container absolute inset-0 w-full h-full flex items-center justify-center">
-                              <div
-                                className="absolute inset-0 opacity-30 scale-110 blur-xl bg-cover bg-center"
-                                style={{ backgroundImage: `url(${clip.png_url})` }}
-                              />
-                              <img
-                                src={clip.png_url}
-                                alt="News clipping"
-                                className="w-full h-full object-contain relative z-10"
-                              />
-                              {/* Play Button Overlay */}
-                              <div className="absolute inset-0 flex items-center justify-center z-30 pointer-events-none">
-                                <div className="w-16 h-16 bg-black/50 rounded-full flex items-center justify-center backdrop-blur-md border border-white/40 shadow-[0_0_15px_rgba(0,0,0,0.5)]">
-                                  <div className="w-0 h-0 border-t-[12px] border-t-transparent border-l-[20px] border-l-white border-b-[12px] border-b-transparent ml-2"></div>
-                                </div>
-                              </div>
-                            </div>
-                          </div>
-                        );
-                      } else if (parsedMp4Url) {
-                        return (
-                          <div 
-                            className="w-full h-full relative z-10 bg-black group"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              const video = e.currentTarget.querySelector('video');
-                              if (video) {
-                                if (video.paused) {
-                                  video.play();
-                                  e.currentTarget.classList.add('is-playing');
-                                } else {
-                                  video.pause();
-                                  e.currentTarget.classList.remove('is-playing');
-                                }
-                              }
-                            }}
-                          >
-                            <video
-                              src={parsedMp4Url}
-                              playsInline
-                              loop
-                              className="w-full h-full object-contain"
-                            />
-                            {/* Play Button Overlay (hidden when playing) */}
-                            <div className="absolute inset-0 flex items-center justify-center pointer-events-none transition-opacity duration-300 group-[.is-playing]:opacity-0">
-                               <div className="w-16 h-16 bg-white/20 rounded-full flex items-center justify-center backdrop-blur-md border border-white/40 shadow-lg">
-                                   <div className="w-0 h-0 border-t-[12px] border-t-transparent border-l-[20px] border-l-white border-b-[12px] border-b-transparent ml-2"></div>
-                               </div>
-                            </div>
-                          </div>
-                        );
-                      } else if (clip.png_url) {
-                        return (
-                          <>
-                            <div
-                              className="absolute inset-0 opacity-30 scale-110 blur-xl bg-cover bg-center"
-                              style={{ backgroundImage: `url(${clip.png_url})` }}
-                            />
-                            <img
-                              src={clip.png_url}
-                              alt="News clipping"
-                              className="w-full h-full object-contain relative z-10"
-                            />
-                          </>
-                        );
-                      } else {
-                        return (
-                          <div className="flex flex-col items-center text-[#6B7A90] relative z-10">
-                            <Newspaper className="w-16 h-16 mb-2 opacity-50" />
-                            <span className="text-sm font-bold opacity-50">No Image Available</span>
-                          </div>
-                        );
-                      }
-                    })()}
+                    {clip.png_url && (
+                      <div
+                        className="absolute inset-0 opacity-30 scale-110 blur-xl bg-cover bg-center"
+                        style={{ backgroundImage: `url(${clip.png_url})` }}
+                      />
+                    )}
+                    {clip.mp4_url || clip.video_url || clip.custom_layout?.mp4_url ? (
+                      <video
+                        src={clip.mp4_url || clip.video_url || clip.custom_layout?.mp4_url}
+                        autoPlay
+                        loop
+                        muted
+                        playsInline
+                        className="w-full h-full object-contain relative z-10"
+                      />
+                    ) : clip.png_url ? (
+                      <img
+                        src={clip.png_url}
+                        alt="News clipping"
+                        className="w-full h-full object-contain relative z-10"
+                      />
+                    ) : (
+                      <div className="flex flex-col items-center text-[#6B7A90] relative z-10">
+                        <Newspaper className="w-16 h-16 mb-2 opacity-50" />
+                        <span className="text-sm font-bold opacity-50">No Image Available</span>
+                      </div>
+                    )}
                   </div>
-
-
 
                   {/* Bottom Action Bar */}
                   <div className="absolute bottom-0 left-0 right-0 bg-white border-t border-gray-200 z-20 h-[56px] flex items-center justify-between px-3">
@@ -522,23 +424,14 @@ export const FeedScreen: React.FC = () => {
                       </button>
                     </div>
                   </div>
-
-                  {/* Star rating — readers only (not shown to the reporter themselves) */}
-                  {user?.role !== 'reporter' && clip.reporter_id && clip.headline && (
-                    <div className="absolute bottom-[64px] left-3 right-3 z-20 flex justify-center pointer-events-auto">
-                      <div style={{ background: 'rgba(0,0,0,0.75)', borderRadius: 12, padding: '4px 12px', backdropFilter: 'blur(4px)' }}>
-                        <StarRating postId={clip.id} reporterName={clip.reporter_name || 'Reporter'} />
-                      </div>
-                    </div>
-                  )}
                 </div>
-                {index === 1 && advisory && (
-                  <div key="advisory-feed-slide" className="w-full h-full snap-start snap-always flex items-center justify-center bg-black p-4 relative overflow-y-auto">
-                    <AdvisoryCard row={advisory} />
-                  </div>
+
+                {/* 🎯 Local Ad: Displayed after every 10 clippings */}
+                {shouldShowLocalAd && localAd && (
+                  <LocalAdFeedCard key={`local-ad-feed-${localAd.id}-${idx}`} ad={localAd} index={idx} />
                 )}
               </React.Fragment>
-            );
+              );
             })}
           </div>
         )}
@@ -729,17 +622,20 @@ export const FeedScreen: React.FC = () => {
         </div>
       )}
 
-      {/* ── Weather Advisory Modal Sheet ─────────────────────────────────── */}
-      {showWeatherSheet && advisory && (
-        <div
-          className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in"
-          onClick={() => setShowWeatherSheet(false)}
-        >
-          <div onClick={(e) => e.stopPropagation()} className="w-full max-w-md animate-in zoom-in-95">
-            <AdvisoryCard row={advisory} onClose={() => setShowWeatherSheet(false)} />
-          </div>
-        </div>
+      {/* ── Full Screen News Detail Pager (Covers top & bottom marked areas) ── */}
+      {activeDetailIndex !== null && (
+        <NewsDetailCardStack
+          items={clippings}
+          initialIndex={activeDetailIndex}
+          onBack={() => setActiveDetailIndex(null)}
+          onLike={handleLike}
+          likedIds={likedIds}
+          onComment={openComments}
+          onShare={handleShareClick}
+          onEndReached={fetchFeed}
+        />
       )}
     </div>
   );
 };
+
