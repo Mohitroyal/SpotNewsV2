@@ -27,7 +27,7 @@ export const TEST_AD_UNITS = {
 // Live Production Ad Unit IDs (RTI EXPRESS Spot news 24x7)
 export const PRODUCTION_AD_UNITS = {
   android: {
-    banner: 'ca-app-pub-5229942501184833/3374936437',
+    banner: 'ca-app-pub-5229942501184833/8543502633',
     interstitial: 'ca-app-pub-5229942501184833/3374936437',
     rewarded: 'ca-app-pub-3940256099942544/5224354917',
   },
