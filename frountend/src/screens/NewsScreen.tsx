@@ -19,14 +19,20 @@ export const NewsScreen: React.FC = () => {
     try {
       const { error } = await supabase
         .from('clippings')
-        .update({ state: userState, district: district, is_posted: true })
+        .update({ 
+          state: userState, 
+          district: district, 
+          is_posted: false,
+          status: 'pending_approval'
+        })
         .eq('id', selectedGen.id);
         
       if (!error) {
         setPostedMap(prev => ({ ...prev, [selectedGen.id]: true }));
+        alert(`✅ Clipping submitted to ${district || 'your'} District Admin for approval! Once approved, it will go live on the feed.`);
       }
     } catch (err) {
-      console.error('Error posting to feed:', err);
+      console.error('Error submitting to feed for approval:', err);
     } finally {
       setIsPosting(false);
     }

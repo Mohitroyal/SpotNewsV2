@@ -3,16 +3,28 @@ import { persist } from "zustand/middleware";
 import type { User, GenerationConfig, Generation } from "@/types";
 
 // ─── Permanent Reporter Name & Photo Helpers ─────────────────────────────────────
+// Clean up any stale legacy keys that leaked across different accounts
+if (typeof window !== "undefined" && window.localStorage) {
+  try {
+    localStorage.removeItem("spotnews_last_reporter_name");
+    localStorage.removeItem("spotnews_last_reporter_photo");
+  } catch (e) {
+    // ignore
+  }
+}
+
 export const getReporterName = (email?: string): string => {
   try {
     if (typeof window === "undefined" || !window.localStorage) return "";
     if (email) {
       const cleanEmail = email.toLowerCase().trim();
-      const name = localStorage.getItem(`spotnews_reporter_name_${cleanEmail}`);
-      if (name) return name;
+      if (cleanEmail) {
+        const name = localStorage.getItem(`spotnews_reporter_name_${cleanEmail}`);
+        if (name) return name;
+      }
     }
-    const lastName = localStorage.getItem("spotnews_last_reporter_name");
-    if (lastName) return lastName;
+    const activeName = localStorage.getItem('spotnews_active_reporter_name');
+    if (activeName) return activeName;
   } catch (e) {
     console.warn("[NameStore] Error reading reporter name:", e);
   }
@@ -22,40 +34,120 @@ export const getReporterName = (email?: string): string => {
 export const saveReporterName = (email: string | undefined, name: string): void => {
   try {
     if (!name || typeof window === "undefined" || !window.localStorage) return;
+    const trimmed = name.trim();
     if (email) {
       const cleanEmail = email.toLowerCase().trim();
-      localStorage.setItem(`spotnews_reporter_name_${cleanEmail}`, name.trim());
+      if (cleanEmail) {
+        localStorage.setItem(`spotnews_reporter_name_${cleanEmail}`, trimmed);
+      }
     }
-    localStorage.setItem("spotnews_last_reporter_name", name.trim());
+    localStorage.setItem('spotnews_active_reporter_name', trimmed);
   } catch (e) {
     console.warn("[NameStore] Error saving reporter name:", e);
   }
 };
 
+export const isGoogleDefaultAvatar = (url?: string): boolean => {
+  if (!url) return false;
+  return (
+    url.includes('googleusercontent.com') ||
+    url.includes('lh3.google') ||
+    url.includes('google.com/accounts')
+  );
+};
+
 export const getReporterPhoto = (email?: string): string => {
   try {
     if (typeof window === "undefined" || !window.localStorage) return "";
+    
+    // 1. Check permanent registration photo
+    const regPhoto = localStorage.getItem('spotnews_registration_photo');
+    if (regPhoto && !isGoogleDefaultAvatar(regPhoto)) return regPhoto;
+
+    // 2. Check email-specific photo
+    if (email) {
+      const cleanEmail = email.toLowerCase().trim();
+      if (cleanEmail) {
+        const photo = localStorage.getItem(`spotnews_reporter_photo_${cleanEmail}`);
+        if (photo && !isGoogleDefaultAvatar(photo)) return photo;
+      }
+    }
+
+    // 3. Check active reporter photo
+    const activePhoto = localStorage.getItem('spotnews_active_reporter_photo');
+    if (activePhoto && !isGoogleDefaultAvatar(activePhoto)) return activePhoto;
+
+    // Fallbacks if only Google avatar exists
     if (email) {
       const cleanEmail = email.toLowerCase().trim();
       const photo = localStorage.getItem(`spotnews_reporter_photo_${cleanEmail}`);
       if (photo) return photo;
     }
-    const lastPhoto = localStorage.getItem("spotnews_last_reporter_photo");
-    if (lastPhoto) return lastPhoto;
+    if (activePhoto) return activePhoto;
   } catch (e) {
     console.warn("[PhotoStore] Error reading reporter photo:", e);
   }
   return "";
 };
 
+export const getEffectiveReporterPhoto = (
+  preferredEmail?: string,
+  extraCandidates: (string | undefined | null)[] = []
+): string => {
+  const candidates: string[] = [];
+
+  for (const c of extraCandidates) {
+    if (c && typeof c === 'string' && c.trim()) {
+      candidates.push(c.trim());
+    }
+  }
+
+  if (preferredEmail) {
+    const p = getReporterPhoto(preferredEmail);
+    if (p) candidates.push(p);
+  }
+
+  try {
+    const reg = localStorage.getItem('spotnews_registration_photo');
+    if (reg) candidates.push(reg);
+    const active = localStorage.getItem('spotnews_active_reporter_photo');
+    if (active) candidates.push(active);
+  } catch {}
+
+  // 1. Highest priority: real uploaded photo (e.g. data:image/ or non-Google URL)
+  const realPhoto = candidates.find((url) => url && !isGoogleDefaultAvatar(url));
+  if (realPhoto) return realPhoto;
+
+  // 2. Fallback to any photo if no real photo exists
+  const anyPhoto = candidates.find((url) => Boolean(url));
+  return anyPhoto || '';
+};
+
 export const saveReporterPhoto = (email: string | undefined, photoUrl: string): void => {
   try {
     if (!photoUrl || typeof window === "undefined" || !window.localStorage) return;
+
+    // Guard: never let a Google letter avatar overwrite an existing real uploaded photo
+    const existing = getReporterPhoto(email);
+    if (isGoogleDefaultAvatar(photoUrl) && existing && !isGoogleDefaultAvatar(existing)) {
+      return;
+    }
+
     if (email) {
       const cleanEmail = email.toLowerCase().trim();
-      localStorage.setItem(`spotnews_reporter_photo_${cleanEmail}`, photoUrl);
+      if (cleanEmail) {
+        localStorage.setItem(`spotnews_reporter_photo_${cleanEmail}`, photoUrl);
+      }
     }
-    localStorage.setItem("spotnews_last_reporter_photo", photoUrl);
+
+    if (!isGoogleDefaultAvatar(photoUrl) || !existing) {
+      localStorage.setItem('spotnews_active_reporter_photo', photoUrl);
+    }
+
+    // If it's a real uploaded photo (base64 data URL), permanently preserve it as the registration photo!
+    if (photoUrl.startsWith('data:image/')) {
+      localStorage.setItem('spotnews_registration_photo', photoUrl);
+    }
   } catch (e) {
     console.warn("[PhotoStore] Error saving reporter photo:", e);
   }
@@ -88,20 +180,22 @@ export const useAuthStore = create<AuthStore>()(
         const storedName = getReporterName(email);
         const storedPhoto = getReporterPhoto(email);
 
-        const existingName =
-          storedName ||
+        const accountName =
           (user as any)?.user_metadata?.full_name ||
           (user as any)?.user_metadata?.name ||
           user?.full_name ||
           user?.firstName ||
           "";
 
-        const existingPhoto =
-          storedPhoto ||
+        const existingName = accountName || storedName || "";
+
+        const accountPhoto =
           user?.avatarUrl ||
           (user as any)?.user_metadata?.avatar_url ||
           (user as any)?.user_metadata?.picture ||
           "";
+
+        const existingPhoto = getEffectiveReporterPhoto(email, [storedPhoto, accountPhoto]);
 
         const existingMetadata = (user as any)?.user_metadata || {};
         const updatedMetadata = {
@@ -121,7 +215,7 @@ export const useAuthStore = create<AuthStore>()(
             (user as any)?.role ||
             (user as any)?.user_metadata?.role ||
             (user as any)?.app_metadata?.role ||
-            (isSuperAdminUser(user) ? 'superadmin' : 'user'),
+            (isSuperAdminUser(user) ? 'admin' : 'user'),
           plan:
             user?.plan ||
             (user as any)?.subscription_plan ||
@@ -149,7 +243,7 @@ export const useAuthStore = create<AuthStore>()(
           if (email === 'mohitroyal116@gmail.com' || email === 'mohithroyal116@gmail.com') {
             updatedUser.role = 'reporter';
           } else if (isSuperAdminUser(updatedUser)) {
-            updatedUser.role = updatedUser.role === 'admin' ? 'admin' : 'superadmin';
+            updatedUser.role = 'admin';
           }
 
           const newName =
@@ -306,6 +400,13 @@ export const useUIStore = create<UIStore>()(
 export const SUPER_ADMIN_EMAILS = [
   'mohithroyal16450@gmail.com',
   'baba.journilist@gmail.com',
+  'baba.journlist@gmail.com',
+  'mahammadkousar2@gmail.com',
+];
+
+export const DISTRICT_ADMIN_EMAILS = [
+  'mpokkala@gitam.in',
+  'mpokkala@gmail.com',
 ];
 
 export const SUPER_ADMIN_PHONES = [
@@ -317,24 +418,44 @@ export const SUPER_ADMIN_EMAIL = 'mohithroyal16450@gmail.com';
 
 /**
  * Returns true if the user is a superadmin:
- * - Emails: mohithroyal16450@gmail.com or baba.journilist@gmail.com
+ * - Emails: in SUPER_ADMIN_EMAILS
  * - Phones: 9346843889 or 7668886666
+ * - Role: 'superadmin'
+ * Note: mpokkala@gitam.in is strictly district admin, not superadmin.
  */
 export const isSuperAdminUser = (userOrEmail?: any): boolean => {
   if (!userOrEmail) return false;
 
-  // 1. Direct role check on user object / metadata
-  if (typeof userOrEmail === 'object') {
-    const role = (
-      userOrEmail?.role ||
-      userOrEmail?.user_metadata?.role ||
-      userOrEmail?.app_metadata?.role ||
-      ''
-    ).toString().toLowerCase();
-    if (role === 'superadmin') return true;
+  const email = (
+    typeof userOrEmail === 'string'
+      ? userOrEmail
+      : userOrEmail?.email || userOrEmail?.user_metadata?.email || ''
+  ).trim().toLowerCase();
+
+  // mpokkala@gitam.in is strictly District Admin
+  if (email === 'mpokkala@gitam.in') {
+    return false;
   }
 
-  // Check phone number
+  // 1. Check superadmin emails list
+  if (email && SUPER_ADMIN_EMAILS.some((e) => e.toLowerCase() === email)) {
+    return true;
+  }
+
+  // 2. Check role property if object
+  if (typeof userOrEmail === 'object') {
+    const role = (
+      userOrEmail.role ||
+      userOrEmail.user_metadata?.role ||
+      userOrEmail.app_metadata?.role ||
+      ''
+    ).toString().toLowerCase();
+    if (role === 'superadmin') {
+      return true;
+    }
+  }
+
+  // 3. Check phone number
   const phone = (
     typeof userOrEmail === 'string'
       ? userOrEmail
@@ -345,24 +466,18 @@ export const isSuperAdminUser = (userOrEmail?: any): boolean => {
     return true;
   }
 
-  const email = (
-    typeof userOrEmail === 'string'
-      ? userOrEmail
-      : userOrEmail?.email || userOrEmail?.user_metadata?.email || ''
-  ).trim().toLowerCase();
-
   if (email && SUPER_ADMIN_PHONES.some((p) => email.includes(p))) {
     return true;
   }
 
-  return SUPER_ADMIN_EMAILS.some((e) => e.toLowerCase() === email);
+  return false;
 };
 
 /**
  * Returns true if the given user or email has admin privileges:
  * 1. Checks isSuperAdminUser (including superadmin phones)
  * 2. Checks hardcoded admin emails (SUPER_ADMIN_EMAILS + VITE_ADMIN_EMAILS env var)
- * 3. Checks role / metadata from Supabase Auth & profiles ('admin' or 'superadmin')
+ * 3. Checks role / metadata from Supabase Auth & profiles ('admin')
  * 4. Checks subscription plan ('admin')
  */
 export const isAdminUser = (userOrEmail?: any): boolean => {
@@ -376,6 +491,7 @@ export const isAdminUser = (userOrEmail?: any): boolean => {
 
   const adminEmails = Array.from(new Set([
     ...SUPER_ADMIN_EMAILS.map((e) => e.toLowerCase()),
+    ...DISTRICT_ADMIN_EMAILS.map((e) => e.toLowerCase()),
     ...envAdminEmails,
   ]));
 
@@ -398,6 +514,6 @@ export const isAdminUser = (userOrEmail?: any): boolean => {
     ''
   ).toString().toLowerCase();
 
-  return role === 'admin' || role === 'superadmin';
+  return role === 'admin';
 };
 

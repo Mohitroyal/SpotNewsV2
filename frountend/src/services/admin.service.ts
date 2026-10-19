@@ -21,6 +21,8 @@ export interface AdminUserProfile {
   preferred_language?: string;
   is_banned?: boolean;
   banned_until?: string | null;
+  district?: string;
+  state?: string;
 }
 
 export interface PublicationLogo {
@@ -101,6 +103,9 @@ export interface AdminClippingLog {
   image_count?: number;
   png_url?: string;
   pdf_url?: string;
+  district?: string;
+  state?: string;
+  is_posted?: boolean;
 }
 
 // ─── Role Check ───────────────────────────────────────────────────────────────
@@ -209,6 +214,8 @@ export const getAdminClippings = async (options?: {
   page?: number;
   pageSize?: number;
   userId?: string;
+  district?: string;
+  status?: string;
 }): Promise<{ total: number; results: AdminClippingLog[] }> => {
   const page = options?.page ?? 1;
   const pageSize = options?.pageSize ?? 50;
@@ -216,6 +223,8 @@ export const getAdminClippings = async (options?: {
   if (options?.fromDate) params.from_date = options.fromDate;
   if (options?.toDate) params.to_date = options.toDate;
   if (options?.userId) params.user_id = options.userId;
+  if (options?.district && options.district !== 'all') params.district = options.district;
+  if (options?.status && options.status !== 'all') params.status = options.status;
 
   // 1. Try Backend API first
   try {
@@ -223,7 +232,13 @@ export const getAdminClippings = async (options?: {
     if (res.data && Array.isArray(res.data.results)) {
       return {
         total: res.data.total ?? res.data.results.length,
-        results: res.data.results,
+        results: res.data.results.map((c: any) => ({
+          ...c,
+          district: c.district || '',
+          state: c.state || '',
+          is_posted: c.is_posted ?? false,
+          status: c.status || 'completed',
+        })),
       };
     }
   } catch (err) {
@@ -247,6 +262,12 @@ export const getAdminClippings = async (options?: {
     }
     if (options?.userId) {
       query = query.eq('user_id', options.userId);
+    }
+    if (options?.district && options.district !== 'all') {
+      query = query.ilike('district', options.district);
+    }
+    if (options?.status && options.status !== 'all') {
+      query = query.eq('status', options.status);
     }
 
     const from = (page - 1) * pageSize;
@@ -290,6 +311,9 @@ export const getAdminClippings = async (options?: {
         image_count: Array.isArray(c.image_urls) ? c.image_urls.length : c.image_url ? 1 : 0,
         png_url: c.png_url || '',
         pdf_url: c.pdf_url || '',
+        district: c.district || '',
+        state: c.state || '',
+        is_posted: c.is_posted ?? false,
       };
     });
 
@@ -303,6 +327,101 @@ export const getAdminClippings = async (options?: {
   }
 };
 
+// ─── Approve Clipping (Post to Feed) ──────────────────────────────────────────
+export const approveClippingToFeed = async (
+  clippingId: string,
+  details?: { headline?: string; district?: string; user_id?: string; user_email?: string; png_url?: string }
+): Promise<{ success: boolean; error?: string }> => {
+  try {
+    const { error: rpcError } = await supabase.rpc('set_clipping_approval_rpc', {
+      p_clipping_id: clippingId,
+      p_status: 'approved',
+      p_is_posted: true,
+    });
+
+    if (rpcError) {
+      console.warn('[AdminService] RPC set_clipping_approval_rpc failed, trying direct update:', rpcError);
+      const { error: updErr } = await supabase
+        .from('clippings')
+        .update({ status: 'approved', is_posted: true })
+        .eq('id', clippingId);
+      if (updErr) throw updErr;
+    }
+
+    // Trigger Push Notification to live feed subscribers
+    try {
+      const headline = details?.headline || 'Spot News 24x7 - తాజా వార్తలు';
+      const districtTag = details?.district ? `[${details.district}] ` : '';
+      api.post('/api/v1/notifications/send', {
+        topic: 'all',
+        title: `🚨 ${districtTag}${headline.substring(0, 50)}`,
+        body: `కొత్త వార్తా కథనం లైవ్ ఫీడ్‌లో ప్రచురించబడింది. ఇప్పుడే చదవండి!`,
+        image_url: details?.png_url || 'https://rffrqokpnqoycpozrjuc.supabase.co/storage/v1/object/public/newscraft-clippings/assets/app_logo.png',
+        url: `/feed`,
+        channel_id: 'news'
+      }).catch((e) => console.warn('[Push] Published clipping alert warning:', e));
+    } catch { /* non-critical */ }
+
+    // Send in-app notification to the reporter
+    if (details?.user_id) {
+      try {
+        await supabase.from('notifications').insert({
+          user_id: details.user_id,
+          user_email: details.user_email || '',
+          title: '🎉 Clipping Approved & Live on Feed!',
+          message: `Your clipping "${(details.headline || '').substring(0, 55)}" has been approved by the District Admin and is now live on the feed.`,
+          notification_type: 'clipping_approved'
+        });
+      } catch { /* non-critical */ }
+    }
+
+    return { success: true };
+  } catch (err: any) {
+    console.error('[AdminService] approveClippingToFeed failed:', err);
+    return { success: false, error: err?.message || 'Failed to approve clipping' };
+  }
+};
+
+// ─── Reject Clipping Submission ───────────────────────────────────────────────
+export const rejectClippingSubmission = async (
+  clippingId: string,
+  details?: { headline?: string; user_id?: string; user_email?: string; reason?: string }
+): Promise<{ success: boolean; error?: string }> => {
+  try {
+    const { error: rpcError } = await supabase.rpc('set_clipping_approval_rpc', {
+      p_clipping_id: clippingId,
+      p_status: 'rejected',
+      p_is_posted: false,
+    });
+
+    if (rpcError) {
+      const { error: updErr } = await supabase
+        .from('clippings')
+        .update({ status: 'rejected', is_posted: false })
+        .eq('id', clippingId);
+      if (updErr) throw updErr;
+    }
+
+    // Send rejection notification to the reporter
+    if (details?.user_id) {
+      try {
+        await supabase.from('notifications').insert({
+          user_id: details.user_id,
+          user_email: details.user_email || '',
+          title: '❌ Clipping Rejected by District Admin',
+          message: details?.reason || `Your clipping "${(details.headline || '').substring(0, 55)}" was not approved for feed publishing.`,
+          notification_type: 'clipping_rejected'
+        });
+      } catch { /* non-critical */ }
+    }
+
+    return { success: true };
+  } catch (err: any) {
+    console.error('[AdminService] rejectClippingSubmission failed:', err);
+    return { success: false, error: err?.message || 'Failed to reject clipping' };
+  }
+};
+
 // ─── Users ────────────────────────────────────────────────────────────────────
 export { getAdminUsers } from './admin-users.service';
 
@@ -311,24 +430,26 @@ export const updateUserRole = async (
   userId: string,
   role: 'superadmin' | 'admin' | 'reporter' | 'user',
   phoneNumber?: string,
-  plan?: string
+  plan?: string,
+  district?: string
 ): Promise<{ success: boolean; error?: string }> => {
-  const validPlans = ['free', 'pro', 'enterprise'];
-  const targetPlan = plan && validPlans.includes(plan.toLowerCase()) ? plan.toLowerCase() : undefined;
+  const targetPlan = plan || (role === 'superadmin' ? 'superadmin' : (role === 'admin' ? 'admin' : (role === 'reporter' ? 'reporter' : 'free')));
 
   // 1. Primary: Use Backend API (runs with service_role key, safely bypassing RLS)
   try {
-    const payload: any = { role };
-    if (targetPlan) {
-      payload.plan = targetPlan;
-    }
+    const payload: any = { role, plan: targetPlan };
     if (phoneNumber && phoneNumber.trim()) {
       payload.phone_number = phoneNumber.trim();
     }
+    if (district !== undefined) {
+      payload.district = district;
+    }
     const res = await api.put(`/api/v1/admin/users/${userId}/role`, payload);
     if (res.status >= 200 && res.status < 300) {
-      // Force-refresh the Supabase session so the promoted user's JWT picks
-      // up the new role immediately if they are the current user
+      // Also update district directly in profiles
+      if (district !== undefined) {
+        await supabase.from('profiles').update({ district }).eq('id', userId);
+      }
       try {
         const { data: sessionData } = await supabase.auth.getSession();
         if (sessionData?.session?.user?.id === userId) {
@@ -341,35 +462,15 @@ export const updateUserRole = async (
     }
   } catch (backendErr: any) {
     console.warn('[AdminService] Backend role update error:', backendErr?.response?.data || backendErr?.message);
-    const detail = backendErr?.response?.data?.detail;
-    if (detail) {
-      return { success: false, error: detail };
-    }
   }
 
-  // 2. Fallback: Supabase RPC (admin_update_user_role)
+  // 2. Fallback: direct Supabase upsert
   try {
-    const { error: rpcError } = await supabase.rpc('admin_update_user_role', {
-      target_user_id: userId,
-      new_role: role,
-      new_plan: targetPlan || null,
-    });
-    if (!rpcError) {
-      return { success: true };
-    }
-    console.warn('[AdminService] RPC role update error:', rpcError.message);
-  } catch {
-    /* fallback to direct update */
-  }
-
-  // 3. Fallback: direct Supabase update
-  try {
-    const updateData: any = { role };
-    if (targetPlan) updateData.plan = targetPlan;
+    const upsertData: any = { id: userId, role, plan: targetPlan };
+    if (district !== undefined) upsertData.district = district;
     const { error } = await supabase
       .from('profiles')
-      .update(updateData)
-      .eq('id', userId);
+      .upsert(upsertData, { onConflict: 'id' });
     if (error) return { success: false, error: error.message };
     // Force-refresh the Supabase session for the promoted user
     try {
@@ -388,12 +489,9 @@ export const updateUserPlan = async (
   userId: string,
   plan: string
 ): Promise<{ success: boolean; error?: string }> => {
-  const validPlans = ['free', 'pro', 'enterprise'];
-  const sanitizedPlan = validPlans.includes(plan.toLowerCase()) ? plan.toLowerCase() : 'free';
-
   // 1. Primary: Use Backend API (runs with service_role key, safely bypassing RLS)
   try {
-    const res = await api.put(`/api/v1/admin/users/${userId}/plan`, { plan: sanitizedPlan });
+    const res = await api.put(`/api/v1/admin/users/${userId}/plan`, { plan });
     if (res.status >= 200 && res.status < 300) {
       return { success: true };
     }
@@ -405,12 +503,11 @@ export const updateUserPlan = async (
     }
   }
 
-  // 2. Fallback: direct Supabase update
+  // 2. Fallback: direct Supabase upsert
   try {
     const { error } = await supabase
       .from('profiles')
-      .update({ plan: sanitizedPlan })
-      .eq('id', userId);
+      .upsert({ id: userId, plan }, { onConflict: 'id' });
     if (error) return { success: false, error: error.message };
     return { success: true };
   } catch (e: any) {

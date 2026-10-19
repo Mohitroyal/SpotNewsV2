@@ -7,21 +7,46 @@ import {
   AlertTriangle, TrendingUp, Newspaper, Activity, Crown,
   ChevronDown, ChevronUp, Search, ArrowLeft, Ban,
   Calendar, FileText, ExternalLink, Download,
-  UploadCloud, Edit2, CheckCircle2
+  UploadCloud, Edit2, CheckCircle2,
+  Bell, Send, Radio, Smartphone, Megaphone,
+  Clock, MapPin
 } from 'lucide-react';
 import { useAuthStore, isAdminUser, isSuperAdminUser } from '@/store';
 import { supabase } from '@/lib/supabase';
+import { LocalAdsAdminSection } from '@/components/LocalAdsAdminSection';
 import {
   getAdminStats, getAdminUsers, getPublicationLogos,
   addPublicationLogo, updatePublicationLogo, uploadLogoImage,
   removePublicationLogo, toggleLogoActive,
   updateUserRole, updateUserPlan, banUser, deleteUser,
-  getAdminClippings,
+  getAdminClippings, approveClippingToFeed, rejectClippingSubmission,
   type AdminStats, type AdminUserProfile, type PublicationLogo, type AdminClippingLog
 } from '@/services/admin.service';
 import mastheadLogo from '../assets/rti_express_logo.png';
 import { DailyNewspaperGeneratorModal } from '@/components/DailyNewspaperGeneratorModal';
 import { dailyNewspaperService, type DailyEditionRecord } from '@/services/daily-newspaper.service';
+import { INDIA_STATES } from '@/utils/indiaStates';
+
+export const ALL_ADMIN_DISTRICTS = Array.from(new Set([
+  ...(INDIA_STATES['Andhra Pradesh'] || []),
+  ...(INDIA_STATES['Telangana'] || []),
+])).sort();
+
+const TELANGANA_DISTRICTS = [
+  { id: 1, name: "Hyderabad / హైదరాబాద్" },
+  { id: 2, name: "Rangareddy / రంగారెడ్డి" },
+  { id: 3, name: "Medchal-Malkajgiri / మేడ్చల్" },
+  { id: 4, name: "Warangal / వరంగల్" },
+  { id: 5, name: "Karimnagar / కరీంనగర్" },
+  { id: 6, name: "Nizamabad / నిజామాబాద్" },
+  { id: 7, name: "Khammam / ఖమ్మం" },
+  { id: 8, name: "Nalgonda / నల్గొండ" },
+  { id: 9, name: "Mahabubnagar / మహబూబ్‌నగర్" },
+  { id: 10, name: "Sangareddy / సంగారెడ్డి" },
+  { id: 11, name: "Siddipet / సిద్దిపేట" },
+  { id: 12, name: "Adilabad / ఆదిలాబాద్" },
+  { id: 13, name: "Suryapet / సూర్యాపేట" },
+];
 
 function fmt(n: number) {
   return n >= 1000 ? `${(n / 1000).toFixed(1)}k` : String(n);
@@ -170,8 +195,19 @@ export const AdminScreen = () => {
 
   useEffect(() => {
     const checkAccess = async () => {
+      const email = (user?.email || '').toLowerCase().trim();
+      const isExplicitDistrictAdmin = email === 'mpokkala@gitam.in';
+
+      if (isExplicitDistrictAdmin) {
+        setIsSuperAdmin(false);
+        setHasAccess(true);
+        setAccessChecked(true);
+        return true;
+      }
+
       // 1. Superadmin fast-path
       if (isSuperAdminUser(user)) {
+        setIsSuperAdmin(true);
         setHasAccess(true);
         setAccessChecked(true);
         return true;
@@ -189,10 +225,27 @@ export const AdminScreen = () => {
         try {
           const { data: prof } = await supabase
             .from('profiles')
-            .select('role')
+            .select('role, district, email')
             .eq('id', user.id)
-            .single();
-          if (prof?.role === 'admin') {
+            .maybeSingle();
+
+          const emailToCheck = (user?.email || prof?.email || '').toLowerCase().trim();
+          if (emailToCheck === 'mpokkala@gitam.in') {
+            setIsSuperAdmin(false);
+            setHasAccess(true);
+            setAccessChecked(true);
+            return true;
+          }
+
+          const isSuper = prof?.role === 'superadmin' || isSuperAdminUser(user) || isSuperAdminUser(emailToCheck);
+
+          if (isSuper) {
+            setIsSuperAdmin(true);
+            setHasAccess(true);
+            setAccessChecked(true);
+            return true;
+          }
+          if (prof?.role === 'admin' || isAdminUser(user)) {
             setHasAccess(true);
             setAccessChecked(true);
             return true;
@@ -239,8 +292,29 @@ export const AdminScreen = () => {
   }, [user, navigate]);
 
   // ── State ─────────────────────────────────────────────────────────────────
-  const isSuperAdmin = isSuperAdminUser(user);
-  const [activeTab, setActiveTab] = useState<'overview' | 'clippings' | 'users' | 'logos' | 'applications' | 'daily_editions'>('overview');
+  const [isSuperAdmin, setIsSuperAdmin] = useState(() => {
+    const email = (user?.email || '').toLowerCase().trim();
+    if (email === 'mpokkala@gitam.in') return false;
+    return isSuperAdminUser(user);
+  });
+
+  useEffect(() => {
+    const email = (user?.email || '').toLowerCase().trim();
+    if (email === 'mpokkala@gitam.in') {
+      setIsSuperAdmin(false);
+      return;
+    }
+    if (isSuperAdminUser(user)) {
+      setIsSuperAdmin(true);
+    }
+  }, [user]);
+
+  const [activeTab, setActiveTab] = useState<'overview' | 'clippings' | 'users' | 'logos' | 'applications' | 'daily_editions' | 'notifications' | 'local_ads'>(
+    () => {
+      const email = (user?.email || '').toLowerCase().trim();
+      return (email !== 'mpokkala@gitam.in' && isSuperAdminUser(user)) ? 'overview' : 'clippings';
+    }
+  );
   const [isPdfGeneratorOpen, setIsPdfGeneratorOpen] = useState(false);
   const [dailyEditions, setDailyEditions] = useState<DailyEditionRecord[]>([]);
   const [dailyEditionsLoading, setDailyEditionsLoading] = useState(false);
@@ -255,6 +329,19 @@ export const AdminScreen = () => {
   const [sortAsc, setSortAsc] = useState(false);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
 
+  // Push Notification broadcast state
+  const [notifTitle, setNotifTitle] = useState('');
+  const [notifBody, setNotifBody] = useState('');
+  const [notifTargetType, setNotifTargetType] = useState<'all' | 'district' | 'token'>('all');
+  const [notifDistrictId, setNotifDistrictId] = useState<number>(1);
+  const [notifCustomToken, setNotifCustomToken] = useState('');
+  const [notifChannel, setNotifChannel] = useState<'news' | 'weather' | 'reporter' | 'general'>('news');
+  const [notifUrl, setNotifUrl] = useState('/');
+  const [notifImageUrl, setNotifImageUrl] = useState('');
+  const [notifSending, setNotifSending] = useState(false);
+  const [notifStats, setNotifStats] = useState<{ total_device_tokens: number; unique_registered_users: number; tokens_by_district: Record<string, number> } | null>(null);
+  const [notifStatsLoading, setNotifStatsLoading] = useState(false);
+
   // Date filtering state
   const [fromDate, setFromDate] = useState<string>('');
   const [toDate, setToDate] = useState<string>('');
@@ -267,16 +354,126 @@ export const AdminScreen = () => {
   const [clippingsSearch, setClippingsSearch] = useState('');
   const [selectedClippingModal, setSelectedClippingModal] = useState<AdminClippingLog | null>(null);
 
+  // District Admin & Approval Filtering State
+  const [clippingApprovalFilter, setClippingApprovalFilter] = useState<'pending' | 'approved' | 'rejected' | 'all'>('pending');
+  const [adminDistrictFilter, setAdminDistrictFilter] = useState<string>('all');
+  const [currentAdminDistrict, setCurrentAdminDistrict] = useState<string>('');
+  const [editDistrict, setEditDistrict] = useState<string>('');
+
+  // Fetch logged in admin's assigned district
+  useEffect(() => {
+    const fetchAdminDistrict = async () => {
+      if (!user?.id) return;
+      try {
+        const { data: prof } = await supabase
+          .from('profiles')
+          .select('role, district')
+          .eq('id', user.id)
+          .maybeSingle();
+
+        const storedDistrict = localStorage.getItem(`spotnews_admin_district_${user.id}`);
+        const d = prof?.district || storedDistrict || '';
+        if (d && !isSuperAdmin) {
+          setCurrentAdminDistrict(d);
+          setAdminDistrictFilter(d);
+        }
+      } catch (err) {
+        console.warn('Could not fetch admin district:', err);
+      }
+    };
+    fetchAdminDistrict();
+  }, [user?.id, isSuperAdmin]);
+
   // Applications state
   const [applications, setApplications] = useState<any[]>([]);
   const [applicationsLoading, setApplicationsLoading] = useState(false);
 
-  // Guard tab for non-superadmin
+  // Guard tabs: District Admin can only access Feed Access (clippings) and Overview
   useEffect(() => {
-    if (!isSuperAdmin && (activeTab === 'logos' || activeTab === 'applications')) {
-      setActiveTab('overview');
+    if (!isSuperAdmin && (
+      activeTab === 'applications' ||
+      activeTab === 'users' ||
+      activeTab === 'logos' ||
+      activeTab === 'notifications' ||
+      activeTab === 'daily_editions' ||
+      activeTab === 'local_ads'
+    )) {
+      setActiveTab('clippings');
     }
   }, [isSuperAdmin, activeTab]);
+
+  const fetchNotificationStats = useCallback(async () => {
+    setNotifStatsLoading(true);
+    try {
+      const apiUrl = import.meta.env.VITE_API_URL || 'https://spotnewsv2.onrender.com';
+      const res = await fetch(`${apiUrl}/api/v1/notifications/tokens`);
+      if (res.ok) {
+        const data = await res.json();
+        setNotifStats(data);
+      }
+    } catch (e) {
+      console.warn("Failed to fetch notification stats:", e);
+    } finally {
+      setNotifStatsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (activeTab === 'notifications' && hasAccess) {
+      fetchNotificationStats();
+    }
+  }, [activeTab, hasAccess, fetchNotificationStats]);
+
+  const handleSendNotification = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!notifTitle.trim() || !notifBody.trim()) {
+      setToast({ message: 'Title and Message are required', type: 'error' });
+      return;
+    }
+    setNotifSending(true);
+    try {
+      const apiUrl = import.meta.env.VITE_API_URL || 'https://spotnewsv2.onrender.com';
+      const payload: Record<string, any> = {
+        title: notifTitle.trim(),
+        body: notifBody.trim(),
+        channel_id: notifChannel,
+        url: notifUrl || '/',
+      };
+      payload.image_url = notifImageUrl.trim() || 'https://rffrqokpnqoycpozrjuc.supabase.co/storage/v1/object/public/newscraft-clippings/assets/app_logo.png';
+      if (notifTargetType === 'all') {
+        payload.topic = 'all';
+      } else if (notifTargetType === 'district') {
+        payload.topic = `district_${notifDistrictId}`;
+      } else if (notifTargetType === 'token') {
+        if (!notifCustomToken.trim()) {
+          setToast({ message: 'Please enter a target device token', type: 'error' });
+          setNotifSending(false);
+          return;
+        }
+        payload.token = notifCustomToken.trim();
+      }
+
+      const res = await fetch(`${apiUrl}/api/v1/notifications/send`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+
+      const resData = await res.json().catch(() => ({}));
+      if (res.ok && resData.success) {
+        setToast({ message: `Push notification sent successfully! (${resData.topic || 'Device'})`, type: 'success' });
+        setNotifTitle('');
+        setNotifBody('');
+        fetchNotificationStats();
+      } else {
+        setToast({ message: resData.error || 'Failed to send notification', type: 'error' });
+      }
+    } catch (err: any) {
+      setToast({ message: err.message || 'Error sending push notification', type: 'error' });
+    } finally {
+      setNotifSending(false);
+    }
+  };
 
   // Edit user state
   const [editingUserId, setEditingUserId] = useState<string | null>(null);
@@ -393,36 +590,95 @@ export const AdminScreen = () => {
   }, []);
 
   useEffect(() => {
-    if (hasAccess && activeTab === 'applications' && isSuperAdmin) {
+    if (hasAccess && isSuperAdmin) {
       fetchApplications();
     }
-  }, [hasAccess, activeTab, isSuperAdmin, fetchApplications]);
+  }, [hasAccess, isSuperAdmin, fetchApplications]);
 
   const handleApplicationStatus = async (appId: string, email: string, status: 'approved' | 'rejected') => {
     try {
       const { error } = await supabase
         .from('reporter_applications')
-        .update({ status })
+        .update({ 
+          status,
+          updated_at: new Date().toISOString()
+        })
         .eq('id', appId);
       if (error) throw error;
       
-      // If approved, update the user's role in the profiles table
+      // Update region metadata on profile if present, but DO NOT activate 'reporter' role yet.
+      // As per security specifications, role stays 'user' until payment is verified by the backend.
+      const app = applications.find(a => a.id === appId);
+      if (app && (app.state || app.district)) {
+        await supabase
+          .from('profiles')
+          .update({
+            ...(app.state ? { state: app.state } : {}),
+            ...(app.district ? { district: app.district } : {})
+          })
+          .eq('email', email);
+      }
+
+      // Send real-time push notification & create in-app notification for the user if approved
       if (status === 'approved') {
-        const targetUser = users.find((u) => u.email && u.email.toLowerCase() === email.toLowerCase());
-        if (targetUser) {
-          await updateUserRole(targetUser.id, 'reporter');
-        } else {
-          try {
-            await supabase.rpc('admin_update_user_role_by_email', { target_email: email, new_role: 'reporter' });
-          } catch {
-            /* Trigger on reporter_applications already handled it */
+        try {
+          const cleanEmail = (email || app?.email || '').trim().toLowerCase();
+
+          // 1. Resolve user_id from app or profiles table
+          let targetUserId = app?.user_id || null;
+          if (!targetUserId && cleanEmail) {
+            try {
+              const { data: profile } = await supabase
+                .from('profiles')
+                .select('id')
+                .ilike('email', cleanEmail)
+                .maybeSingle();
+              if (profile?.id) {
+                targetUserId = profile.id;
+              }
+            } catch (pErr) {
+              console.warn('Could not resolve user_id for approval:', pErr);
+            }
           }
+
+          // 2. Insert in-app notification row so user receives notification in the app
+          try {
+            await supabase.from('notifications').insert([
+              {
+                user_id: targetUserId || null,
+                user_email: cleanEmail || null,
+                title: '🎉 రిపోర్టర్ దరఖాస్తు ఆమోదించబడింది!',
+                message: 'అభినందనలు! మీ Spot News 24x7 రిపోర్టర్ దరఖాస్తు ఆమోదించబడింది. ID కార్డు & యాక్సెస్ కొరకు వెంటనే చెల్లింపు పూర్తి చేయండి.',
+                notification_type: 'reporter_approval',
+                is_read: false
+              }
+            ]);
+          } catch (notifDbErr) {
+            console.warn('Failed to insert in-app notification:', notifDbErr);
+          }
+
+          // 3. Dispatch native push notification
+          const apiUrl = import.meta.env.VITE_API_URL || 'https://spotnewsv2.onrender.com';
+          await fetch(`${apiUrl}/api/v1/notifications/send`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              user_id: targetUserId || undefined,
+              email: cleanEmail || undefined,
+              title: '🎉 రిపోర్టర్ దరఖాస్తు ఆమోదించబడింది!',
+              body: 'అభినందనలు! మీ Spot News 24x7 రిపోర్టర్ దరఖాస్తు ఆమోదించబడింది. ID కార్డు & యాక్సెస్ కొరకు వెంటనే చెల్లింపు పూర్తి చేయండి.',
+              image_url: 'https://rffrqokpnqoycpozrjuc.supabase.co/storage/v1/object/public/newscraft-clippings/assets/app_logo.png',
+              url: '/payment',
+              channel_id: 'reporter',
+            }),
+          }).catch((err) => console.warn('Approval push error:', err));
+        } catch (e) {
+          console.warn('Failed to trigger approval notification:', e);
         }
       }
 
-      showToast(`Application ${status} successfully.`, 'success');
+      showToast(status === 'approved' ? 'Application approved! Reporter can now proceed to payment.' : 'Application rejected.', 'success');
       fetchApplications();
-      fetchAll(fromDate || undefined, toDate || undefined);
     } catch {
       showToast(`Failed to update application status`, 'error');
     }
@@ -486,34 +742,27 @@ export const AdminScreen = () => {
   };
 
   const startEdit = (u: AdminUserProfile) => {
-    const isSelf = Boolean(
-      (user?.email && u.email && user.email.toLowerCase() === u.email.toLowerCase()) ||
-      (user?.phone_number && u.phone_number && user.phone_number === u.phone_number)
-    );
-    if (isSelf) {
-      showToast('You cannot modify your own permissions here.', 'error');
-      return;
-    }
-    if (isSuperAdminUser(u) && !isSuperAdmin) {
-      showToast('Only superadmin can modify superadmin accounts.', 'error');
+    if (isSuperAdminUser(u)) {
+      showToast('Superadmin account is protected.', 'error');
       return;
     }
     setEditingUserId(u.id);
     setEditRole(u.role ?? 'user');
     setEditPlan(u.plan ?? 'free');
     setEditPhone(u.phone_number ?? '');
+    setEditDistrict(u.district ?? '');
   };
 
   const cancelEdit = () => { setEditingUserId(null); };
 
   const saveEdit = async (u: AdminUserProfile) => {
-    if (isSuperAdminUser(u) && !isSuperAdmin) {
-      showToast('Only superadmin can modify superadmin accounts.', 'error');
+    if (isSuperAdminUser(u)) {
+      showToast('Superadmin account cannot be modified.', 'error');
       setEditingUserId(null);
       return;
     }
-    if ((editRole === 'admin' || editRole === 'superadmin') && !isSuperAdmin) {
-      showToast('Only superadmin can grant administrator or superadmin roles.', 'error');
+    if (editRole === 'admin' && !isSuperAdmin) {
+      showToast('Only superadmin can grant admin role.', 'error');
       return;
     }
     setEditSaving(true);
@@ -521,14 +770,14 @@ export const AdminScreen = () => {
     let planSuccess = true;
     let errorMsg: string | undefined;
 
-    if (editRole !== u.role || editPhone !== (u.phone_number ?? '')) {
-      const r1 = await updateUserRole(u.id, editRole as any, editPhone.trim() || u.phone_number, editPlan);
+    if (editRole !== u.role || editPhone !== (u.phone_number ?? '') || editDistrict !== (u.district ?? '')) {
+      const r1 = await updateUserRole(u.id, editRole as any, editPhone.trim() || u.phone_number, undefined, editDistrict || undefined);
       if (!r1.success) {
         roleSuccess = false;
         errorMsg = r1.error;
       }
     }
-    if (editPlan !== u.plan && editRole === u.role) {
+    if (editPlan !== u.plan && editRole !== 'admin') {
       const r2 = await updateUserPlan(u.id, editPlan);
       if (!r2.success) {
         planSuccess = false;
@@ -738,7 +987,7 @@ export const AdminScreen = () => {
   // Counts for user filter tabs
   const activeTodayCount = users.filter((u) => u.is_active_today).length;
   const reportersCount = users.filter((u) => u.role === 'reporter').length;
-  const adminsCount = users.filter((u) => u.role === 'admin' || u.role === 'superadmin' || isSuperAdminUser(u)).length;
+  const adminsCount = users.filter((u) => u.role === 'admin').length;
   const bannedCount = users.filter((u) => u.is_banned).length;
 
   // Filtered users
@@ -755,7 +1004,7 @@ export const AdminScreen = () => {
     if (!matchesSearch) return false;
 
     if (userFilter === 'active_today') return Boolean(u.is_active_today);
-    if (userFilter === 'admin') return u.role === 'admin' || u.role === 'superadmin' || isSuperAdminUser(u);
+    if (userFilter === 'admin') return u.role === 'admin';
     if (userFilter === 'reporter') return u.role === 'reporter';
     if (userFilter === 'banned') return Boolean(u.is_banned);
     return true;
@@ -767,15 +1016,117 @@ export const AdminScreen = () => {
     return 0;
   });
 
-  // Filtered clippings
+  // Approval Handlers for District Admin / Superadmin
+  const handleApproveClipping = async (clip: AdminClippingLog) => {
+    setActionLoadingId(clip.id);
+    try {
+      const res = await approveClippingToFeed(clip.id, {
+        headline: clip.headline,
+        district: clip.district,
+        user_id: clip.user_id,
+        user_email: clip.user_email,
+        png_url: clip.png_url,
+      });
+      if (res.success) {
+        showToast('Clipping approved & published to live feed!', 'success');
+        setClippings((prev) =>
+          prev.map((c) => (c.id === clip.id ? { ...c, is_posted: true, status: 'approved' } : c))
+        );
+        if (selectedClippingModal?.id === clip.id) {
+          setSelectedClippingModal((prev) => (prev ? { ...prev, is_posted: true, status: 'approved' } : null));
+        }
+      } else {
+        showToast(res.error || 'Failed to approve clipping', 'error');
+      }
+    } catch {
+      showToast('Error approving clipping', 'error');
+    } finally {
+      setActionLoadingId(null);
+    }
+  };
+
+  const handleRejectClipping = async (clip: AdminClippingLog) => {
+    const reason = window.prompt(
+      'Enter reason for rejecting this clipping (optional):',
+      'Clipping does not meet editorial publication standards.'
+    );
+    if (reason === null) return;
+
+    setActionLoadingId(clip.id);
+    try {
+      const res = await rejectClippingSubmission(clip.id, {
+        headline: clip.headline,
+        user_id: clip.user_id,
+        user_email: clip.user_email,
+        reason: reason || undefined,
+      });
+      if (res.success) {
+        showToast('Clipping marked as rejected.', 'success');
+        setClippings((prev) =>
+          prev.map((c) => (c.id === clip.id ? { ...c, is_posted: false, status: 'rejected' } : c))
+        );
+        if (selectedClippingModal?.id === clip.id) {
+          setSelectedClippingModal((prev) => (prev ? { ...prev, is_posted: false, status: 'rejected' } : null));
+        }
+      } else {
+        showToast(res.error || 'Failed to reject clipping', 'error');
+      }
+    } catch {
+      showToast('Error rejecting clipping', 'error');
+    } finally {
+      setActionLoadingId(null);
+    }
+  };
+
+  // Pending clippings count for current district scope
+  const pendingClippingsCount = clippings.filter((c) => {
+    if (currentAdminDistrict && !isSuperAdmin) {
+      if ((c.district || '').toLowerCase() !== currentAdminDistrict.toLowerCase()) return false;
+    } else if (adminDistrictFilter !== 'all') {
+      if ((c.district || '').toLowerCase() !== adminDistrictFilter.toLowerCase()) return false;
+    }
+    return c.status === 'pending_approval' || (!c.is_posted && c.status !== 'rejected');
+  }).length;
+
+  // Pending reporter applications count
+  const pendingApplicationsCount = applications.filter((a) => {
+    if (currentAdminDistrict && !isSuperAdmin) {
+      if ((a.district || '').toLowerCase() !== currentAdminDistrict.toLowerCase()) return false;
+    }
+    return a.status === 'pending';
+  }).length;
+
+  // Filtered clippings with District Admin and Approval status logic
   const filteredClippings = clippings.filter((c) => {
     const q = clippingsSearch.toLowerCase();
-    return (
+    const matchQuery =
       c.headline.toLowerCase().includes(q) ||
       c.user_email.toLowerCase().includes(q) ||
+      (c.user_name || '').toLowerCase().includes(q) ||
+      (c.district || '').toLowerCase().includes(q) ||
       (c.publication_name || '').toLowerCase().includes(q) ||
-      (c.language || '').toLowerCase().includes(q)
-    );
+      (c.language || '').toLowerCase().includes(q);
+
+    if (!matchQuery) return false;
+
+    // District filter
+    if (currentAdminDistrict && !isSuperAdmin) {
+      if ((c.district || '').toLowerCase() !== currentAdminDistrict.toLowerCase()) return false;
+    } else if (adminDistrictFilter !== 'all') {
+      if ((c.district || '').toLowerCase() !== adminDistrictFilter.toLowerCase()) return false;
+    }
+
+    // Approval status filter
+    if (clippingApprovalFilter === 'pending') {
+      return c.status === 'pending_approval' || (!c.is_posted && c.status !== 'rejected');
+    }
+    if (clippingApprovalFilter === 'approved') {
+      return c.is_posted === true || c.status === 'approved';
+    }
+    if (clippingApprovalFilter === 'rejected') {
+      return c.status === 'rejected';
+    }
+    return true;
   });
 
   // ── Render Dashboard ──────────────────────────────────────────────────────
@@ -794,7 +1145,7 @@ export const AdminScreen = () => {
                   Spot News 24x7
                 </h1>
                 <span className="bg-amber-400 text-[#0A2540] text-[9px] font-black uppercase px-1.5 py-0.5 rounded shadow-xs">
-                  {isSuperAdmin ? 'SUPERADMIN' : 'ADMIN'}
+                  {isSuperAdmin ? 'SUPERADMIN' : (currentAdminDistrict ? `${currentAdminDistrict.toUpperCase()} ADMIN` : 'DISTRICT ADMIN')}
                 </span>
               </div>
               <p className="text-white/75 text-[11px] font-medium">Control Center & Operations</p>
@@ -845,6 +1196,11 @@ export const AdminScreen = () => {
               <Crown className="w-3.5 h-3.5 text-amber-300 shrink-0" />
               <span className="truncate">
                 Admin: <strong className="text-white font-bold">{user?.email}</strong>
+                {currentAdminDistrict && !isSuperAdmin && (
+                  <span className="ml-2 px-2 py-0.5 rounded-full bg-white/20 text-white font-black text-[10px] tracking-wide">
+                    📍 {currentAdminDistrict}
+                  </span>
+                )}
               </span>
             </div>
             <span className="text-[11px] text-white/60 shrink-0">
@@ -865,10 +1221,29 @@ export const AdminScreen = () => {
         </div>
       )}
       <div className="max-w-5xl mx-auto px-4 pt-4">
-        <div className="bg-[#E8F2FC] border border-[#D0E2F7] rounded-2xl p-1 flex items-center gap-1 shadow-xs">
+        <div className="bg-[#E8F2FC] border border-[#D0E2F7] rounded-2xl p-1 flex items-center gap-1 shadow-xs overflow-x-auto scrollbar-none">
+          {/* Feed Access / Clippings Tab */}
+          <button
+            onClick={() => setActiveTab('clippings')}
+            className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 px-3 rounded-xl text-xs font-bold transition-all whitespace-nowrap shrink-0 relative ${
+              activeTab === 'clippings'
+                ? 'bg-[#015BB3] text-white shadow-sm'
+                : 'text-[#415A77] hover:bg-white/50'
+            }`}
+          >
+            <Newspaper className="w-4 h-4" />
+            <span>Feed Access</span>
+            {pendingClippingsCount > 0 && (
+              <span className="px-1.5 py-0.2 rounded-full text-[9px] font-black bg-amber-500 text-white shadow-xs animate-pulse">
+                {pendingClippingsCount}
+              </span>
+            )}
+          </button>
+
+          {/* Overview Tab */}
           <button
             onClick={() => setActiveTab('overview')}
-            className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl text-xs font-bold transition-all ${
+            className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 px-3 rounded-xl text-xs font-bold transition-all whitespace-nowrap shrink-0 ${
               activeTab === 'overview'
                 ? 'bg-[#015BB3] text-white shadow-sm'
                 : 'text-[#415A77] hover:bg-white/50'
@@ -878,35 +1253,46 @@ export const AdminScreen = () => {
             <span>Overview</span>
           </button>
 
-          <button
-            onClick={() => setActiveTab('clippings')}
-            className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl text-xs font-bold transition-all ${
-              activeTab === 'clippings'
-                ? 'bg-[#015BB3] text-white shadow-sm'
-                : 'text-[#415A77] hover:bg-white/50'
-            }`}
-          >
-            <Newspaper className="w-4 h-4" />
-            <span>Clippings</span>
-          </button>
+          {/* Superadmin Only: Reporter Requests */}
+          {isSuperAdmin && (
+            <button
+              onClick={() => setActiveTab('applications')}
+              className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 px-3 rounded-xl text-xs font-bold transition-all whitespace-nowrap shrink-0 relative ${
+                activeTab === 'applications'
+                  ? 'bg-[#015BB3] text-white shadow-sm'
+                  : 'text-[#415A77] hover:bg-white/50'
+              }`}
+            >
+              <FileText className="w-4 h-4" />
+              <span>Requests</span>
+              {pendingApplicationsCount > 0 && (
+                <span className="px-1.5 py-0.2 rounded-full text-[9px] font-black bg-amber-500 text-white shadow-xs animate-pulse">
+                  {pendingApplicationsCount}
+                </span>
+              )}
+            </button>
+          )}
 
-          <button
-            onClick={() => setActiveTab('users')}
-            className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl text-xs font-bold transition-all ${
-              activeTab === 'users'
-                ? 'bg-[#015BB3] text-white shadow-sm'
-                : 'text-[#415A77] hover:bg-white/50'
-            }`}
-          >
-            <Users className="w-4 h-4" />
-            <span>{usersError ? 'Users (unavailable)' : `Users (${users.length})`}</span>
-          </button>
+          {/* Superadmin Only: Users */}
+          {isSuperAdmin && (
+            <button
+              onClick={() => setActiveTab('users')}
+              className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 px-3 rounded-xl text-xs font-bold transition-all whitespace-nowrap shrink-0 ${
+                activeTab === 'users'
+                  ? 'bg-[#015BB3] text-white shadow-sm'
+                  : 'text-[#415A77] hover:bg-white/50'
+              }`}
+            >
+              <Users className="w-4 h-4" />
+              <span>{usersError ? 'Users (unavailable)' : `Users (${users.length})`}</span>
+            </button>
+          )}
 
           {isSuperAdmin && (
             <>
               <button
                 onClick={() => setActiveTab('daily_editions')}
-                className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl text-xs font-bold transition-all ${
+                className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 px-3 rounded-xl text-xs font-bold transition-all whitespace-nowrap shrink-0 ${
                   activeTab === 'daily_editions'
                     ? 'bg-[#015BB3] text-white shadow-sm'
                     : 'text-[#415A77] hover:bg-white/50'
@@ -918,7 +1304,7 @@ export const AdminScreen = () => {
 
               <button
                 onClick={() => setActiveTab('logos')}
-                className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl text-xs font-bold transition-all ${
+                className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 px-3 rounded-xl text-xs font-bold transition-all whitespace-nowrap shrink-0 ${
                   activeTab === 'logos'
                     ? 'bg-[#015BB3] text-white shadow-sm'
                     : 'text-[#415A77] hover:bg-white/50'
@@ -927,17 +1313,29 @@ export const AdminScreen = () => {
                 <ImageIcon className="w-4 h-4" />
                 <span>Logos ({logos.length})</span>
               </button>
-              
+
               <button
-                onClick={() => setActiveTab('applications')}
-                className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl text-xs font-bold transition-all ${
-                  activeTab === 'applications'
+                onClick={() => setActiveTab('notifications')}
+                className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 px-3 rounded-xl text-xs font-bold transition-all whitespace-nowrap shrink-0 ${
+                  activeTab === 'notifications'
                     ? 'bg-[#015BB3] text-white shadow-sm'
                     : 'text-[#415A77] hover:bg-white/50'
                 }`}
               >
-                <FileText className="w-4 h-4" />
-                <span>Requests</span>
+                <Bell className="w-4 h-4 text-amber-300" />
+                <span>Push Alerts</span>
+              </button>
+
+              <button
+                onClick={() => setActiveTab('local_ads')}
+                className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 px-3 rounded-xl text-xs font-bold transition-all whitespace-nowrap shrink-0 ${
+                  activeTab === 'local_ads'
+                    ? 'bg-[#015BB3] text-white shadow-sm'
+                    : 'text-[#415A77] hover:bg-white/50'
+                }`}
+              >
+                <Megaphone className="w-4 h-4 text-emerald-300" />
+                <span>Local Ads</span>
               </button>
             </>
           )}
@@ -1097,10 +1495,41 @@ export const AdminScreen = () => {
                 <span>Quick Operations</span>
               </h3>
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-2">
+                {/* Feed Approvals / Access (Primary for District Admin & Superadmin) */}
                 <button
                   onClick={() => {
-                    setUserFilter('active_today');
-                    setActiveTab('users');
+                    setClippingApprovalFilter('pending');
+                    setActiveTab('clippings');
+                  }}
+                  className="p-3 rounded-xl bg-sky-50/80 border border-sky-200 text-left hover:bg-sky-100/70 transition-all flex items-center justify-between"
+                >
+                  <div>
+                    <div className="flex items-center gap-1.5">
+                      <p className="text-xs font-bold text-[#0A2540]">Feed Approvals</p>
+                      {pendingClippingsCount > 0 && (
+                        <span className="px-1.5 py-0.2 rounded-full text-[9px] font-black bg-amber-500 text-white shadow-xs animate-pulse">
+                          {pendingClippingsCount} PENDING
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-[11px] text-[#415A77] mt-0.5">
+                      {currentAdminDistrict && !isSuperAdmin
+                        ? `${currentAdminDistrict} reporter clippings for review`
+                        : 'Review & approve clippings for live feed'}
+                    </p>
+                  </div>
+                  <Newspaper className="w-4 h-4 text-[#015BB3]" />
+                </button>
+
+                {/* Active Reporters */}
+                <button
+                  onClick={() => {
+                    if (isSuperAdmin) {
+                      setUserFilter('active_today');
+                      setActiveTab('users');
+                    } else {
+                      setActiveTab('clippings');
+                    }
                   }}
                   className="p-3 rounded-xl bg-emerald-50/70 border border-emerald-200 text-left hover:bg-emerald-100/60 transition-all flex items-center justify-between"
                 >
@@ -1116,30 +1545,45 @@ export const AdminScreen = () => {
                   <Activity className="w-4 h-4 text-emerald-600" />
                 </button>
 
-                <button
-                  onClick={() => {
-                    setUserFilter('all');
-                    setActiveTab('users');
-                  }}
-                  className="p-3 rounded-xl bg-[#E8F2FC] border border-[#D0E2F7] text-left hover:bg-[#D6E9FF] transition-all flex items-center justify-between"
-                >
-                  <div>
-                    <p className="text-xs font-bold text-[#0A2540]">Manage Users & Roles</p>
-                    <p className="text-[11px] text-[#6B7A90] mt-0.5">Promote, demote or ban users</p>
-                  </div>
-                  <Users className="w-4 h-4 text-[#015BB3]" />
-                </button>
+                {/* Superadmin Only: Reporter Requests */}
+                {isSuperAdmin && (
+                  <button
+                    onClick={() => setActiveTab('applications')}
+                    className="p-3 rounded-xl bg-amber-50/80 border border-amber-200 text-left hover:bg-amber-100/70 transition-all flex items-center justify-between"
+                  >
+                    <div>
+                      <div className="flex items-center gap-1.5">
+                        <p className="text-xs font-bold text-amber-950">Reporter Requests</p>
+                        {pendingApplicationsCount > 0 && (
+                          <span className="px-1.5 py-0.2 rounded-full text-[9px] font-black bg-amber-500 text-white shadow-xs">
+                            {pendingApplicationsCount} PENDING
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-[11px] text-amber-800 mt-0.5 font-medium">
+                        Review & accept reporter applications
+                      </p>
+                    </div>
+                    <FileText className="w-4 h-4 text-amber-600" />
+                  </button>
+                )}
 
-                <button
-                  onClick={() => setActiveTab('clippings')}
-                  className="p-3 rounded-xl bg-[#E8F2FC] border border-[#D0E2F7] text-left hover:bg-[#D6E9FF] transition-all flex items-center justify-between"
-                >
-                  <div>
-                    <p className="text-xs font-bold text-[#0A2540]">Review Clippings</p>
-                    <p className="text-[11px] text-[#6B7A90] mt-0.5">Browse news generation feed</p>
-                  </div>
-                  <Newspaper className="w-4 h-4 text-[#015BB3]" />
-                </button>
+                {/* Superadmin Only: Manage Users */}
+                {isSuperAdmin && (
+                  <button
+                    onClick={() => {
+                      setUserFilter('all');
+                      setActiveTab('users');
+                    }}
+                    className="p-3 rounded-xl bg-[#E8F2FC] border border-[#D0E2F7] text-left hover:bg-[#D6E9FF] transition-all flex items-center justify-between"
+                  >
+                    <div>
+                      <p className="text-xs font-bold text-[#0A2540]">Manage Users & Roles</p>
+                      <p className="text-[11px] text-[#6B7A90] mt-0.5">Promote, demote or ban users</p>
+                    </div>
+                    <Users className="w-4 h-4 text-[#015BB3]" />
+                  </button>
+                )}
 
                 {isSuperAdmin && (
                   <button
@@ -1172,63 +1616,138 @@ export const AdminScreen = () => {
         {/* ═════════════════════════════════════════════════════════════════════ */}
         {activeTab === 'clippings' && (
           <div className="space-y-4">
-            {/* Search & Actions Header */}
-            <div className="bg-white border border-[#D0E2F7] rounded-2xl p-3 shadow-sm flex flex-col md:flex-row items-stretch md:items-center justify-between gap-2">
-              <div className="relative flex-1">
-                <Search className="w-4 h-4 text-[#8FA3B8] absolute left-3 top-1/2 -translate-y-1/2" />
-                <input
-                  type="text"
-                  placeholder="Search clippings by headline, user email, publication..."
-                  value={clippingsSearch}
-                  onChange={(e) => setClippingsSearch(e.target.value)}
-                  className="w-full bg-[#E8F2FC] border border-[#D0E2F7] rounded-xl pl-9 pr-3 py-2 text-xs text-[#0A2540] placeholder-[#8FA3B8] focus:outline-none focus:border-[#015BB3]"
-                />
+            {/* District Admin Scope Banner */}
+            <div className="bg-white border border-[#D0E2F7] rounded-2xl p-4 shadow-sm flex flex-col md:flex-row items-start md:items-center justify-between gap-3">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-[#015BB3] text-white flex items-center justify-center shrink-0 shadow-sm">
+                  <MapPin className="w-5 h-5" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-sm font-bold text-[#0A2540]">
+                      {currentAdminDistrict && !isSuperAdmin
+                        ? `${currentAdminDistrict} District Admin Review`
+                        : 'District Clippings Review & Approvals'}
+                    </h3>
+                    <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-blue-100 text-[#015BB3] uppercase tracking-wider">
+                      {isSuperAdmin ? 'Superadmin Scope' : 'District Admin'}
+                    </span>
+                  </div>
+                  <p className="text-xs text-[#6B7A90] mt-0.5">
+                    {currentAdminDistrict && !isSuperAdmin
+                      ? `Clippings submitted by reporters in ${currentAdminDistrict} require your approval before appearing on the public feed.`
+                      : 'Review and approve clippings submitted by reporters across districts before they go live on the public feed.'}
+                  </p>
+                </div>
               </div>
 
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={() => fetchClippings(fromDate || undefined, toDate || undefined)}
-                  disabled={clippingsLoading}
-                  className="px-3 py-2 rounded-xl bg-[#015BB3] text-white text-xs font-bold flex items-center gap-1.5 shadow-xs"
+              {/* District Filter Dropdown (Superadmin or District Admin) */}
+              <div className="flex items-center gap-2 self-stretch md:self-auto">
+                <span className="text-xs font-bold text-[#0A2540] shrink-0">District:</span>
+                <select
+                  value={adminDistrictFilter}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setAdminDistrictFilter(val);
+                    if (!isSuperAdmin) {
+                      if (val !== 'all') {
+                        setCurrentAdminDistrict(val);
+                        if (user?.id) {
+                          localStorage.setItem(`spotnews_admin_district_${user.id}`, val);
+                          supabase.from('profiles').update({ district: val }).eq('id', user.id).then();
+                        }
+                      } else {
+                        setCurrentAdminDistrict('');
+                      }
+                    }
+                  }}
+                  className="bg-[#E8F2FC] border border-[#D0E2F7] rounded-xl px-3 py-1.5 text-xs font-bold text-[#0A2540] focus:outline-none"
                 >
-                  <RefreshCw className={`w-3.5 h-3.5 ${clippingsLoading ? 'animate-spin' : ''}`} />
-                  <span>Refresh ({clippingsTotal})</span>
-                </button>
+                  <option value="all">📍 All Districts</option>
+                  {ALL_ADMIN_DISTRICTS.map((d) => (
+                    <option key={d} value={d}>
+                      {d}
+                    </option>
+                  ))}
+                </select>
               </div>
             </div>
 
-            {/* Today's Filter Banner */}
-            {activeDatePreset === 'today' && (
-              <div className="bg-emerald-50 border border-emerald-200 rounded-2xl p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-2xs">
-                <div className="flex items-center gap-2.5">
-                  <div className="w-8 h-8 rounded-xl bg-emerald-600 text-white flex items-center justify-center shrink-0 shadow-2xs">
-                    <TrendingUp className="w-4 h-4" />
-                  </div>
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <h4 className="text-xs font-bold text-emerald-950">
-                        Clippings Generated Today ({filteredClippings.length})
-                      </h4>
-                      <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-emerald-200 text-emerald-800 uppercase tracking-wider">
-                        Today
-                      </span>
-                    </div>
-                    <p className="text-[11px] text-emerald-700 mt-0.5">
-                      Review all clippings published today and see which reporter generated each one.
-                    </p>
-                  </div>
-                </div>
+            {/* Approval Status Filters & Search Bar */}
+            <div className="bg-white border border-[#D0E2F7] rounded-2xl p-3 shadow-sm flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3">
+              {/* Status Pills */}
+              <div className="flex flex-wrap items-center gap-1.5">
                 <button
-                  onClick={() => {
-                    handleDatePreset('all');
-                    fetchClippings();
-                  }}
-                  className="text-xs font-bold text-emerald-800 bg-white hover:bg-emerald-100 border border-emerald-300 rounded-xl px-3 py-1.5 transition-colors shrink-0 self-start sm:self-center"
+                  onClick={() => setClippingApprovalFilter('pending')}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 ${
+                    clippingApprovalFilter === 'pending'
+                      ? 'bg-amber-500 text-white shadow-xs'
+                      : 'bg-[#E8F2FC] text-[#415A77] hover:bg-[#D6E9FF]'
+                  }`}
                 >
-                  Show All Clippings
+                  <Clock className="w-3.5 h-3.5" />
+                  <span>Pending Approval ({pendingClippingsCount})</span>
+                </button>
+
+                <button
+                  onClick={() => setClippingApprovalFilter('approved')}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 ${
+                    clippingApprovalFilter === 'approved'
+                      ? 'bg-[#059669] text-white shadow-xs'
+                      : 'bg-[#E8F2FC] text-[#415A77] hover:bg-[#D6E9FF]'
+                  }`}
+                >
+                  <CheckCircle2 className="w-3.5 h-3.5" />
+                  <span>Live on Feed</span>
+                </button>
+
+                <button
+                  onClick={() => setClippingApprovalFilter('rejected')}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 ${
+                    clippingApprovalFilter === 'rejected'
+                      ? 'bg-rose-600 text-white shadow-xs'
+                      : 'bg-[#E8F2FC] text-[#415A77] hover:bg-[#D6E9FF]'
+                  }`}
+                >
+                  <X className="w-3.5 h-3.5" />
+                  <span>Rejected</span>
+                </button>
+
+                <button
+                  onClick={() => setClippingApprovalFilter('all')}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
+                    clippingApprovalFilter === 'all'
+                      ? 'bg-[#015BB3] text-white shadow-xs'
+                      : 'bg-[#E8F2FC] text-[#415A77] hover:bg-[#D6E9FF]'
+                  }`}
+                >
+                  All Clippings
                 </button>
               </div>
-            )}
+
+              {/* Search & Refresh */}
+              <div className="flex items-center gap-2">
+                <div className="relative flex-1 md:w-64">
+                  <Search className="w-4 h-4 text-[#8FA3B8] absolute left-3 top-1/2 -translate-y-1/2" />
+                  <input
+                    type="text"
+                    placeholder="Search headline, reporter, district..."
+                    value={clippingsSearch}
+                    onChange={(e) => setClippingsSearch(e.target.value)}
+                    className="w-full bg-[#E8F2FC] border border-[#D0E2F7] rounded-xl pl-9 pr-3 py-1.5 text-xs text-[#0A2540] placeholder-[#8FA3B8] focus:outline-none focus:border-[#015BB3]"
+                  />
+                </div>
+
+                <button
+                  onClick={() => fetchClippings(fromDate || undefined, toDate || undefined)}
+                  disabled={clippingsLoading}
+                  className="px-3 py-1.5 rounded-xl bg-[#015BB3] text-white text-xs font-bold flex items-center gap-1.5 shadow-xs shrink-0"
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 ${clippingsLoading ? 'animate-spin' : ''}`} />
+                  <span>Refresh ({clippingsTotal || clippings.length})</span>
+                </button>
+              </div>
+            </div>
 
             {/* Clippings List */}
             {clippingsLoading ? (
@@ -1240,84 +1759,151 @@ export const AdminScreen = () => {
               <div className="bg-white border border-[#D0E2F7] rounded-2xl p-10 text-center shadow-sm">
                 <Newspaper className="w-12 h-12 text-[#8FA3B8] mx-auto mb-2 opacity-50" />
                 <p className="text-sm font-bold text-[#0A2540]">
-                  {activeDatePreset === 'today' ? 'No Clippings Generated Today Yet' : 'No clippings found'}
+                  {clippingApprovalFilter === 'pending'
+                    ? 'No Clippings Pending Approval'
+                    : 'No clippings found matching criteria'}
                 </p>
                 <p className="text-xs text-[#6B7A90] mt-1">
-                  {activeDatePreset === 'today'
-                    ? 'When reporters create clippings today, they will appear here with author details and links.'
-                    : 'Try clearing search filters or selecting another date preset.'}
+                  {clippingApprovalFilter === 'pending'
+                    ? 'When reporters submit clippings from their device, they will show up here for District Admin review.'
+                    : 'Try selecting a different filter or clearing search terms.'}
                 </p>
-                {activeDatePreset === 'today' && (
-                  <button
-                    onClick={() => {
-                      handleDatePreset('all');
-                      fetchClippings();
-                    }}
-                    className="mt-3 px-3.5 py-1.5 rounded-xl bg-[#015BB3] text-white text-xs font-bold shadow-xs inline-flex items-center gap-1.5"
-                  >
-                    <Eye className="w-3.5 h-3.5" />
-                    <span>View All Past Clippings</span>
-                  </button>
-                )}
               </div>
             ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                {filteredClippings.map((clip) => (
-                  <div
-                    key={clip.id}
-                    onClick={() => setSelectedClippingModal(clip)}
-                    className="bg-white border border-[#D0E2F7] rounded-2xl p-4 shadow-sm hover:border-[#015BB3] transition-all cursor-pointer flex flex-col justify-between group"
-                  >
-                    <div>
-                      <div className="flex items-start justify-between gap-2 mb-2">
-                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-[#E0F2FE] text-[#0369A1] uppercase tracking-wider">
-                          {clip.publication_name || 'Spot News'}
-                        </span>
-                        <span className="text-[11px] text-[#8FA3B8] font-medium">
-                          {timeAgo(clip.created_at)}
-                        </span>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {filteredClippings.map((clip) => {
+                  const isPending = clip.status === 'pending_approval' || (!clip.is_posted && clip.status !== 'rejected');
+                  const isApproved = clip.is_posted === true || clip.status === 'approved';
+                  const isRejected = clip.status === 'rejected';
+
+                  return (
+                    <div
+                      key={clip.id}
+                      onClick={() => setSelectedClippingModal(clip)}
+                      className="bg-white border border-[#D0E2F7] rounded-2xl p-4 shadow-sm hover:border-[#015BB3] transition-all cursor-pointer flex flex-col justify-between group space-y-3"
+                    >
+                      <div>
+                        {/* Top Badges */}
+                        <div className="flex items-center justify-between gap-2 mb-2">
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-[#E0F2FE] text-[#0369A1] uppercase tracking-wider">
+                              {clip.publication_name || 'Spot News'}
+                            </span>
+                            {clip.district && (
+                              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-100 text-slate-700 flex items-center gap-1">
+                                <MapPin className="w-2.5 h-2.5" />
+                                <span>{clip.district}</span>
+                              </span>
+                            )}
+                          </div>
+
+                          {/* Approval Status Badge */}
+                          <span
+                            className={`text-[10px] font-extrabold px-2 py-0.5 rounded-full uppercase tracking-wider flex items-center gap-1 ${
+                              isApproved
+                                ? 'bg-emerald-100 text-emerald-800'
+                                : isPending
+                                ? 'bg-amber-100 text-amber-800'
+                                : isRejected
+                                ? 'bg-rose-100 text-rose-800'
+                                : 'bg-slate-100 text-slate-800'
+                            }`}
+                          >
+                            {isApproved ? (
+                              <>
+                                <Check className="w-3 h-3" />
+                                <span>Live on Feed</span>
+                              </>
+                            ) : isPending ? (
+                              <>
+                                <Clock className="w-3 h-3" />
+                                <span>Pending Approval</span>
+                              </>
+                            ) : (
+                              <>
+                                <X className="w-3 h-3" />
+                                <span>Rejected</span>
+                              </>
+                            )}
+                          </span>
+                        </div>
+
+                        {/* Thumbnail & Headline Row */}
+                        <div className="flex items-start gap-3 mb-2">
+                          {clip.png_url && (
+                            <div className="w-16 h-20 rounded-xl overflow-hidden bg-slate-100 border border-[#D0E2F7] shrink-0">
+                              <img src={clip.png_url} alt="Thumbnail" className="w-full h-full object-cover" />
+                            </div>
+                          )}
+                          <div className="min-w-0 flex-1">
+                            <h4 className="text-sm font-bold text-[#0A2540] line-clamp-2 leading-snug group-hover:text-[#015BB3] transition-colors">
+                              {clip.headline || 'Untitled Clipping'}
+                            </h4>
+                            <p className="text-[11px] text-[#8FA3B8] mt-1">
+                              Submitted {timeAgo(clip.created_at)}
+                            </p>
+                          </div>
+                        </div>
+
+                        {/* Who Generated It: Reporter Card */}
+                        <div className="flex items-center gap-2.5 p-2 rounded-xl bg-[#F8FAFC] border border-[#E2E8F0] mb-2">
+                          <div className="w-7 h-7 rounded-full bg-[#E0F2FE] border border-[#015BB3]/30 text-[#015BB3] font-bold text-xs flex items-center justify-center shrink-0">
+                            {(clip.user_name || clip.user_email || 'R').substring(0, 1).toUpperCase()}
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <p className="text-xs font-bold text-[#0A2540] truncate">
+                              {clip.user_name || 'Reporter'}
+                            </p>
+                            <p className="text-[10px] text-[#6B7A90] truncate">
+                              {clip.user_email}
+                            </p>
+                          </div>
+                          {clip.user_plan && <PlanBadge plan={clip.user_plan} />}
+                        </div>
                       </div>
 
-                      <h4 className="text-sm font-bold text-[#0A2540] line-clamp-2 leading-snug mb-2 group-hover:text-[#015BB3] transition-colors">
-                        {clip.headline || 'Untitled Clipping'}
-                      </h4>
+                      {/* Card Footer & Direct Action Buttons */}
+                      <div className="space-y-2 pt-2 border-t border-[#E8F2FC]">
+                        {isPending ? (
+                          <div
+                            className="flex items-center gap-2"
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            <button
+                              onClick={() => handleApproveClipping(clip)}
+                              disabled={actionLoadingId === clip.id}
+                              className="flex-1 py-2 px-3 bg-[#059669] hover:bg-[#047857] active:scale-[0.98] text-white text-xs font-bold rounded-xl transition flex items-center justify-center gap-1.5 shadow-xs cursor-pointer"
+                            >
+                              {actionLoadingId === clip.id ? (
+                                <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                              ) : (
+                                <Check className="w-3.5 h-3.5" />
+                              )}
+                              <span>Approve & Post to Feed</span>
+                            </button>
 
-                      {/* Who Generated It: Reporter Card */}
-                      <div className="flex items-center gap-2.5 p-2 rounded-xl bg-[#F8FAFC] border border-[#E2E8F0] mb-3">
-                        <div className="w-8 h-8 rounded-full bg-[#E0F2FE] border border-[#015BB3]/30 text-[#015BB3] font-bold text-xs flex items-center justify-center shrink-0">
-                          {(clip.user_name || clip.user_email || 'R').substring(0, 1).toUpperCase()}
-                        </div>
-                        <div className="min-w-0 flex-1">
-                          <p className="text-xs font-bold text-[#0A2540] truncate">
-                            {clip.user_name || 'Reporter'}
-                          </p>
-                          <p className="text-[10px] text-[#6B7A90] truncate">
-                            {clip.user_email}
-                          </p>
-                        </div>
-                        {clip.user_plan && (
-                          <PlanBadge plan={clip.user_plan} />
+                            <button
+                              onClick={() => handleRejectClipping(clip)}
+                              disabled={actionLoadingId === clip.id}
+                              className="py-2 px-3 bg-white border border-[#CBD5E1] text-[#DC2626] hover:bg-red-50 active:scale-[0.98] text-xs font-bold rounded-xl transition flex items-center justify-center gap-1.5 cursor-pointer"
+                            >
+                              <X className="w-3.5 h-3.5" />
+                              <span>Reject</span>
+                            </button>
+                          </div>
+                        ) : (
+                          <div className="flex items-center justify-between text-xs">
+                            <span className="text-[11px] text-[#8FA3B8]">{formatDateTime(clip.created_at)}</span>
+                            <span className="font-bold text-[#015BB3] flex items-center gap-1">
+                              <Eye className="w-3.5 h-3.5" />
+                              <span>View Full Preview</span>
+                            </span>
+                          </div>
                         )}
                       </div>
-
-                      <div className="flex flex-wrap items-center gap-1.5 text-[11px] text-[#6B7A90] mb-1">
-                        <span className="uppercase font-semibold">{clip.language}</span>
-                        <span>·</span>
-                        <span>{clip.layout_columns} Cols</span>
-                        <span>·</span>
-                        <span className="capitalize">{clip.template_id?.replace(/_/g, ' ')}</span>
-                      </div>
                     </div>
-
-                    <div className="pt-2 border-t border-[#E8F2FC] flex items-center justify-between">
-                      <span className="text-[11px] text-[#8FA3B8]">{formatDateTime(clip.created_at)}</span>
-                      <span className="text-xs font-bold text-[#015BB3] flex items-center gap-1">
-                        <Eye className="w-3.5 h-3.5" />
-                        <span>View Details</span>
-                      </span>
-                    </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </div>
@@ -1608,9 +2194,9 @@ export const AdminScreen = () => {
         )}
 
         {/* ═════════════════════════════════════════════════════════════════════ */}
-        {/* TAB: APPLICATIONS                                                    */}
+        {/* TAB: APPLICATIONS (SUPERADMIN ONLY)                                   */}
         {/* ═════════════════════════════════════════════════════════════════════ */}
-        {activeTab === 'applications' && isSuperAdmin && (
+        {isSuperAdmin && activeTab === 'applications' && (
           <div className="space-y-4">
             <div className="bg-white border border-[#D0E2F7] rounded-2xl p-4 shadow-sm flex items-center justify-between">
               <div>
@@ -1641,11 +2227,14 @@ export const AdminScreen = () => {
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {applications.map((app) => (
-                  <div key={app.id} className="bg-white border border-[#D0E2F7] rounded-2xl p-4 shadow-sm flex flex-col justify-between">
-                    <div>
-                      <div className="flex justify-between items-start mb-2">
-                        <h4 className="text-sm font-bold text-[#0A2540]">{app.name}</h4>
-                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider ${
+                  <div key={app.id} className="bg-white border border-[#D0E2F7] rounded-3xl p-5 shadow-sm flex flex-col justify-between space-y-4">
+                    <div className="space-y-3">
+                      {/* Header Badge & Title */}
+                      <div className="flex items-center justify-between">
+                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full bg-[#EBF3FB] text-[#0B4EA2] text-[10px] font-black tracking-wider uppercase">
+                          SUPER ADMIN / APPLICATIONS
+                        </span>
+                        <span className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full uppercase tracking-wider ${
                           app.status === 'pending' ? 'bg-amber-100 text-amber-800' :
                           app.status === 'approved' ? 'bg-emerald-100 text-emerald-800' :
                           'bg-red-100 text-red-800'
@@ -1653,57 +2242,71 @@ export const AdminScreen = () => {
                           {app.status}
                         </span>
                       </div>
-                      
-                      <div className="space-y-1 mt-3">
-                        <div className="flex items-center gap-2 text-xs text-[#6B7A90]">
-                          <span className="font-semibold w-24">Email:</span>
-                          <span className="text-[#0A2540]">{app.email}</span>
+
+                      <div>
+                        <h4 className="text-base font-bold text-[#0A2540]">Review reporter</h4>
+                        <p className="text-xs text-[#6B7A90] mt-0.5">Check the reporter's details before approving access to payment.</p>
+                      </div>
+
+                      {/* Card 1: Reporter Application Details */}
+                      <div className="bg-[#F8FAFC] border border-[#E2E8F0] rounded-2xl p-3.5 space-y-2">
+                        <div className="flex items-center justify-between">
+                          <span className="text-[10px] font-bold uppercase tracking-wider text-[#6B7A90]">Reporter application</span>
+                          <span className="inline-flex items-center gap-1 text-[9.5px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
+                            EMAIL VERIFIED
+                          </span>
                         </div>
-                        <div className="flex items-center gap-2 text-xs text-[#6B7A90]">
-                          <span className="font-semibold w-24">Phone:</span>
-                          <span className="text-[#0A2540]">{app.phone}</span>
+
+                        <div>
+                          <p className="text-sm font-bold text-[#0A2540]">{app.name}</p>
+                          <p className="text-xs text-[#0B4EA2] font-semibold">{app.email}</p>
+                          <p className="text-xs text-[#6B7A90] mt-0.5">
+                            Mobile: <span className="font-semibold text-[#0A2540]">{app.phone}</span> • from application
+                          </p>
+                          <p className="text-xs text-[#6B7A90]">
+                            {app.district || 'Reporting Centre'}{app.state ? `, ${app.state}` : ''}
+                          </p>
                         </div>
-                        <div className="flex items-center gap-2 text-xs text-[#6B7A90]">
-                          <span className="font-semibold w-24">Aadhar Card:</span>
-                          <span className="text-[#0A2540]">{app.aadhar_card}</span>
-                        </div>
-                        <div className="flex items-center gap-2 text-xs text-[#6B7A90]">
-                          <span className="font-semibold w-24">Press ID:</span>
-                          <span className="text-[#0A2540]">{app.press_id}</span>
-                        </div>
-                        {app.state && (
-                          <div className="flex items-center gap-2 text-xs text-[#6B7A90]">
-                            <span className="font-semibold w-24">State:</span>
-                            <span className="text-[#0A2540]">{app.state}</span>
-                          </div>
-                        )}
-                        {app.district && (
-                          <div className="flex items-center gap-2 text-xs text-[#6B7A90]">
-                            <span className="font-semibold w-24">District:</span>
-                            <span className="text-[#0A2540]">{app.district}</span>
-                          </div>
-                        )}
-                        <div className="flex items-center gap-2 text-xs text-[#6B7A90]">
-                          <span className="font-semibold w-24">Submitted:</span>
-                          <span className="text-[#0A2540]">{formatDate(app.created_at)}</span>
+
+                        <div className="grid grid-cols-2 gap-1.5 pt-2 border-t border-slate-200/60 text-[11px] text-[#6B7A90]">
+                          <div><span className="font-medium text-slate-400">Aadhar:</span> {app.aadhar_card}</div>
+                          <div><span className="font-medium text-slate-400">Press ID:</span> {app.press_id}</div>
                         </div>
                       </div>
+
+                      {/* Card 2: What approval does */}
+                      <div className="bg-blue-50/60 border border-blue-100 rounded-2xl p-3.5 space-y-1">
+                        <span className="text-xs font-bold text-[#0B4EA2] block">What approval does</span>
+                        <p className="text-[11.5px] text-[#415A77] leading-relaxed">
+                          The reporter can proceed to payment. Publishing and ID card access stay locked until payment is verified.
+                        </p>
+                      </div>
                     </div>
-                    
-                    {app.status === 'pending' && (
-                      <div className="flex items-center gap-2 mt-4 pt-3 border-t border-[#E8F2FC]">
+
+                    {/* Action Buttons */}
+                    {app.status === 'pending' ? (
+                      <div className="flex flex-col sm:flex-row items-center gap-2 pt-2 border-t border-[#E8F2FC]">
                         <button
                           onClick={() => handleApplicationStatus(app.id, app.email, 'approved')}
-                          className="flex-1 py-2 bg-emerald-500 hover:bg-emerald-600 active:bg-emerald-700 text-white text-xs font-bold rounded-xl transition-colors shadow-xs flex items-center justify-center gap-1.5"
+                          className="w-full sm:flex-1 py-2.5 px-3 bg-[#0B4EA2] hover:bg-[#093F84] active:scale-[0.99] text-white text-xs font-bold rounded-xl transition-all shadow-xs flex items-center justify-center gap-1.5 cursor-pointer"
                         >
-                          <Check className="w-4 h-4" /> Approve
+                          <Check className="w-4 h-4" /> Approve email & enable payment
                         </button>
                         <button
                           onClick={() => handleApplicationStatus(app.id, app.email, 'rejected')}
-                          className="flex-1 py-2 bg-white border border-red-200 text-red-600 hover:bg-red-50 active:bg-red-100 text-xs font-bold rounded-xl transition-colors shadow-xs flex items-center justify-center gap-1.5"
+                          className="w-full sm:w-auto py-2.5 px-4 bg-white border border-[#CBD5E1] text-[#64748B] hover:bg-slate-50 active:scale-[0.99] text-xs font-bold rounded-xl transition-all flex items-center justify-center gap-1.5 cursor-pointer"
                         >
-                          <X className="w-4 h-4" /> Reject
+                          <X className="w-4 h-4" /> Request corrections
                         </button>
+                      </div>
+                    ) : (
+                      <div className="pt-2 border-t border-[#E8F2FC] flex items-center justify-between text-xs text-[#6B7A90]">
+                        <span>Updated: {formatDate(app.updated_at || app.created_at)}</span>
+                        {app.status === 'approved' && (
+                          <span className="font-bold text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-lg border border-emerald-200">
+                            Payment Enabled
+                          </span>
+                        )}
                       </div>
                     )}
                   </div>
@@ -1997,6 +2600,267 @@ export const AdminScreen = () => {
           </div>
         )}
 
+        {/* ═════════════════════════════════════════════════════════════════════ */}
+        {/* TAB: PUSH NOTIFICATIONS                                              */}
+        {/* ═════════════════════════════════════════════════════════════════════ */}
+        {activeTab === 'notifications' && isSuperAdmin && (
+          <div className="space-y-6">
+            {/* Header & Stats Card */}
+            <div className="bg-white border border-[#D0E2F7] rounded-3xl p-6 shadow-sm">
+              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                <div>
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className="p-2 rounded-xl bg-amber-500/10 text-amber-600">
+                      <Bell className="w-5 h-5" />
+                    </span>
+                    <h3 className="text-lg font-bold text-[#0A2540]">Push Notifications Broadcast</h3>
+                  </div>
+                  <p className="text-xs text-[#6B7A90]">
+                    Send real-time alerts directly to reader devices via Firebase Cloud Messaging (FCM).
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => fetchNotificationStats()}
+                  disabled={notifStatsLoading}
+                  className="px-3.5 py-2 rounded-xl bg-[#015BB3] text-white text-xs font-bold flex items-center gap-1.5 shadow-xs hover:bg-[#015BB3]/90 transition"
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 ${notifStatsLoading ? 'animate-spin' : ''}`} />
+                  <span>Refresh Stats</span>
+                </button>
+              </div>
+
+              {/* Stats badges */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-5 pt-5 border-t border-[#E8F2FC]">
+                <div className="bg-[#F8FAFC] border border-[#E2E8F0] rounded-2xl p-3.5 flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-blue-50 text-[#015BB3] flex items-center justify-center shrink-0">
+                    <Smartphone className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <p className="text-[11px] font-bold text-[#6B7A90] uppercase tracking-wider">Active Device Tokens</p>
+                    <p className="text-lg font-black text-[#0A2540]">
+                      {notifStatsLoading ? '...' : notifStats?.total_device_tokens ?? 0}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="bg-[#F8FAFC] border border-[#E2E8F0] rounded-2xl p-3.5 flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0">
+                    <Users className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <p className="text-[11px] font-bold text-[#6B7A90] uppercase tracking-wider">Registered Users</p>
+                    <p className="text-lg font-black text-[#0A2540]">
+                      {notifStatsLoading ? '...' : notifStats?.unique_registered_users ?? 0}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="bg-[#F8FAFC] border border-[#E2E8F0] rounded-2xl p-3.5 flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center shrink-0">
+                    <Radio className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <p className="text-[11px] font-bold text-[#6B7A90] uppercase tracking-wider">Districts Reached</p>
+                    <p className="text-lg font-black text-[#0A2540]">
+                      {notifStatsLoading ? '...' : Object.keys(notifStats?.tokens_by_district || {}).length}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Compose Card */}
+            <div className="bg-white border border-[#D0E2F7] rounded-3xl p-6 shadow-sm">
+              <h4 className="text-sm font-bold text-[#0A2540] mb-4 flex items-center gap-2">
+                <Send className="w-4 h-4 text-[#015BB3]" />
+                <span>Compose New Alert</span>
+              </h4>
+
+              {/* Quick Preset Buttons */}
+              <div className="mb-4">
+                <label className="block text-[11px] font-bold text-[#6B7A90] uppercase tracking-wider mb-2">
+                  Quick Presets
+                </label>
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setNotifTitle('🚨 బ్రేకింగ్ న్యూస్ | Spot News 24x7');
+                      setNotifChannel('news');
+                      setNotifUrl('/feed');
+                    }}
+                    className="px-3 py-1.5 rounded-xl bg-red-50 text-red-700 hover:bg-red-100 border border-red-200 text-xs font-bold transition"
+                  >
+                    🚨 బ్రేకింగ్ న్యూస్ (Breaking)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setNotifTitle('🌦️ వాతావరణ హెచ్చరిక | Spot News 24x7');
+                      setNotifChannel('weather');
+                      setNotifUrl('/feed');
+                    }}
+                    className="px-3 py-1.5 rounded-xl bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200 text-xs font-bold transition"
+                  >
+                    🌦️ వాతావరణ హెచ్చరిక (Weather)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setNotifTitle('📰 నేటి వార్తాపత్రిక సిద్ధంగా ఉంది!');
+                      setNotifBody('ఈరోజు తాజా వార్తలతో కూడిన Spot News 24x7 ఈ-పేపర్‌ను ఇప్పుడు డౌన్‌లోడ్ చేసుకోండి.');
+                      setNotifChannel('news');
+                      setNotifUrl('/admin');
+                    }}
+                    className="px-3 py-1.5 rounded-xl bg-amber-50 text-amber-700 hover:bg-amber-100 border border-amber-200 text-xs font-bold transition"
+                  >
+                    📰 నేటి వార్తాపత్రిక (Daily Paper)
+                  </button>
+                </div>
+              </div>
+
+              <form onSubmit={handleSendNotification} className="space-y-4">
+                {/* Title */}
+                <div>
+                  <label className="block text-xs font-bold text-[#0A2540] mb-1">
+                    Notification Title <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={notifTitle}
+                    onChange={(e) => setNotifTitle(e.target.value)}
+                    placeholder="e.g. బ్రేకింగ్: భారీ వర్ష సూచన / Breaking News"
+                    required
+                    className="w-full bg-[#F8FAFC] border border-[#D0E2F7] rounded-xl px-3.5 py-2.5 text-xs font-semibold text-[#0A2540] focus:outline-none focus:border-[#015BB3] transition"
+                  />
+                </div>
+
+                {/* Message Body */}
+                <div>
+                  <label className="block text-xs font-bold text-[#0A2540] mb-1">
+                    Message Body <span className="text-red-500">*</span>
+                  </label>
+                  <textarea
+                    value={notifBody}
+                    onChange={(e) => setNotifBody(e.target.value)}
+                    placeholder="Enter the alert text to display on the lock screen / notification drawer..."
+                    rows={3}
+                    required
+                    className="w-full bg-[#F8FAFC] border border-[#D0E2F7] rounded-xl px-3.5 py-2.5 text-xs font-semibold text-[#0A2540] focus:outline-none focus:border-[#015BB3] transition"
+                  />
+                </div>
+
+                {/* Target Audience & Channel Grid */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  {/* Target Audience */}
+                  <div>
+                    <label className="block text-xs font-bold text-[#0A2540] mb-1">Target Audience</label>
+                    <select
+                      value={notifTargetType}
+                      onChange={(e) => setNotifTargetType(e.target.value as any)}
+                      className="w-full bg-[#F8FAFC] border border-[#D0E2F7] rounded-xl px-3.5 py-2.5 text-xs font-bold text-[#0A2540] focus:outline-none focus:border-[#015BB3] transition"
+                    >
+                      <option value="all">📢 All Users (Topic: all)</option>
+                      <option value="district">📍 Specific District (Topic: district_X)</option>
+                      <option value="token">📱 Single Device Token (Direct)</option>
+                    </select>
+                  </div>
+
+                  {/* Channel ID */}
+                  <div>
+                    <label className="block text-xs font-bold text-[#0A2540] mb-1">Notification Channel</label>
+                    <select
+                      value={notifChannel}
+                      onChange={(e) => setNotifChannel(e.target.value as any)}
+                      className="w-full bg-[#F8FAFC] border border-[#D0E2F7] rounded-xl px-3.5 py-2.5 text-xs font-bold text-[#0A2540] focus:outline-none focus:border-[#015BB3] transition"
+                    >
+                      <option value="news">📰 బ్రేకింగ్ వార్తలు (News)</option>
+                      <option value="weather">🌦️ వాతావరణ హెచ్చరికలు (Weather)</option>
+                      <option value="reporter">🧑‍💼 రిపోర్టర్ అప్‌డేట్స్ (Reporter)</option>
+                      <option value="general">📢 సాధారణ సమాచారం (General)</option>
+                    </select>
+                  </div>
+                </div>
+
+                {/* District Selector (conditional) */}
+                {notifTargetType === 'district' && (
+                  <div>
+                    <label className="block text-xs font-bold text-[#0A2540] mb-1">Select Target District</label>
+                    <select
+                      value={notifDistrictId}
+                      onChange={(e) => setNotifDistrictId(Number(e.target.value))}
+                      className="w-full bg-[#F8FAFC] border border-[#D0E2F7] rounded-xl px-3.5 py-2.5 text-xs font-bold text-[#0A2540] focus:outline-none focus:border-[#015BB3] transition"
+                    >
+                      {TELANGANA_DISTRICTS.map((d) => (
+                        <option key={d.id} value={d.id}>{d.name} (District ID: {d.id})</option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+
+                {/* Custom Token (conditional) */}
+                {notifTargetType === 'token' && (
+                  <div>
+                    <label className="block text-xs font-bold text-[#0A2540] mb-1">Target FCM Device Token</label>
+                    <input
+                      type="text"
+                      value={notifCustomToken}
+                      onChange={(e) => setNotifCustomToken(e.target.value)}
+                      placeholder="Paste FCM registration token..."
+                      className="w-full bg-[#F8FAFC] border border-[#D0E2F7] rounded-xl px-3.5 py-2.5 text-xs font-mono text-[#0A2540] focus:outline-none focus:border-[#015BB3] transition"
+                    />
+                  </div>
+                )}
+
+                {/* Optional Image URL & Deep-link */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-bold text-[#0A2540] mb-1">Target Screen URL / Deep Link</label>
+                    <input
+                      type="text"
+                      value={notifUrl}
+                      onChange={(e) => setNotifUrl(e.target.value)}
+                      placeholder="e.g. /feed, /news, /admin"
+                      className="w-full bg-[#F8FAFC] border border-[#D0E2F7] rounded-xl px-3.5 py-2.5 text-xs font-semibold text-[#0A2540] focus:outline-none focus:border-[#015BB3] transition"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-[#0A2540] mb-1">Image URL (Optional)</label>
+                    <input
+                      type="url"
+                      value={notifImageUrl}
+                      onChange={(e) => setNotifImageUrl(e.target.value)}
+                      placeholder="https://example.com/banner.jpg"
+                      className="w-full bg-[#F8FAFC] border border-[#D0E2F7] rounded-xl px-3.5 py-2.5 text-xs font-semibold text-[#0A2540] focus:outline-none focus:border-[#015BB3] transition"
+                    />
+                  </div>
+                </div>
+
+                {/* Send Button */}
+                <div className="pt-2">
+                  <button
+                    type="submit"
+                    disabled={notifSending}
+                    className="w-full sm:w-auto px-6 py-3 rounded-2xl bg-[#015BB3] text-white text-xs font-bold flex items-center justify-center gap-2 shadow-sm hover:bg-[#015BB3]/90 disabled:opacity-50 transition"
+                  >
+                    <Send className={`w-4 h-4 ${notifSending ? 'animate-bounce' : ''}`} />
+                    <span>{notifSending ? 'Dispatching Push Alert via Firebase...' : 'Send Broadcast Push Notification'}</span>
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
+
+        {/* ═════════════════════════════════════════════════════════════════════ */}
+        {/* TAB: LOCAL ADS                                                       */}
+        {/* ═════════════════════════════════════════════════════════════════════ */}
+        {activeTab === 'local_ads' && (
+          <LocalAdsAdminSection />
+        )}
+
       </main>
 
       {/* ═════════════════════════════════════════════════════════════════════ */}
@@ -2049,7 +2913,6 @@ export const AdminScreen = () => {
                         <option value="user">User</option>
                         <option value="reporter">Reporter</option>
                         {isSuperAdmin && <option value="admin">Administrator</option>}
-                        {isSuperAdmin && <option value="superadmin">Super Admin</option>}
                       </select>
                     </div>
 
@@ -2061,10 +2924,32 @@ export const AdminScreen = () => {
                         className="w-full bg-[#E8F2FC] border border-[#D0E2F7] rounded-xl px-3 py-2 text-xs font-bold text-[#0A2540] focus:outline-none"
                       >
                         <option value="free">Free</option>
+                        <option value="reporter">Reporter</option>
                         <option value="pro">Pro</option>
                         <option value="enterprise">Enterprise</option>
+                        <option value="admin">Admin Plan</option>
                       </select>
                     </div>
+
+                    {isSuperAdmin && (
+                      <div>
+                        <label className="block text-xs font-bold text-[#0A2540] mb-1">
+                          Assigned District (for District Admin)
+                        </label>
+                        <select
+                          value={editDistrict}
+                          onChange={(e) => setEditDistrict(e.target.value)}
+                          className="w-full bg-[#E8F2FC] border border-[#D0E2F7] rounded-xl px-3 py-2 text-xs font-bold text-[#0A2540] focus:outline-none"
+                        >
+                          <option value="">-- No Assigned District --</option>
+                          {ALL_ADMIN_DISTRICTS.map((d) => (
+                            <option key={d} value={d}>
+                              {d}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
 
                     <div className="flex items-center justify-end gap-2 pt-2">
                       <button
@@ -2141,18 +3026,50 @@ export const AdminScreen = () => {
                   <p className="font-bold text-[#0A2540] truncate">{selectedClippingModal.user_name} ({selectedClippingModal.user_email})</p>
                 </div>
                 <div className="p-2.5 rounded-xl bg-[#E8F2FC]">
+                  <p className="text-[10px] text-[#8FA3B8] uppercase font-bold">District</p>
+                  <p className="font-bold text-[#0A2540]">{selectedClippingModal.district || 'All Districts'}</p>
+                </div>
+                <div className="p-2.5 rounded-xl bg-[#E8F2FC]">
                   <p className="text-[10px] text-[#8FA3B8] uppercase font-bold">Generated At</p>
                   <p className="font-bold text-[#0A2540]">{formatDateTime(selectedClippingModal.created_at)}</p>
                 </div>
                 <div className="p-2.5 rounded-xl bg-[#E8F2FC]">
-                  <p className="text-[10px] text-[#8FA3B8] uppercase font-bold">Language & Tone</p>
-                  <p className="font-bold text-[#0A2540] capitalize">{selectedClippingModal.language} · {selectedClippingModal.tone}</p>
-                </div>
-                <div className="p-2.5 rounded-xl bg-[#E8F2FC]">
-                  <p className="text-[10px] text-[#8FA3B8] uppercase font-bold">Layout Columns</p>
-                  <p className="font-bold text-[#0A2540]">{selectedClippingModal.layout_columns} Columns</p>
+                  <p className="text-[10px] text-[#8FA3B8] uppercase font-bold">Approval Status</p>
+                  <p className="font-bold text-[#0A2540] capitalize">
+                    {selectedClippingModal.is_posted
+                      ? 'Live on Feed'
+                      : selectedClippingModal.status === 'rejected'
+                      ? 'Rejected'
+                      : 'Pending District Admin'}
+                  </p>
                 </div>
               </div>
+
+              {/* Approval Actions inside Modal */}
+              {(!selectedClippingModal.is_posted || selectedClippingModal.status === 'pending_approval') && (
+                <div className="flex items-center gap-2 pt-2 border-t border-[#D0E2F7]">
+                  <button
+                    onClick={() => handleApproveClipping(selectedClippingModal)}
+                    disabled={actionLoadingId === selectedClippingModal.id}
+                    className="flex-1 py-2.5 px-3 bg-[#059669] hover:bg-[#047857] text-white text-xs font-bold rounded-xl transition flex items-center justify-center gap-1.5 shadow-sm cursor-pointer"
+                  >
+                    {actionLoadingId === selectedClippingModal.id ? (
+                      <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                    ) : (
+                      <Check className="w-4 h-4" />
+                    )}
+                    <span>Approve & Post to Feed</span>
+                  </button>
+                  <button
+                    onClick={() => handleRejectClipping(selectedClippingModal)}
+                    disabled={actionLoadingId === selectedClippingModal.id}
+                    className="py-2.5 px-4 bg-white border border-[#CBD5E1] text-[#DC2626] hover:bg-red-50 text-xs font-bold rounded-xl transition flex items-center justify-center gap-1.5 cursor-pointer"
+                  >
+                    <X className="w-4 h-4" />
+                    <span>Reject</span>
+                  </button>
+                </div>
+              )}
 
               {/* Actions */}
               <div className="flex items-center justify-end gap-2 pt-2 border-t border-[#D0E2F7]">
