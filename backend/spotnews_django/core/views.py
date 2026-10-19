@@ -155,6 +155,7 @@ def send_notification_view(request):
 
     topic = body_data.get("topic")
     user_id = body_data.get("user_id")
+    email = body_data.get("email")
     token = body_data.get("token")
     url = body_data.get("url", "/")
     image_url = body_data.get("image_url")
@@ -178,9 +179,10 @@ def send_notification_view(request):
                 channel_id=channel_id,
                 extra_data=extra_data,
             )
-        elif user_id:
+        elif user_id or email:
             result = send_user_notification(
                 user_id=user_id,
+                email=email,
                 title=title,
                 body=body,
                 url=url,
