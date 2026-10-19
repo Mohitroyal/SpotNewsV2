@@ -11,24 +11,56 @@ def admin_generations(request):
         offset = (page - 1) * page_size
         
         user_id = request.GET.get('user_id')
+        district = request.GET.get('district')
+        status = request.GET.get('status')
+        from_date = request.GET.get('from_date')
+        to_date = request.GET.get('to_date')
         
-        query = "SELECT c.id, c.status, c.created_at, c.user_id, c.headline, c.template_id, c.language, c.tone, c.publication_name, c.publication_date, c.layout_columns, c.font_family, c.png_url, c.pdf_url, p.email, p.full_name, p.plan FROM clippings c LEFT JOIN profiles p ON c.user_id = p.id"
-        count_query = "SELECT COUNT(*) FROM clippings c"
-        params = []
+        query = (
+            "SELECT c.id, c.status, c.created_at, c.user_id, c.headline, c.template_id, "
+            "c.language, c.tone, c.publication_name, c.publication_date, c.layout_columns, "
+            "c.font_family, c.png_url, c.pdf_url, c.district, c.state, c.is_posted, "
+            "p.email, p.full_name, p.plan "
+            "FROM clippings c LEFT JOIN profiles p ON c.user_id = p.id"
+        )
+        count_query = "SELECT COUNT(*) FROM clippings c LEFT JOIN profiles p ON c.user_id = p.id"
+        
+        where_clauses = []
+        where_params = []
         
         if user_id:
-            query += " WHERE c.user_id = %s"
-            count_query += " WHERE c.user_id = %s"
-            params.append(user_id)
+            where_clauses.append("c.user_id = %s")
+            where_params.append(user_id)
+            
+        if district and district.strip() and district.strip().lower() != 'all':
+            where_clauses.append("LOWER(TRIM(c.district)) = LOWER(%s)")
+            where_params.append(district.strip())
+            
+        if status and status.strip() and status.strip().lower() != 'all':
+            where_clauses.append("c.status = %s")
+            where_params.append(status.strip())
+            
+        if from_date and from_date.strip():
+            where_clauses.append("c.created_at >= %s")
+            where_params.append(f"{from_date.strip()} 00:00:00+05:30")
+            
+        if to_date and to_date.strip():
+            where_clauses.append("c.created_at <= %s")
+            where_params.append(f"{to_date.strip()} 23:59:59+05:30")
+            
+        if where_clauses:
+            clause_str = " WHERE " + " AND ".join(where_clauses)
+            query += clause_str
+            count_query += clause_str
             
         query += " ORDER BY c.created_at DESC LIMIT %s OFFSET %s"
-        params.extend([page_size, offset])
+        exec_params = list(where_params) + [page_size, offset]
         
         with connection.cursor() as cursor:
-            cursor.execute(count_query, params[:-2] if user_id else [])
+            cursor.execute(count_query, where_params)
             total = cursor.fetchone()[0]
             
-            cursor.execute(query, params)
+            cursor.execute(query, exec_params)
             rows = cursor.fetchall()
             
             results = []
@@ -49,9 +81,12 @@ def admin_generations(request):
                     "image_count": 0,
                     "png_url": r[12] or "",
                     "pdf_url": r[13] or "",
-                    "user_email": r[14] or "",
-                    "user_name": r[15] or "",
-                    "user_plan": r[16] or "free"
+                    "district": r[14] or "",
+                    "state": r[15] or "",
+                    "is_posted": bool(r[16]) if r[16] is not None else False,
+                    "user_email": r[17] or "",
+                    "user_name": r[18] or "",
+                    "user_plan": r[19] or "free"
                 })
                 
         return JsonResponse({"total": total, "results": results})
