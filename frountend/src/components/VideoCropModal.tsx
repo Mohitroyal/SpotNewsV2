@@ -1,6 +1,6 @@
 import React, { useState, useRef } from 'react';
 import ReactCrop from 'react-image-crop';
-import type { Crop, PixelCrop } from 'react-image-crop';
+import type { Crop } from 'react-image-crop';
 import 'react-image-crop/dist/ReactCrop.css';
 import { X, Check, Maximize2, Video as VideoIcon } from 'lucide-react';
 
@@ -30,7 +30,6 @@ export const VideoCropModal: React.FC<VideoCropModalProps> = ({
   const [aspect, setAspect] = useState<number | undefined>(undefined);
   const [selectedPreset, setSelectedPreset] = useState<string>('free');
   const [crop, setCrop] = useState<Crop>({ unit: '%', x: 0, y: 0, width: 100, height: 100 });
-  const [completedCrop, setCompletedCrop] = useState<PixelCrop>();
   const [hasExplicitlyCropped, setHasExplicitlyCropped] = useState(false);
   const videoRef = useRef<HTMLVideoElement>(null);
 
@@ -220,7 +219,6 @@ export const VideoCropModal: React.FC<VideoCropModalProps> = ({
             crop={crop}
             aspect={aspect}
             onChange={handleCropChange}
-            onComplete={(c) => setCompletedCrop(c)}
             style={{ maxWidth: '100%', maxHeight: '48vh' }}
           >
             <video
