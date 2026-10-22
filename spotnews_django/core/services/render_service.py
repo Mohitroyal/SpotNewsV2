@@ -2159,6 +2159,8 @@ class RenderService:
                                         width: Math.round(rect.width),
                                         height: Math.round(rect.height)
                                     };
+                                }
+
                                 let overlayBox = null;
                                 const overlayEl = document.querySelector('.image-overlay');
                                 if (overlayEl) {
