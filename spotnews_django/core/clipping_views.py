@@ -270,13 +270,26 @@ def run_clipping_generation_background(clipping_id, data, user_id):
                 # -threads 1: Avoids multi-thread buffer bloat
                 # fps=24: Reduces decoding frame queue from 60fps
                 # -t 60: Caps maximum render duration
+                vc = data.get("video_crop") or data.get("videoCrop") or {}
+                fit_mode = vc.get("fitMode") or "crop"
+                if fit_mode == "fit":
+                    vf_filter = f"[1:v]fps=24,scale={w}:{h}:force_original_aspect_ratio=decrease,pad={w}:{h}:(ow-iw)/2:(oh-ih)/2:color=black[vid];[0:v][vid]overlay={x}:{y}:shortest=1,pad=ceil(iw/2)*2:ceil(ih/2)*2[outv]"
+                elif "width" in vc and "height" in vc and (vc.get("width", 100) < 99 or vc.get("height", 100) < 99 or vc.get("x", 0) > 1 or vc.get("y", 0) > 1):
+                    cx = max(0.0, min(1.0, float(vc.get("x", 0)) / 100.0))
+                    cy = max(0.0, min(1.0, float(vc.get("y", 0)) / 100.0))
+                    cw = max(0.1, min(1.0, float(vc.get("width", 100)) / 100.0))
+                    ch = max(0.1, min(1.0, float(vc.get("height", 100)) / 100.0))
+                    vf_filter = f"[1:v]fps=24,crop=iw*{cw:.4f}:ih*{ch:.4f}:iw*{cx:.4f}:ih*{cy:.4f},scale={w}:{h}[vid];[0:v][vid]overlay={x}:{y}:shortest=1,pad=ceil(iw/2)*2:ceil(ih/2)*2[outv]"
+                else:
+                    vf_filter = f"[1:v]fps=24,scale={w}:{h}:force_original_aspect_ratio=increase,crop={w}:{h}[vid];[0:v][vid]overlay={x}:{y}:shortest=1,pad=ceil(iw/2)*2:ceil(ih/2)*2[outv]"
+
                 cmd = [
                     ffmpeg_exe, "-y",
                     "-loop", "1", "-i", temp_bg_video,
                     "-t", "60",
                     "-i", temp_video,
                     "-filter_complex",
-                    f"[1:v]fps=24,scale={w}:{h}:force_original_aspect_ratio=increase,crop={w}:{h}[vid];[0:v][vid]overlay={x}:{y},pad=ceil(iw/2)*2:ceil(ih/2)*2[outv]",
+                    vf_filter,
                     "-map", "[outv]", "-map", "1:a?",
                     "-c:v", "libx264",
                     "-preset", "ultrafast",

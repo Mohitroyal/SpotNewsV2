@@ -90,6 +90,8 @@ export const generationService = {
         heading_bg: (config as any).headingBg || (config as any).heading_bg || null,
         border_color: (config as any).borderColor || (config as any).border_color || null,
         image_layout: (config as any).imageLayout || (config as any).image_layout || null,
+        video_crop: (config as any).video_crop || (config as any).videoCrop || null,
+        videoCrop: (config as any).video_crop || (config as any).videoCrop || null,
         // Include any other required fields for the backend
       }, {
         timeout: 0 // No timeout, wait for processing to start

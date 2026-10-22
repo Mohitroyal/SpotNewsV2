@@ -13,6 +13,7 @@ import type { Language } from '@/types';
 import { LiveNewspaperPreview } from '@/components/LiveNewspaperPreview';
 import { PatternSelectionModal } from '@/components/PatternSelectionModal';
 import { ImageCropModal } from '@/components/ImageCropModal';
+import { VideoCropModal, type VideoCropData } from '@/components/VideoCropModal';
 import { BORDER_COLOURS, HEADING_BG_COLOURS } from '@/constants/colours';
 import { useTranslation } from '@/lib/i18n';
 
@@ -108,6 +109,10 @@ export const GenerateScreen = () => {
   const [cropImageMime, setCropImageMime] = useState<string | null>(null);
   const [showCropModal, setShowCropModal] = useState(false);
   const [cropImageSrc, setCropImageSrc] = useState<string | null>(null);
+  const [showVideoCropModal, setShowVideoCropModal] = useState(false);
+  const [videoCropSrc, setVideoCropSrc] = useState<string | null>(null);
+  const [videoRawFile, setVideoRawFile] = useState<File | null>(null);
+  const [videoCropData, setVideoCropData] = useState<VideoCropData | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const videoInputRef = useRef<HTMLInputElement>(null);
   const rawFileRef = useRef<File | null>(null); // stores original file for full-image bypass
@@ -256,9 +261,24 @@ export const GenerateScreen = () => {
       return;
     }
 
+    setVideoRawFile(file);
+    const objUrl = URL.createObjectURL(file);
+    setVideoCropSrc(objUrl);
+    setShowVideoCropModal(true);
+    e.target.value = '';
+  };
+
+  const handleVideoCropComplete = async (result: { file: File; crop: VideoCropData }) => {
+    setShowVideoCropModal(false);
+    if (videoCropSrc) {
+      URL.revokeObjectURL(videoCropSrc);
+      setVideoCropSrc(null);
+    }
+    setVideoCropData(result.crop);
+
     setLoading(true);
     try {
-      const uploadRes = await generationService.uploadVideo(file);
+      const uploadRes = await generationService.uploadVideo(result.file);
       if (uploadRes.success && uploadRes.data?.url) {
         setVideoUrl(uploadRes.data.url);
       } else {
@@ -269,7 +289,15 @@ export const GenerateScreen = () => {
     } finally {
       setLoading(false);
     }
-    e.target.value = '';
+  };
+
+  const handleVideoCropCancel = () => {
+    setShowVideoCropModal(false);
+    if (videoCropSrc) {
+      URL.revokeObjectURL(videoCropSrc);
+      setVideoCropSrc(null);
+    }
+    setVideoRawFile(null);
   };
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -415,6 +443,8 @@ export const GenerateScreen = () => {
       const configToSave = {
         ...currentConfig, headline, articleContent: content, language, fontFamily,
         layoutColumns, imageUrls, imageUrl: imageUrls[0] || '', videoUrl: videoUrl || undefined,
+        videoCrop: videoCropData || undefined,
+        video_crop: videoCropData || undefined,
         templateId: selectedTemplateId,
         publicationName: selectedTemplateDetails.name,
         logoId: logoMode ? selectedTemplateId : undefined,
@@ -433,6 +463,8 @@ export const GenerateScreen = () => {
         imageUrls,
         imageUrl: imageUrls[0] || '',
         videoUrl: videoUrl || undefined,
+        videoCrop: videoCropData || undefined,
+        video_crop: videoCropData || undefined,
         generateHeadline: false,
         generate_headline: false,
         autoGenerateHeadline: false,
@@ -468,6 +500,7 @@ export const GenerateScreen = () => {
         setLayoutColumns(3);
         setImageUrls([]);
         setVideoUrl(null);
+        setVideoCropData(null);
 
         navigate(`/preview/${generation.id}`);
       }
@@ -577,8 +610,13 @@ export const GenerateScreen = () => {
               {videoUrl && (
                 <div style={{ position: 'relative', flexShrink: 0, width: '78px', height: '78px', borderRadius: '8px', overflow: 'hidden', border: '1.5px solid rgba(255,255,255,0.1)', background: '#000', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                   <Video style={{ width: 24, height: 24, color: '#fff' }} />
+                  {videoCropData && (
+                    <span style={{ position: 'absolute', bottom: '3px', left: '3px', background: 'rgba(0,0,0,0.7)', color: '#fff', fontSize: '9px', padding: '1px 4px', borderRadius: '4px', fontWeight: 700 }}>
+                      {videoCropData.fitMode === 'fit' ? 'FIT' : (videoCropData.aspectRatioLabel || 'CROP')}
+                    </span>
+                  )}
                   <button
-                    onClick={() => setVideoUrl(null)}
+                    onClick={() => { setVideoUrl(null); setVideoCropData(null); }}
                     style={{ position: 'absolute', top: '3px', right: '3px', width: '20px', height: '20px', background: '#CC1E1E', border: 'none', borderRadius: '50%', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}
                   >
                     <X style={{ width: '10px', height: '10px' }} strokeWidth={3} />
@@ -1018,6 +1056,15 @@ export const GenerateScreen = () => {
             URL.revokeObjectURL(cropImageSrc);
             setCropImageSrc(null);
           }}
+        />
+      )}
+
+      {showVideoCropModal && videoCropSrc && videoRawFile && (
+        <VideoCropModal
+          videoSrc={videoCropSrc}
+          originalFile={videoRawFile}
+          onCropComplete={handleVideoCropComplete}
+          onCancel={handleVideoCropCancel}
         />
       )}
 

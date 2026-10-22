@@ -243,9 +243,50 @@
 </head>
 <body>
     <div class="newspaper-container">
-        <!-- Top Section: Hero Image OR No-Image Layout -->
+        <!-- Top Section: Video Layout (with Dedicated Header Bar) OR Hero Image OR No-Image Layout -->
         {% set has_hero_image = (image_urls and image_urls|length > 0 and image_urls[0] != '') or (image_url and image_url != '') %}
-        {% if image_urls and image_urls|length >= 2 %}
+        {% if video_url %}
+        <!-- Dedicated Top Header Bar for Video Clipping: Logo, Time, Date, Reporter Name -->
+        <div class="video-header-bar" style="width: 100%; min-height: 72px; background: #111827; display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; box-sizing: border-box; border-bottom: 3px solid #CC2222;">
+            <div class="reporter-badge">
+                {% if reporter_image %}
+                    <img class="reporter-avatar" src="{{ reporter_image }}" alt="Reporter" />
+                {% elif reporter_avatar %}
+                    <img class="reporter-avatar" src="{{ reporter_avatar }}" alt="Reporter" />
+                {% else %}
+                    <div class="reporter-avatar-fallback">
+                        {{ (reporter_name[0] if reporter_name else 'R')|upper }}
+                    </div>
+                {% endif %}
+                <div class="reporter-meta">
+                    <span class="reporter-name">{{ reporter_name if reporter_name else 'Mohithroyal Pokkala' }}</span>
+                    <span class="reporter-date-time">{{ publication_date_time if publication_date_time else (publication_date if publication_date else '05 Sep 2026 | 05:45 PM') }}</span>
+                </div>
+            </div>
+
+            <div class="channel-logo-badge">
+                {% set current_logo = (logo_id if logo_id else (template_id if template_id else 'rti_express'))|lower %}
+                {% if 'bharath' in current_logo %}
+                    {% include 'bharath_reporter/logo.svg' %}
+                {% elif 'national' in current_logo %}
+                    {% include 'national_news/logo.svg' %}
+                {% elif 'rti' in current_logo %}
+                    {% include 'rti_express/logo.svg' %}
+                {% elif logo_url and 'localhost' not in logo_url and '127.0.0.1' not in logo_url %}
+                    <img src="{{ logo_url }}" alt="Logo" class="overlay-logo-img">
+                {% elif publication_name %}
+                    <span class="overlay-logo-text">{{ publication_name }}</span>
+                {% else %}
+                    {% include 'rti_express/logo.svg' %}
+                {% endif %}
+            </div>
+        </div>
+
+        <div class="hero-image-wrapper" style="position: relative; width: 100%; height: 420px; background: #111827; overflow: hidden; display: flex; align-items: center; justify-content: center;">
+            {% set img_src = image_urls[0] if (image_urls and image_urls|length > 0) else image_url %}
+            <img class="hero-img" src="{{ img_src }}" alt="Hero Image" style="width: 100%; height: 100%; object-fit: cover;" />
+        </div>
+        {% elif image_urls and image_urls|length >= 2 %}
         <div class="hero-image-wrapper" style="display: flex; gap: 4px; padding: 0;">
             <div style="flex: 1; height: 100%; position: relative;">
                 <img class="hero-img" src="{{ image_urls[0] }}" alt="Hero Image 1" style="width: 100%; height: 100%; object-fit: cover;" />

@@ -65,6 +65,8 @@ export interface GenerationConfig {
   showInnerBorders?: boolean;
   reporterName?: string;
   reporterImage?: string;
+  videoCrop?: any;
+  video_crop?: any;
 }
 export interface Generation {
   id: string;
