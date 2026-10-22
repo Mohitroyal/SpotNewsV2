@@ -92,6 +92,10 @@ export const generationService = {
         image_layout: (config as any).imageLayout || (config as any).image_layout || null,
         video_crop: (config as any).video_crop || (config as any).videoCrop || null,
         videoCrop: (config as any).video_crop || (config as any).videoCrop || null,
+        logo_id: (config as any).logoId || (config as any).logo_id || 'rti_express',
+        logoId: (config as any).logoId || (config as any).logo_id || 'rti_express',
+        logo_url: (config as any).logoUrl || (config as any).logo_url || null,
+        logoUrl: (config as any).logoUrl || (config as any).logo_url || null,
         // Include any other required fields for the backend
       }, {
         timeout: 0 // No timeout, wait for processing to start

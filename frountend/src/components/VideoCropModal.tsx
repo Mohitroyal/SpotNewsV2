@@ -94,18 +94,13 @@ export const VideoCropModal: React.FC<VideoCropModalProps> = ({
         width: 100,
         height: 100,
         unit: '%',
-        fitMode: 'fit',
-        aspectRatioLabel: 'Fit Full Video',
+        fitMode: 'crop',
+        aspectRatioLabel: 'Fill Frame',
       },
     });
   };
 
   const handleConfirmCrop = () => {
-    if (!hasExplicitlyCropped && selectedPreset === 'free') {
-      handleFitEntireVideo();
-      return;
-    }
-
     const finalX = crop.x ?? 0;
     const finalY = crop.y ?? 0;
     const finalW = crop.width ?? 100;
@@ -245,7 +240,7 @@ export const VideoCropModal: React.FC<VideoCropModalProps> = ({
           <p style={{ margin: 0, color: '#94A3B8', fontSize: '12px' }}>
             {hasExplicitlyCropped
               ? `✂️ Framing: ${selectedPreset.toUpperCase()} (${Math.round(crop.width || 100)}% × ${Math.round(crop.height || 100)}%)`
-              : '📺 Entire original video will be used with black background padding if needed'}
+              : '📺 Video fills frame edge-to-edge with no black bars'}
           </p>
         </div>
 
@@ -271,7 +266,7 @@ export const VideoCropModal: React.FC<VideoCropModalProps> = ({
             }}
           >
             <Maximize2 size={16} />
-            Fit Entire Video
+            Fill Frame
           </button>
           <button
             onClick={handleConfirmCrop}

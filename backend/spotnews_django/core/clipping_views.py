@@ -152,8 +152,8 @@ def run_clipping_generation_background(clipping_id, data, user_id):
                 "language": language,
                 "layout_columns": data.get("layout_columns", "auto"),
                 "font_family": data.get("font_family", "noto_serif"),
-                "logo_id": data.get("logo_id") or template_id,
-                "logo_url": data.get("logo_url"),
+                "logo_id": data.get("logo_id") or data.get("logoId") or ("rti_express" if template_id in ["hero-image", "custom"] else template_id),
+                "logo_url": data.get("logo_url") or data.get("logoUrl"),
                 "is_premium": False,
                 "show_watermark": data.get("show_watermark", True),
                 "show_inner_borders": data.get("show_inner_borders", True),
@@ -274,16 +274,15 @@ def run_clipping_generation_background(clipping_id, data, user_id):
                 # fps=24: Reduces decoding frame queue from 60fps
                 # -t 60: Caps maximum render duration
                 vc = data.get("video_crop") or data.get("videoCrop") or {}
-                fit_mode = vc.get("fitMode") or "crop"
-                if fit_mode == "fit":
-                    vid_filter = f"[1:v]fps=24,scale={w}:{h}:force_original_aspect_ratio=decrease,pad={w}:{h}:(ow-iw)/2:(oh-ih)/2:color=black[vid]"
-                elif "width" in vc and "height" in vc and (vc.get("width", 100) < 99 or vc.get("height", 100) < 99 or vc.get("x", 0) > 1 or vc.get("y", 0) > 1):
+                # If explicit crop box was specified, crop it and scale to frame
+                if "width" in vc and "height" in vc and (vc.get("width", 100) < 99 or vc.get("height", 100) < 99 or vc.get("x", 0) > 1 or vc.get("y", 0) > 1):
                     cx = max(0.0, min(1.0, float(vc.get("x", 0)) / 100.0))
                     cy = max(0.0, min(1.0, float(vc.get("y", 0)) / 100.0))
                     cw = max(0.1, min(1.0, float(vc.get("width", 100)) / 100.0))
                     ch = max(0.1, min(1.0, float(vc.get("height", 100)) / 100.0))
                     vid_filter = f"[1:v]fps=24,crop=iw*{cw:.4f}:ih*{ch:.4f}:iw*{cx:.4f}:ih*{cy:.4f},scale={w}:{h}[vid]"
                 else:
+                    # Fill entire frame edge-to-edge (cover) without any black padding bars, exactly like images do
                     vid_filter = f"[1:v]fps=24,scale={w}:{h}:force_original_aspect_ratio=increase,crop={w}:{h}[vid]"
 
                 has_overlay = temp_overlay and os.path.exists(temp_overlay) and overlay_box

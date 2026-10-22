@@ -267,17 +267,13 @@
                 </div>
 
                 <div class="channel-logo-badge">
-                    {% set current_logo = (logo_id if logo_id else (template_id if template_id else 'rti_express'))|lower %}
-                    {% if 'bharath' in current_logo %}
+                    {% set current_logo = (logo_id if (logo_id and logo_id != 'hero-image' and logo_id != 'custom') else (template_id if (template_id and template_id != 'hero-image' and template_id != 'custom') else 'rti_express'))|lower %}
+                    {% if logo_url and 'localhost' not in logo_url and '127.0.0.1' not in logo_url and 'http' in logo_url %}
+                        <img src="{{ logo_url }}" alt="Logo" class="overlay-logo-img">
+                    {% elif 'bharath' in current_logo %}
                         {% include 'bharath_reporter/logo.svg' %}
                     {% elif 'national' in current_logo %}
                         {% include 'national_news/logo.svg' %}
-                    {% elif 'rti' in current_logo %}
-                        {% include 'rti_express/logo.svg' %}
-                    {% elif logo_url and 'localhost' not in logo_url and '127.0.0.1' not in logo_url %}
-                        <img src="{{ logo_url }}" alt="Logo" class="overlay-logo-img">
-                    {% elif publication_name %}
-                        <span class="overlay-logo-text">{{ publication_name }}</span>
                     {% else %}
                         {% include 'rti_express/logo.svg' %}
                     {% endif %}
@@ -326,17 +322,13 @@
 
                 <!-- Bottom Right: User-Chosen Publication/Channel Logo -->
                 <div class="channel-logo-badge">
-                    {% set current_logo = (logo_id if logo_id else (template_id if template_id else 'rti_express'))|lower %}
-                    {% if 'bharath' in current_logo %}
+                    {% set current_logo = (logo_id if (logo_id and logo_id != 'hero-image' and logo_id != 'custom') else (template_id if (template_id and template_id != 'hero-image' and template_id != 'custom') else 'rti_express'))|lower %}
+                    {% if logo_url and 'localhost' not in logo_url and '127.0.0.1' not in logo_url and 'http' in logo_url %}
+                        <img src="{{ logo_url }}" alt="Logo" class="overlay-logo-img">
+                    {% elif 'bharath' in current_logo %}
                         {% include 'bharath_reporter/logo.svg' %}
                     {% elif 'national' in current_logo %}
                         {% include 'national_news/logo.svg' %}
-                    {% elif 'rti' in current_logo %}
-                        {% include 'rti_express/logo.svg' %}
-                    {% elif logo_url and 'localhost' not in logo_url and '127.0.0.1' not in logo_url %}
-                        <img src="{{ logo_url }}" alt="Logo" class="overlay-logo-img">
-                    {% elif publication_name %}
-                        <span class="overlay-logo-text">{{ publication_name }}</span>
                     {% else %}
                         {% include 'rti_express/logo.svg' %}
                     {% endif %}
@@ -363,17 +355,13 @@
             </div>
 
             <div class="channel-logo-badge">
-                {% set current_logo = (logo_id if logo_id else (template_id if template_id else 'rti_express'))|lower %}
-                {% if 'bharath' in current_logo %}
+                {% set current_logo = (logo_id if (logo_id and logo_id != 'hero-image' and logo_id != 'custom') else (template_id if (template_id and template_id != 'hero-image' and template_id != 'custom') else 'rti_express'))|lower %}
+                {% if logo_url and 'localhost' not in logo_url and '127.0.0.1' not in logo_url and 'http' in logo_url %}
+                    <img src="{{ logo_url }}" alt="Logo" class="overlay-logo-img">
+                {% elif 'bharath' in current_logo %}
                     {% include 'bharath_reporter/logo.svg' %}
                 {% elif 'national' in current_logo %}
                     {% include 'national_news/logo.svg' %}
-                {% elif 'rti' in current_logo %}
-                    {% include 'rti_express/logo.svg' %}
-                {% elif logo_url and 'localhost' not in logo_url and '127.0.0.1' not in logo_url %}
-                    <img src="{{ logo_url }}" alt="Logo" class="overlay-logo-img">
-                {% elif publication_name %}
-                    <span class="overlay-logo-text">{{ publication_name }}</span>
                 {% else %}
                     {% include 'rti_express/logo.svg' %}
                 {% endif %}
