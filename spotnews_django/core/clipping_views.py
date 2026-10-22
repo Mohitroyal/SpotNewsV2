@@ -174,12 +174,13 @@ def run_clipping_generation_background(clipping_id, data, user_id):
             # 4. Screenshot / PDF Generation via Playwright
             temp_png = f"temp_{clipping_id}.png"
             temp_pdf = f"temp_{clipping_id}.pdf"
-            hero_box = await render_service.generate_clipping_assets(html, temp_png, temp_pdf)
+            temp_overlay = f"temp_overlay_{clipping_id}.png"
+            hero_box, overlay_box = await render_service.generate_clipping_assets(html, temp_png, temp_pdf, overlay_png_path=temp_overlay)
             
-            return temp_png, temp_pdf, hero_box
+            return temp_png, temp_pdf, temp_overlay, hero_box, overlay_box
             
         # Run async code inside the synchronous thread
-        temp_png, temp_pdf, hero_box = asyncio.run(_generate())
+        temp_png, temp_pdf, temp_overlay, hero_box, overlay_box = asyncio.run(_generate())
         
         # 5. Upload to Supabase Storage
         def _update_stage_sync(stage_msg, progress):
@@ -208,10 +209,12 @@ def run_clipping_generation_background(clipping_id, data, user_id):
         video_url = data.get("video_url") or data.get("videoUrl")
         print(f"[DEBUG VIDEO] video_url: {video_url}")
         print(f"[DEBUG VIDEO] hero_box: {hero_box}")
+        print(f"[DEBUG VIDEO] overlay_box: {overlay_box}")
         if video_url and hero_box:
             temp_video = None
             temp_mp4 = None
             temp_bg_video = None
+            temp_overlay_video = None
             try:
                 _update_stage_sync("Generating Video (This takes 1-2 minutes)...", 90)
                 import urllib.request
@@ -273,23 +276,52 @@ def run_clipping_generation_background(clipping_id, data, user_id):
                 vc = data.get("video_crop") or data.get("videoCrop") or {}
                 fit_mode = vc.get("fitMode") or "crop"
                 if fit_mode == "fit":
-                    vf_filter = f"[1:v]fps=24,scale={w}:{h}:force_original_aspect_ratio=decrease,pad={w}:{h}:(ow-iw)/2:(oh-ih)/2:color=black[vid];[0:v][vid]overlay={x}:{y}:shortest=1,pad=ceil(iw/2)*2:ceil(ih/2)*2[outv]"
+                    vid_filter = f"[1:v]fps=24,scale={w}:{h}:force_original_aspect_ratio=decrease,pad={w}:{h}:(ow-iw)/2:(oh-ih)/2:color=black[vid]"
                 elif "width" in vc and "height" in vc and (vc.get("width", 100) < 99 or vc.get("height", 100) < 99 or vc.get("x", 0) > 1 or vc.get("y", 0) > 1):
                     cx = max(0.0, min(1.0, float(vc.get("x", 0)) / 100.0))
                     cy = max(0.0, min(1.0, float(vc.get("y", 0)) / 100.0))
                     cw = max(0.1, min(1.0, float(vc.get("width", 100)) / 100.0))
                     ch = max(0.1, min(1.0, float(vc.get("height", 100)) / 100.0))
-                    vf_filter = f"[1:v]fps=24,crop=iw*{cw:.4f}:ih*{ch:.4f}:iw*{cx:.4f}:ih*{cy:.4f},scale={w}:{h}[vid];[0:v][vid]overlay={x}:{y}:shortest=1,pad=ceil(iw/2)*2:ceil(ih/2)*2[outv]"
+                    vid_filter = f"[1:v]fps=24,crop=iw*{cw:.4f}:ih*{ch:.4f}:iw*{cx:.4f}:ih*{cy:.4f},scale={w}:{h}[vid]"
                 else:
-                    vf_filter = f"[1:v]fps=24,scale={w}:{h}:force_original_aspect_ratio=increase,crop={w}:{h}[vid];[0:v][vid]overlay={x}:{y}:shortest=1,pad=ceil(iw/2)*2:ceil(ih/2)*2[outv]"
+                    vid_filter = f"[1:v]fps=24,scale={w}:{h}:force_original_aspect_ratio=increase,crop={w}:{h}[vid]"
+
+                has_overlay = temp_overlay and os.path.exists(temp_overlay) and overlay_box
+                if has_overlay:
+                    temp_overlay_video = temp_overlay
+                    if scale_factor != 1.0:
+                        try:
+                            with Image.open(temp_overlay) as o_im:
+                                o_orig_w, o_orig_h = o_im.size
+                                o_target_w = int(o_orig_w * scale_factor)
+                                o_target_h = int(o_orig_h * scale_factor)
+                                o_target_w -= o_target_w % 2
+                                o_target_h -= o_target_h % 2
+                                resized_overlay = o_im.resize((o_target_w, o_target_h), Image.Resampling.LANCZOS)
+                                temp_overlay_video = f"temp_overlay_scaled_{clipping_id}.png"
+                                resized_overlay.save(temp_overlay_video)
+                        except Exception as oe:
+                            print(f"[BACKGROUND VIDEO WARN] Could not downscale overlay: {oe}")
+                            temp_overlay_video = temp_overlay
+
+                    ox = int(float(overlay_box['x']) * scale_factor)
+                    oy = int(float(overlay_box['y']) * scale_factor)
+                    ox -= ox % 2
+                    oy -= oy % 2
+                    vf_filter = f"{vid_filter};[0:v][vid]overlay={x}:{y}:shortest=1[tmp];[tmp][2:v]overlay={ox}:{oy},pad=ceil(iw/2)*2:ceil(ih/2)*2[outv]"
+                else:
+                    vf_filter = f"{vid_filter};[0:v][vid]overlay={x}:{y}:shortest=1,pad=ceil(iw/2)*2:ceil(ih/2)*2[outv]"
 
                 cmd = [
                     ffmpeg_exe, "-y",
                     "-loop", "1", "-i", temp_bg_video,
                     "-t", "60",
                     "-i", temp_video,
-                    "-filter_complex",
-                    vf_filter,
+                ]
+                if has_overlay:
+                    cmd.extend(["-i", temp_overlay_video])
+                cmd.extend([
+                    "-filter_complex", vf_filter,
                     "-map", "[outv]", "-map", "1:a?",
                     "-c:v", "libx264",
                     "-preset", "ultrafast",
@@ -305,7 +337,7 @@ def run_clipping_generation_background(clipping_id, data, user_id):
                     "-shortest",
                     "-pix_fmt", "yuv420p",
                     temp_mp4
-                ]
+                ])
                 subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, timeout=180)
                 
                 mp4_url = storage_service.upload_file(temp_mp4, f"clippings/{clipping_id}_{timestamp}.mp4", "video/mp4")
@@ -317,6 +349,7 @@ def run_clipping_generation_background(clipping_id, data, user_id):
                 if temp_video and os.path.exists(temp_video): os.remove(temp_video)
                 if temp_mp4 and os.path.exists(temp_mp4): os.remove(temp_mp4)
                 if temp_bg_video and temp_bg_video != temp_png and os.path.exists(temp_bg_video): os.remove(temp_bg_video)
+                if temp_overlay_video and temp_overlay_video != temp_overlay and os.path.exists(temp_overlay_video): os.remove(temp_overlay_video)
                 import gc
                 gc.collect()
 
@@ -324,6 +357,8 @@ def run_clipping_generation_background(clipping_id, data, user_id):
             os.remove(temp_png)
         if os.path.exists(temp_pdf):
             os.remove(temp_pdf)
+        if temp_overlay and os.path.exists(temp_overlay):
+            os.remove(temp_overlay)
         
         # 6. Update Database Status to 'completed'
         with connection.cursor() as cursor:

@@ -1950,7 +1950,7 @@ class RenderService:
             print(f"[CROP ERROR] {e}")
             return 0
 
-    async def generate_clipping_assets(self, html_content: str, png_path: str | None = None, pdf_path: str | None = None):
+    async def generate_clipping_assets(self, html_content: str, png_path: str | None = None, pdf_path: str | None = None, overlay_png_path: str | None = None):
         """Uses Playwright to render HTML and take both a PNG screenshot and/or a PDF print."""
         async with self.semaphore:
             _log_memory("generate_clipping_assets: Enter")
@@ -2159,21 +2159,40 @@ class RenderService:
                                         width: Math.round(rect.width),
                                         height: Math.round(rect.height)
                                     };
+                                let overlayBox = null;
+                                const overlayEl = document.querySelector('.image-overlay');
+                                if (overlayEl) {
+                                    const orect = overlayEl.getBoundingClientRect();
+                                    const contRect = finalCont.getBoundingClientRect();
+                                    overlayBox = {
+                                        x: Math.round(orect.left - contRect.left),
+                                        y: Math.round(orect.top - contRect.top),
+                                        width: Math.round(orect.width),
+                                        height: Math.round(orect.height)
+                                    };
                                 }
                                 
-                                return { width: Math.ceil(finalRect.width), height: finalHeight, heroBox: heroBox };
+                                return { width: Math.ceil(finalRect.width), height: finalHeight, heroBox: heroBox, overlayBox: overlayBox };
                             }
 
-                            return { width: 1200, height: document.documentElement.scrollHeight, heroBox: null };
+                            return { width: 1200, height: document.documentElement.scrollHeight, heroBox: null, overlayBox: null };
                         }""")
                         
                         await page.set_viewport_size({"width": int(layout_info.get("width", 1060) + 50), "height": int(layout_info.get("height", 1600) + 50)})
 
                         final_h_px = None
-                        if png_path:
+                        if (png_path):
                             await page.locator('.newspaper-container').first.screenshot(path=png_path, type="png")
                             final_h_px = self._auto_crop_png(png_path) or layout_info.get('height', 1600)
                             
+                        if overlay_png_path:
+                            try:
+                                overlay_loc = page.locator('.image-overlay')
+                                if await overlay_loc.count() > 0:
+                                    await overlay_loc.first.screenshot(path=overlay_png_path, omit_background=True)
+                            except Exception as oe:
+                                print(f"[WARN] Failed to capture overlay png: {oe}")
+
                         if pdf_path:
                             pdf_h = (final_h_px / 2.0) if final_h_px else layout_info.get('height', 1600)
                             await page.pdf(path=pdf_path, width=f"{layout_info.get('width', 1060)/96.0}in", height=f"{(pdf_h+15)/96.0}in", print_background=True, margin={"top": "0px", "right": "0px", "bottom": "0px", "left": "0px"})
@@ -2187,7 +2206,7 @@ class RenderService:
                         except Exception:
                             pass
                         gc.collect()
-                        return layout_info.get("heroBox")
+                        return layout_info.get("heroBox"), layout_info.get("overlayBox")
                 except Exception as e:
                     if attempt == max_attempts - 1: raise
                 finally:
