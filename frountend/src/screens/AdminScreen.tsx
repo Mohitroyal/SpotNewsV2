@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
@@ -27,10 +27,27 @@ import { DailyNewspaperGeneratorModal } from '@/components/DailyNewspaperGenerat
 import { dailyNewspaperService, type DailyEditionRecord } from '@/services/daily-newspaper.service';
 import { INDIA_STATES } from '@/utils/indiaStates';
 
-export const ALL_ADMIN_DISTRICTS = Array.from(new Set([
-  ...(INDIA_STATES['Andhra Pradesh'] || []),
-  ...(INDIA_STATES['Telangana'] || []),
-])).sort();
+export const TELANGANA_DISTRICTS_LIST: string[] = INDIA_STATES['Telangana'] || [
+  'Adilabad', 'Bhadradri Kothagudem', 'Hanumakonda', 'Hyderabad', 'Jagtial', 'Jangaon',
+  'Jayashankar Bhupalpally', 'Jogulamba Gadwal', 'Kamareddy', 'Karimnagar', 'Khammam',
+  'Kumuram Bheem Asifabad', 'Mahabubabad', 'Mahabubnagar', 'Mancherial', 'Medak',
+  'Medchal-Malkajgiri', 'Mulugu', 'Nagarkurnool', 'Nalgonda', 'Narayanpet', 'Nirmal',
+  'Nizamabad', 'Peddapalli', 'Rajanna Sircilla', 'Rangareddy', 'Sangareddy', 'Siddipet',
+  'Suryapet', 'Vikarabad', 'Wanaparthy', 'Warangal', 'Yadadri Bhuvanagiri'
+];
+
+export const ANDHRA_DISTRICTS_LIST: string[] = INDIA_STATES['Andhra Pradesh'] || [
+  'Alluri Sitharama Raju', 'Anakapalli', 'Ananthapuramu', 'Annamayya', 'Bapatla', 'Chittoor',
+  'Dr. B.R. Ambedkar Konaseema', 'East Godavari', 'Eluru', 'Guntur', 'Kakinada', 'Krishna',
+  'Kurnool', 'Nandyal', 'NTR', 'Palnadu', 'Parvathipuram Manyam', 'Prakasam',
+  'Sri Potti Sriramulu Nellore', 'Sri Sathya Sai', 'Srikakulam', 'Tirupati', 'Visakhapatnam',
+  'Vizianagaram', 'West Godavari', 'Y.S.R.'
+];
+
+export const ALL_ADMIN_DISTRICTS: string[] = [
+  ...TELANGANA_DISTRICTS_LIST,
+  ...ANDHRA_DISTRICTS_LIST,
+];
 
 const TELANGANA_DISTRICTS = [
   { id: 1, name: "Hyderabad / హైదరాబాద్" },
@@ -195,19 +212,8 @@ export const AdminScreen = () => {
 
   useEffect(() => {
     const checkAccess = async () => {
-      const email = (user?.email || '').toLowerCase().trim();
-      const isExplicitDistrictAdmin = email === 'mpokkala@gitam.in';
-
-      if (isExplicitDistrictAdmin) {
-        setIsSuperAdmin(false);
-        setHasAccess(true);
-        setAccessChecked(true);
-        return true;
-      }
-
       // 1. Superadmin fast-path
       if (isSuperAdminUser(user)) {
-        setIsSuperAdmin(true);
         setHasAccess(true);
         setAccessChecked(true);
         return true;
@@ -225,27 +231,10 @@ export const AdminScreen = () => {
         try {
           const { data: prof } = await supabase
             .from('profiles')
-            .select('role, district, email')
+            .select('role')
             .eq('id', user.id)
-            .maybeSingle();
-
-          const emailToCheck = (user?.email || prof?.email || '').toLowerCase().trim();
-          if (emailToCheck === 'mpokkala@gitam.in') {
-            setIsSuperAdmin(false);
-            setHasAccess(true);
-            setAccessChecked(true);
-            return true;
-          }
-
-          const isSuper = prof?.role === 'superadmin' || isSuperAdminUser(user) || isSuperAdminUser(emailToCheck);
-
-          if (isSuper) {
-            setIsSuperAdmin(true);
-            setHasAccess(true);
-            setAccessChecked(true);
-            return true;
-          }
-          if (prof?.role === 'admin' || isAdminUser(user)) {
+            .single();
+          if (prof?.role === 'admin') {
             setHasAccess(true);
             setAccessChecked(true);
             return true;
@@ -292,29 +281,8 @@ export const AdminScreen = () => {
   }, [user, navigate]);
 
   // ── State ─────────────────────────────────────────────────────────────────
-  const [isSuperAdmin, setIsSuperAdmin] = useState(() => {
-    const email = (user?.email || '').toLowerCase().trim();
-    if (email === 'mpokkala@gitam.in') return false;
-    return isSuperAdminUser(user);
-  });
-
-  useEffect(() => {
-    const email = (user?.email || '').toLowerCase().trim();
-    if (email === 'mpokkala@gitam.in') {
-      setIsSuperAdmin(false);
-      return;
-    }
-    if (isSuperAdminUser(user)) {
-      setIsSuperAdmin(true);
-    }
-  }, [user]);
-
-  const [activeTab, setActiveTab] = useState<'overview' | 'clippings' | 'users' | 'logos' | 'applications' | 'daily_editions' | 'notifications' | 'local_ads'>(
-    () => {
-      const email = (user?.email || '').toLowerCase().trim();
-      return (email !== 'mpokkala@gitam.in' && isSuperAdminUser(user)) ? 'overview' : 'clippings';
-    }
-  );
+  const isSuperAdmin = isSuperAdminUser(user);
+  const [activeTab, setActiveTab] = useState<'overview' | 'clippings' | 'users' | 'logos' | 'applications' | 'daily_editions' | 'notifications' | 'local_ads'>('overview');
   const [isPdfGeneratorOpen, setIsPdfGeneratorOpen] = useState(false);
   const [dailyEditions, setDailyEditions] = useState<DailyEditionRecord[]>([]);
   const [dailyEditionsLoading, setDailyEditionsLoading] = useState(false);
@@ -358,7 +326,19 @@ export const AdminScreen = () => {
   const [clippingApprovalFilter, setClippingApprovalFilter] = useState<'pending' | 'approved' | 'rejected' | 'all'>('pending');
   const [adminDistrictFilter, setAdminDistrictFilter] = useState<string>('all');
   const [currentAdminDistrict, setCurrentAdminDistrict] = useState<string>('');
+  const [adminDistrictLoading, setAdminDistrictLoading] = useState<boolean>(!isSuperAdmin);
   const [editDistrict, setEditDistrict] = useState<string>('');
+
+  // Map of district -> admin user (Every district will get one admin only)
+  const districtAdminMap = useMemo(() => {
+    const map: Record<string, AdminUserProfile> = {};
+    users.forEach((u) => {
+      if (u.role === 'admin' && u.district && u.district.trim()) {
+        map[u.district.trim().toLowerCase()] = u;
+      }
+    });
+    return map;
+  }, [users]);
 
   // Fetch logged in admin's assigned district
   useEffect(() => {
@@ -371,14 +351,15 @@ export const AdminScreen = () => {
           .eq('id', user.id)
           .maybeSingle();
 
-        const storedDistrict = localStorage.getItem(`spotnews_admin_district_${user.id}`);
-        const d = prof?.district || storedDistrict || '';
-        if (d && !isSuperAdmin) {
+        if (prof?.role === 'admin' && !isSuperAdmin) {
+          const d = (prof.district || '').trim();
           setCurrentAdminDistrict(d);
-          setAdminDistrictFilter(d);
+          setAdminDistrictFilter(d || 'none');
         }
       } catch (err) {
         console.warn('Could not fetch admin district:', err);
+      } finally {
+        setAdminDistrictLoading(false);
       }
     };
     fetchAdminDistrict();
@@ -388,17 +369,10 @@ export const AdminScreen = () => {
   const [applications, setApplications] = useState<any[]>([]);
   const [applicationsLoading, setApplicationsLoading] = useState(false);
 
-  // Guard tabs: District Admin can only access Feed Access (clippings) and Overview
+  // Guard tab for non-superadmin
   useEffect(() => {
-    if (!isSuperAdmin && (
-      activeTab === 'applications' ||
-      activeTab === 'users' ||
-      activeTab === 'logos' ||
-      activeTab === 'notifications' ||
-      activeTab === 'daily_editions' ||
-      activeTab === 'local_ads'
-    )) {
-      setActiveTab('clippings');
+    if (!isSuperAdmin && (activeTab === 'logos' || activeTab === 'applications' || activeTab === 'notifications')) {
+      setActiveTab('overview');
     }
   }, [isSuperAdmin, activeTab]);
 
@@ -533,7 +507,17 @@ export const AdminScreen = () => {
   const fetchClippings = useCallback(async (fDate?: string, tDate?: string) => {
     setClippingsLoading(true);
     try {
-      const res = await getAdminClippings({ fromDate: fDate, toDate: tDate, page: 1, pageSize: 60 });
+      const activeDistrict = !isSuperAdmin
+        ? (currentAdminDistrict || undefined)
+        : (adminDistrictFilter !== 'all' ? adminDistrictFilter : undefined);
+
+      const res = await getAdminClippings({
+        fromDate: fDate,
+        toDate: tDate,
+        page: 1,
+        pageSize: 60,
+        district: activeDistrict,
+      });
       setClippings(res.results);
       setClippingsTotal(res.total);
     } catch {
@@ -541,7 +525,7 @@ export const AdminScreen = () => {
     } finally {
       setClippingsLoading(false);
     }
-  }, []);
+  }, [isSuperAdmin, currentAdminDistrict, adminDistrictFilter]);
 
   useEffect(() => {
     if (hasAccess) {
@@ -590,10 +574,10 @@ export const AdminScreen = () => {
   }, []);
 
   useEffect(() => {
-    if (hasAccess && isSuperAdmin) {
+    if (hasAccess && activeTab === 'applications' && isSuperAdmin) {
       fetchApplications();
     }
-  }, [hasAccess, isSuperAdmin, fetchApplications]);
+  }, [hasAccess, activeTab, isSuperAdmin, fetchApplications]);
 
   const handleApplicationStatus = async (appId: string, email: string, status: 'approved' | 'rejected') => {
     try {
@@ -761,9 +745,20 @@ export const AdminScreen = () => {
       setEditingUserId(null);
       return;
     }
-    if (editRole === 'admin' && !isSuperAdmin) {
-      showToast('Only superadmin can grant admin role.', 'error');
-      return;
+    if (editRole === 'admin') {
+      if (!isSuperAdmin) {
+        showToast('Only superadmin can grant admin role.', 'error');
+        return;
+      }
+      if (!editDistrict || !editDistrict.trim()) {
+        showToast('Please assign a district. Every district will get one admin only.', 'error');
+        return;
+      }
+      const conflict = districtAdminMap[editDistrict.trim().toLowerCase()];
+      if (conflict && conflict.id !== u.id) {
+        showToast(`District "${editDistrict}" is already assigned to admin ${conflict.email || conflict.full_name}. Every district will get one admin only.`, 'error');
+        return;
+      }
     }
     setEditSaving(true);
     let roleSuccess = true;
@@ -1080,20 +1075,13 @@ export const AdminScreen = () => {
 
   // Pending clippings count for current district scope
   const pendingClippingsCount = clippings.filter((c) => {
-    if (currentAdminDistrict && !isSuperAdmin) {
-      if ((c.district || '').toLowerCase() !== currentAdminDistrict.toLowerCase()) return false;
+    if (!isSuperAdmin) {
+      if (!currentAdminDistrict) return false;
+      if ((c.district || '').trim().toLowerCase() !== currentAdminDistrict.trim().toLowerCase()) return false;
     } else if (adminDistrictFilter !== 'all') {
-      if ((c.district || '').toLowerCase() !== adminDistrictFilter.toLowerCase()) return false;
+      if ((c.district || '').trim().toLowerCase() !== adminDistrictFilter.trim().toLowerCase()) return false;
     }
     return c.status === 'pending_approval' || (!c.is_posted && c.status !== 'rejected');
-  }).length;
-
-  // Pending reporter applications count
-  const pendingApplicationsCount = applications.filter((a) => {
-    if (currentAdminDistrict && !isSuperAdmin) {
-      if ((a.district || '').toLowerCase() !== currentAdminDistrict.toLowerCase()) return false;
-    }
-    return a.status === 'pending';
   }).length;
 
   // Filtered clippings with District Admin and Approval status logic
@@ -1109,11 +1097,12 @@ export const AdminScreen = () => {
 
     if (!matchQuery) return false;
 
-    // District filter
-    if (currentAdminDistrict && !isSuperAdmin) {
-      if ((c.district || '').toLowerCase() !== currentAdminDistrict.toLowerCase()) return false;
+    // Strict District filter (1 admin per district)
+    if (!isSuperAdmin) {
+      if (!currentAdminDistrict) return false;
+      if ((c.district || '').trim().toLowerCase() !== currentAdminDistrict.trim().toLowerCase()) return false;
     } else if (adminDistrictFilter !== 'all') {
-      if ((c.district || '').toLowerCase() !== adminDistrictFilter.toLowerCase()) return false;
+      if ((c.district || '').trim().toLowerCase() !== adminDistrictFilter.trim().toLowerCase()) return false;
     }
 
     // Approval status filter
@@ -1145,7 +1134,7 @@ export const AdminScreen = () => {
                   Spot News 24x7
                 </h1>
                 <span className="bg-amber-400 text-[#0A2540] text-[9px] font-black uppercase px-1.5 py-0.5 rounded shadow-xs">
-                  {isSuperAdmin ? 'SUPERADMIN' : (currentAdminDistrict ? `${currentAdminDistrict.toUpperCase()} ADMIN` : 'DISTRICT ADMIN')}
+                  {isSuperAdmin ? 'SUPERADMIN' : 'ADMIN'}
                 </span>
               </div>
               <p className="text-white/75 text-[11px] font-medium">Control Center & Operations</p>
@@ -1196,11 +1185,6 @@ export const AdminScreen = () => {
               <Crown className="w-3.5 h-3.5 text-amber-300 shrink-0" />
               <span className="truncate">
                 Admin: <strong className="text-white font-bold">{user?.email}</strong>
-                {currentAdminDistrict && !isSuperAdmin && (
-                  <span className="ml-2 px-2 py-0.5 rounded-full bg-white/20 text-white font-black text-[10px] tracking-wide">
-                    📍 {currentAdminDistrict}
-                  </span>
-                )}
               </span>
             </div>
             <span className="text-[11px] text-white/60 shrink-0">
@@ -1221,29 +1205,10 @@ export const AdminScreen = () => {
         </div>
       )}
       <div className="max-w-5xl mx-auto px-4 pt-4">
-        <div className="bg-[#E8F2FC] border border-[#D0E2F7] rounded-2xl p-1 flex items-center gap-1 shadow-xs overflow-x-auto scrollbar-none">
-          {/* Feed Access / Clippings Tab */}
-          <button
-            onClick={() => setActiveTab('clippings')}
-            className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 px-3 rounded-xl text-xs font-bold transition-all whitespace-nowrap shrink-0 relative ${
-              activeTab === 'clippings'
-                ? 'bg-[#015BB3] text-white shadow-sm'
-                : 'text-[#415A77] hover:bg-white/50'
-            }`}
-          >
-            <Newspaper className="w-4 h-4" />
-            <span>Feed Access</span>
-            {pendingClippingsCount > 0 && (
-              <span className="px-1.5 py-0.2 rounded-full text-[9px] font-black bg-amber-500 text-white shadow-xs animate-pulse">
-                {pendingClippingsCount}
-              </span>
-            )}
-          </button>
-
-          {/* Overview Tab */}
+        <div className="bg-[#E8F2FC] border border-[#D0E2F7] rounded-2xl p-1 flex items-center gap-1 shadow-xs">
           <button
             onClick={() => setActiveTab('overview')}
-            className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 px-3 rounded-xl text-xs font-bold transition-all whitespace-nowrap shrink-0 ${
+            className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl text-xs font-bold transition-all ${
               activeTab === 'overview'
                 ? 'bg-[#015BB3] text-white shadow-sm'
                 : 'text-[#415A77] hover:bg-white/50'
@@ -1253,46 +1218,40 @@ export const AdminScreen = () => {
             <span>Overview</span>
           </button>
 
-          {/* Superadmin Only: Reporter Requests */}
-          {isSuperAdmin && (
-            <button
-              onClick={() => setActiveTab('applications')}
-              className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 px-3 rounded-xl text-xs font-bold transition-all whitespace-nowrap shrink-0 relative ${
-                activeTab === 'applications'
-                  ? 'bg-[#015BB3] text-white shadow-sm'
-                  : 'text-[#415A77] hover:bg-white/50'
-              }`}
-            >
-              <FileText className="w-4 h-4" />
-              <span>Requests</span>
-              {pendingApplicationsCount > 0 && (
-                <span className="px-1.5 py-0.2 rounded-full text-[9px] font-black bg-amber-500 text-white shadow-xs animate-pulse">
-                  {pendingApplicationsCount}
-                </span>
-              )}
-            </button>
-          )}
+          <button
+            onClick={() => setActiveTab('clippings')}
+            className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl text-xs font-bold transition-all relative ${
+              activeTab === 'clippings'
+                ? 'bg-[#015BB3] text-white shadow-sm'
+                : 'text-[#415A77] hover:bg-white/50'
+            }`}
+          >
+            <Newspaper className="w-4 h-4" />
+            <span>Clippings</span>
+            {pendingClippingsCount > 0 && (
+              <span className="px-1.5 py-0.2 rounded-full text-[9px] font-black bg-amber-500 text-white shadow-xs">
+                {pendingClippingsCount}
+              </span>
+            )}
+          </button>
 
-          {/* Superadmin Only: Users */}
-          {isSuperAdmin && (
-            <button
-              onClick={() => setActiveTab('users')}
-              className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 px-3 rounded-xl text-xs font-bold transition-all whitespace-nowrap shrink-0 ${
-                activeTab === 'users'
-                  ? 'bg-[#015BB3] text-white shadow-sm'
-                  : 'text-[#415A77] hover:bg-white/50'
-              }`}
-            >
-              <Users className="w-4 h-4" />
-              <span>{usersError ? 'Users (unavailable)' : `Users (${users.length})`}</span>
-            </button>
-          )}
+          <button
+            onClick={() => setActiveTab('users')}
+            className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl text-xs font-bold transition-all ${
+              activeTab === 'users'
+                ? 'bg-[#015BB3] text-white shadow-sm'
+                : 'text-[#415A77] hover:bg-white/50'
+            }`}
+          >
+            <Users className="w-4 h-4" />
+            <span>{usersError ? 'Users (unavailable)' : `Users (${users.length})`}</span>
+          </button>
 
           {isSuperAdmin && (
             <>
               <button
                 onClick={() => setActiveTab('daily_editions')}
-                className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 px-3 rounded-xl text-xs font-bold transition-all whitespace-nowrap shrink-0 ${
+                className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl text-xs font-bold transition-all ${
                   activeTab === 'daily_editions'
                     ? 'bg-[#015BB3] text-white shadow-sm'
                     : 'text-[#415A77] hover:bg-white/50'
@@ -1304,7 +1263,7 @@ export const AdminScreen = () => {
 
               <button
                 onClick={() => setActiveTab('logos')}
-                className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 px-3 rounded-xl text-xs font-bold transition-all whitespace-nowrap shrink-0 ${
+                className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl text-xs font-bold transition-all ${
                   activeTab === 'logos'
                     ? 'bg-[#015BB3] text-white shadow-sm'
                     : 'text-[#415A77] hover:bg-white/50'
@@ -1313,10 +1272,22 @@ export const AdminScreen = () => {
                 <ImageIcon className="w-4 h-4" />
                 <span>Logos ({logos.length})</span>
               </button>
+              
+              <button
+                onClick={() => setActiveTab('applications')}
+                className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl text-xs font-bold transition-all ${
+                  activeTab === 'applications'
+                    ? 'bg-[#015BB3] text-white shadow-sm'
+                    : 'text-[#415A77] hover:bg-white/50'
+                }`}
+              >
+                <FileText className="w-4 h-4" />
+                <span>Requests</span>
+              </button>
 
               <button
                 onClick={() => setActiveTab('notifications')}
-                className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 px-3 rounded-xl text-xs font-bold transition-all whitespace-nowrap shrink-0 ${
+                className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl text-xs font-bold transition-all ${
                   activeTab === 'notifications'
                     ? 'bg-[#015BB3] text-white shadow-sm'
                     : 'text-[#415A77] hover:bg-white/50'
@@ -1328,7 +1299,7 @@ export const AdminScreen = () => {
 
               <button
                 onClick={() => setActiveTab('local_ads')}
-                className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 px-3 rounded-xl text-xs font-bold transition-all whitespace-nowrap shrink-0 ${
+                className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl text-xs font-bold transition-all ${
                   activeTab === 'local_ads'
                     ? 'bg-[#015BB3] text-white shadow-sm'
                     : 'text-[#415A77] hover:bg-white/50'
@@ -1495,41 +1466,10 @@ export const AdminScreen = () => {
                 <span>Quick Operations</span>
               </h3>
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-2">
-                {/* Feed Approvals / Access (Primary for District Admin & Superadmin) */}
                 <button
                   onClick={() => {
-                    setClippingApprovalFilter('pending');
-                    setActiveTab('clippings');
-                  }}
-                  className="p-3 rounded-xl bg-sky-50/80 border border-sky-200 text-left hover:bg-sky-100/70 transition-all flex items-center justify-between"
-                >
-                  <div>
-                    <div className="flex items-center gap-1.5">
-                      <p className="text-xs font-bold text-[#0A2540]">Feed Approvals</p>
-                      {pendingClippingsCount > 0 && (
-                        <span className="px-1.5 py-0.2 rounded-full text-[9px] font-black bg-amber-500 text-white shadow-xs animate-pulse">
-                          {pendingClippingsCount} PENDING
-                        </span>
-                      )}
-                    </div>
-                    <p className="text-[11px] text-[#415A77] mt-0.5">
-                      {currentAdminDistrict && !isSuperAdmin
-                        ? `${currentAdminDistrict} reporter clippings for review`
-                        : 'Review & approve clippings for live feed'}
-                    </p>
-                  </div>
-                  <Newspaper className="w-4 h-4 text-[#015BB3]" />
-                </button>
-
-                {/* Active Reporters */}
-                <button
-                  onClick={() => {
-                    if (isSuperAdmin) {
-                      setUserFilter('active_today');
-                      setActiveTab('users');
-                    } else {
-                      setActiveTab('clippings');
-                    }
+                    setUserFilter('active_today');
+                    setActiveTab('users');
                   }}
                   className="p-3 rounded-xl bg-emerald-50/70 border border-emerald-200 text-left hover:bg-emerald-100/60 transition-all flex items-center justify-between"
                 >
@@ -1545,45 +1485,30 @@ export const AdminScreen = () => {
                   <Activity className="w-4 h-4 text-emerald-600" />
                 </button>
 
-                {/* Superadmin Only: Reporter Requests */}
-                {isSuperAdmin && (
-                  <button
-                    onClick={() => setActiveTab('applications')}
-                    className="p-3 rounded-xl bg-amber-50/80 border border-amber-200 text-left hover:bg-amber-100/70 transition-all flex items-center justify-between"
-                  >
-                    <div>
-                      <div className="flex items-center gap-1.5">
-                        <p className="text-xs font-bold text-amber-950">Reporter Requests</p>
-                        {pendingApplicationsCount > 0 && (
-                          <span className="px-1.5 py-0.2 rounded-full text-[9px] font-black bg-amber-500 text-white shadow-xs">
-                            {pendingApplicationsCount} PENDING
-                          </span>
-                        )}
-                      </div>
-                      <p className="text-[11px] text-amber-800 mt-0.5 font-medium">
-                        Review & accept reporter applications
-                      </p>
-                    </div>
-                    <FileText className="w-4 h-4 text-amber-600" />
-                  </button>
-                )}
+                <button
+                  onClick={() => {
+                    setUserFilter('all');
+                    setActiveTab('users');
+                  }}
+                  className="p-3 rounded-xl bg-[#E8F2FC] border border-[#D0E2F7] text-left hover:bg-[#D6E9FF] transition-all flex items-center justify-between"
+                >
+                  <div>
+                    <p className="text-xs font-bold text-[#0A2540]">Manage Users & Roles</p>
+                    <p className="text-[11px] text-[#6B7A90] mt-0.5">Promote, demote or ban users</p>
+                  </div>
+                  <Users className="w-4 h-4 text-[#015BB3]" />
+                </button>
 
-                {/* Superadmin Only: Manage Users */}
-                {isSuperAdmin && (
-                  <button
-                    onClick={() => {
-                      setUserFilter('all');
-                      setActiveTab('users');
-                    }}
-                    className="p-3 rounded-xl bg-[#E8F2FC] border border-[#D0E2F7] text-left hover:bg-[#D6E9FF] transition-all flex items-center justify-between"
-                  >
-                    <div>
-                      <p className="text-xs font-bold text-[#0A2540]">Manage Users & Roles</p>
-                      <p className="text-[11px] text-[#6B7A90] mt-0.5">Promote, demote or ban users</p>
-                    </div>
-                    <Users className="w-4 h-4 text-[#015BB3]" />
-                  </button>
-                )}
+                <button
+                  onClick={() => setActiveTab('clippings')}
+                  className="p-3 rounded-xl bg-[#E8F2FC] border border-[#D0E2F7] text-left hover:bg-[#D6E9FF] transition-all flex items-center justify-between"
+                >
+                  <div>
+                    <p className="text-xs font-bold text-[#0A2540]">Review Clippings</p>
+                    <p className="text-[11px] text-[#6B7A90] mt-0.5">Browse news generation feed</p>
+                  </div>
+                  <Newspaper className="w-4 h-4 text-[#015BB3]" />
+                </button>
 
                 {isSuperAdmin && (
                   <button
@@ -1630,48 +1555,62 @@ export const AdminScreen = () => {
                         : 'District Clippings Review & Approvals'}
                     </h3>
                     <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-blue-100 text-[#015BB3] uppercase tracking-wider">
-                      {isSuperAdmin ? 'Superadmin Scope' : 'District Admin'}
+                      {isSuperAdmin ? 'Superadmin Scope' : 'District Admin (Exclusive)'}
                     </span>
                   </div>
                   <p className="text-xs text-[#6B7A90] mt-0.5">
                     {currentAdminDistrict && !isSuperAdmin
-                      ? `Clippings submitted by reporters in ${currentAdminDistrict} require your approval before appearing on the public feed.`
+                      ? `Clippings submitted by reporters in ${currentAdminDistrict} require your approval before appearing on the public feed. (1 Admin per District)`
+                      : !isSuperAdmin
+                      ? 'No district assigned to your account. Contact superadmin to assign your district.'
                       : 'Review and approve clippings submitted by reporters across districts before they go live on the public feed.'}
                   </p>
                 </div>
               </div>
 
-              {/* District Filter Dropdown (Superadmin or District Admin) */}
-              <div className="flex items-center gap-2 self-stretch md:self-auto">
-                <span className="text-xs font-bold text-[#0A2540] shrink-0">District:</span>
-                <select
-                  value={adminDistrictFilter}
-                  onChange={(e) => {
-                    const val = e.target.value;
-                    setAdminDistrictFilter(val);
-                    if (!isSuperAdmin) {
-                      if (val !== 'all') {
-                        setCurrentAdminDistrict(val);
-                        if (user?.id) {
-                          localStorage.setItem(`spotnews_admin_district_${user.id}`, val);
-                          supabase.from('profiles').update({ district: val }).eq('id', user.id).then();
-                        }
-                      } else {
-                        setCurrentAdminDistrict('');
-                      }
-                    }
-                  }}
-                  className="bg-[#E8F2FC] border border-[#D0E2F7] rounded-xl px-3 py-1.5 text-xs font-bold text-[#0A2540] focus:outline-none"
-                >
-                  <option value="all">📍 All Districts</option>
-                  {ALL_ADMIN_DISTRICTS.map((d) => (
-                    <option key={d} value={d}>
-                      {d}
-                    </option>
-                  ))}
-                </select>
-              </div>
+              {/* District Filter Dropdown (Superadmin) or Fixed District Badge (District Admin) */}
+              {isSuperAdmin ? (
+                <div className="flex items-center gap-2 self-stretch md:self-auto">
+                  <span className="text-xs font-bold text-[#0A2540] shrink-0">District:</span>
+                  <select
+                    value={adminDistrictFilter}
+                    onChange={(e) => setAdminDistrictFilter(e.target.value)}
+                    className="bg-[#E8F2FC] border border-[#D0E2F7] rounded-xl px-3 py-1.5 text-xs font-bold text-[#0A2540] focus:outline-none"
+                  >
+                    <option value="all">📍 All Districts</option>
+                    <optgroup label="Telangana">
+                      {TELANGANA_DISTRICTS_LIST.map((d) => (
+                        <option key={d} value={d}>
+                          {d}
+                        </option>
+                      ))}
+                    </optgroup>
+                    <optgroup label="Andhra Pradesh">
+                      {ANDHRA_DISTRICTS_LIST.map((d) => (
+                        <option key={d} value={d}>
+                          {d}
+                        </option>
+                      ))}
+                    </optgroup>
+                  </select>
+                </div>
+              ) : (
+                <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-blue-50 border border-blue-200 text-[#015BB3] text-xs font-bold shrink-0">
+                  <MapPin className="w-3.5 h-3.5" />
+                  <span>{currentAdminDistrict ? `${currentAdminDistrict} (Assigned)` : 'No District Assigned'}</span>
+                </div>
+              )}
             </div>
+
+            {!isSuperAdmin && !currentAdminDistrict && !adminDistrictLoading && (
+              <div className="bg-amber-50 border border-amber-300 rounded-2xl p-5 text-center shadow-xs">
+                <MapPin className="w-8 h-8 text-amber-600 mx-auto mb-2" />
+                <h4 className="text-sm font-bold text-amber-900">No District Assigned to Your Admin Account</h4>
+                <p className="text-xs text-amber-800 mt-1 max-w-md mx-auto">
+                  Every district in Spot News is assigned to exactly one administrator. Your account has not yet been assigned to a district by the Superadmin. Once assigned, you will receive news submitted by reporters in your district for approval.
+                </p>
+              </div>
+            )}
 
             {/* Approval Status Filters & Search Bar */}
             <div className="bg-white border border-[#D0E2F7] rounded-2xl p-3 shadow-sm flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3">
@@ -2069,6 +2008,18 @@ export const AdminScreen = () => {
                             {u.full_name || (u.phone_number ? `User (${u.phone_number})` : 'Reporter')}
                           </h4>
                           <RoleBadge role={isSuper ? 'superadmin' : u.role} />
+                          {u.role === 'admin' && !isSuper && (
+                            u.district ? (
+                              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-200 flex items-center gap-1 shadow-2xs">
+                                <MapPin className="w-2.5 h-2.5" />
+                                <span>{u.district} Admin</span>
+                              </span>
+                            ) : (
+                              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-300 flex items-center gap-1 shadow-2xs">
+                                ⚠️ No District Assigned
+                              </span>
+                            )
+                          )}
                           <PlanBadge plan={u.plan} />
 
                           {u.is_active_today && (
@@ -2194,9 +2145,9 @@ export const AdminScreen = () => {
         )}
 
         {/* ═════════════════════════════════════════════════════════════════════ */}
-        {/* TAB: APPLICATIONS (SUPERADMIN ONLY)                                   */}
+        {/* TAB: APPLICATIONS                                                    */}
         {/* ═════════════════════════════════════════════════════════════════════ */}
-        {isSuperAdmin && activeTab === 'applications' && (
+        {activeTab === 'applications' && isSuperAdmin && (
           <div className="space-y-4">
             <div className="bg-white border border-[#D0E2F7] rounded-2xl p-4 shadow-sm flex items-center justify-between">
               <div>
@@ -2933,21 +2884,62 @@ export const AdminScreen = () => {
 
                     {isSuperAdmin && (
                       <div>
-                        <label className="block text-xs font-bold text-[#0A2540] mb-1">
-                          Assigned District (for District Admin)
-                        </label>
+                        <div className="flex items-center justify-between mb-1">
+                          <label className="text-xs font-bold text-[#0A2540]">
+                            Assigned District {editRole === 'admin' ? <span className="text-red-500">* (1 Admin per District)</span> : '(Optional)'}
+                          </label>
+                        </div>
                         <select
                           value={editDistrict}
                           onChange={(e) => setEditDistrict(e.target.value)}
-                          className="w-full bg-[#E8F2FC] border border-[#D0E2F7] rounded-xl px-3 py-2 text-xs font-bold text-[#0A2540] focus:outline-none"
+                          className={`w-full bg-[#E8F2FC] border rounded-xl px-3 py-2 text-xs font-bold text-[#0A2540] focus:outline-none ${
+                            editRole === 'admin' && !editDistrict ? 'border-amber-400 ring-1 ring-amber-400' : 'border-[#D0E2F7]'
+                          }`}
                         >
-                          <option value="">-- No Assigned District --</option>
-                          {ALL_ADMIN_DISTRICTS.map((d) => (
-                            <option key={d} value={d}>
-                              {d}
-                            </option>
-                          ))}
+                          <option value="">-- Select Assigned District --</option>
+                          <optgroup label="Telangana Districts">
+                            {TELANGANA_DISTRICTS_LIST.map((name) => {
+                              const assigned = districtAdminMap[name.toLowerCase()];
+                              const isTaken = assigned && assigned.id !== targetUser.id;
+                              return (
+                                <option
+                                  key={name}
+                                  value={name}
+                                  disabled={Boolean(editRole === 'admin' && isTaken)}
+                                  className={isTaken ? 'text-slate-400 bg-slate-50' : 'text-[#0A2540]'}
+                                >
+                                  {name} {isTaken ? `(🔒 Assigned: ${assigned.email || assigned.full_name})` : ''}
+                                </option>
+                              );
+                            })}
+                          </optgroup>
+                          <optgroup label="Andhra Pradesh Districts">
+                            {ANDHRA_DISTRICTS_LIST.map((name) => {
+                              const assigned = districtAdminMap[name.toLowerCase()];
+                              const isTaken = assigned && assigned.id !== targetUser.id;
+                              return (
+                                <option
+                                  key={name}
+                                  value={name}
+                                  disabled={Boolean(editRole === 'admin' && isTaken)}
+                                  className={isTaken ? 'text-slate-400 bg-slate-50' : 'text-[#0A2540]'}
+                                >
+                                  {name} {isTaken ? `(🔒 Assigned: ${assigned.email || assigned.full_name})` : ''}
+                                </option>
+                              );
+                            })}
+                          </optgroup>
                         </select>
+                        {editRole === 'admin' && editDistrict && districtAdminMap[editDistrict.trim().toLowerCase()] && districtAdminMap[editDistrict.trim().toLowerCase()].id !== targetUser.id && (
+                          <p className="text-[11px] text-red-600 font-semibold mt-1">
+                            ⚠️ This district is already assigned to {districtAdminMap[editDistrict.trim().toLowerCase()].email || districtAdminMap[editDistrict.trim().toLowerCase()].full_name}. Every district will get one admin only.
+                          </p>
+                        )}
+                        {editRole === 'admin' && !editDistrict && (
+                          <p className="text-[11px] text-amber-600 font-medium mt-1">
+                            ⚠️ Every district will get one admin only. Please select the district this admin will manage.
+                          </p>
+                        )}
                       </div>
                     )}
 

@@ -170,7 +170,7 @@ export const PaymentSuccessScreen: React.FC = () => {
             className="w-full py-3.5 px-4 bg-gradient-to-r from-[#015BB3] to-[#0284c7] hover:from-[#093F84] hover:to-[#015BB3] active:scale-[0.99] text-white font-bold text-sm rounded-xl transition-all shadow-md flex items-center justify-center gap-2 cursor-pointer"
           >
             <CreditCard className="w-4 h-4" />
-            <span>Go to Digital Press ID Card ({countdown}s)</span>
+            <span>View & Download Reporter ID Card ({countdown}s)</span>
             <ArrowRight className="w-4 h-4" />
           </button>
 

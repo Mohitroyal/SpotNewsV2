@@ -1,6 +1,6 @@
 import { BrowserRouter as Router, Routes, Route, Navigate, Link, useNavigate } from 'react-router-dom';
 import { useState, useEffect } from 'react';
-import { Settings, Plus, Newspaper, Globe } from 'lucide-react';
+import { Settings, Plus, Newspaper, Globe, Shield } from 'lucide-react';
 // import { useTranslation } from './lib/i18n';
 import mastheadLogo from './assets/rti_express_logo.png';
 import watermarkLogo from './assets/rti_express_watermark.png';
@@ -21,11 +21,20 @@ import { ForgotPasswordScreen } from './screens/ForgotPasswordScreen';
 import { AdminScreen } from './screens/AdminScreen';
 import { FeedScreen } from './screens/FeedScreen';
 import { StatsScreen } from './screens/StatsScreen';
-import { useAuthStore, useUIStore, getReporterPhoto, getReporterName } from './store';
+import { ApplicationWaitingScreen } from './screens/ApplicationWaitingScreen';
+import { PaymentScreen } from './screens/PaymentScreen';
+import { PaymentPendingScreen } from './screens/PaymentPendingScreen';
+import { PaymentSuccessScreen } from './screens/PaymentSuccessScreen';
+import { PaymentFailedScreen } from './screens/PaymentFailedScreen';
+import { IdGeneratingScreen } from './screens/IdGeneratingScreen';
+import { ReporterIdCardScreen } from './screens/ReporterIdCardScreen';
+import { ApplicationRejectedScreen } from './screens/ApplicationRejectedScreen';
+import { ReporterAdRequestsScreen } from './screens/ReporterAdRequestsScreen';
+import { useAuthStore, useUIStore, getReporterPhoto, getReporterName, isSuperAdminUser, isAdminUser } from './store';
 import { supabase } from './lib/supabase';
 import { App as CapacitorApp } from '@capacitor/app';
 import { Browser } from '@capacitor/browser';
-import { initDeepLinks } from './lib/deepLinks';
+import { admobService } from './services/admob.service';
 
 import { ErrorBoundary } from './ErrorBoundary';
 
@@ -33,10 +42,13 @@ import { ErrorBoundary } from './ErrorBoundary';
 const MainLayout = ({ children }: { children: React.ReactNode }) => {
   // const { t } = useTranslation();
   const { user } = useAuthStore();
+  const isSuperAdmin = isSuperAdminUser(user);
+  const isAdmin = isAdminUser(user);
+  const hasReporterAccess = user?.role === 'reporter' || isSuperAdmin || isAdmin;
   const isFullScreenFeed = useUIStore((state) => state.isFullScreenFeed);
   const userAvatar = getReporterPhoto(user?.email) || user?.avatarUrl || (user as any)?.user_metadata?.avatar_url || (user as any)?.user_metadata?.picture || (user as any)?.avatar_url;
-  const userName = getReporterName(user?.email) || (user as any)?.user_metadata?.full_name || (user as any)?.user_metadata?.name || user?.full_name || user?.firstName || 'Reporter';
-  const userInitials = userName.split(' ').filter(Boolean).map((n: string) => n[0]).join('').substring(0, 2).toUpperCase() || 'RP';
+  const userName = (user as any)?.user_metadata?.full_name || (user as any)?.user_metadata?.name || user?.full_name || user?.firstName || getReporterName(user?.email) || (isSuperAdmin ? 'Superadmin' : 'Reporter');
+  const userInitials = userName.split(' ').filter(Boolean).map((n: string) => n[0]).join('').substring(0, 2).toUpperCase() || (isSuperAdmin ? 'SA' : 'RP');
 
   const headerBg = '#015BB3';
 
@@ -76,10 +88,9 @@ const MainLayout = ({ children }: { children: React.ReactNode }) => {
 
       {/* Main Content Area — masthead scrolls with content on all devices */}
       <main
-        className="flex-1 flex flex-col overflow-y-auto pb-[92px]"
+        className={`flex-1 flex flex-col overflow-y-auto ${!isFullScreenFeed ? 'pb-[92px]' : ''}`}
         style={{
           position: 'relative',
-          zIndex: 3,
           WebkitOverflowScrolling: 'touch',
           overscrollBehavior: 'contain'
         }}
@@ -124,7 +135,9 @@ const MainLayout = ({ children }: { children: React.ReactNode }) => {
                     </div>
                   )}
                   <div className="flex flex-col items-center leading-tight text-center mt-1">
-                    <span className="text-white/80 text-[8.5px] uppercase tracking-wider font-extrabold">REPORTER:</span>
+                    <span className="text-white/80 text-[8.5px] uppercase tracking-wider font-extrabold">
+                      {isSuperAdmin ? 'SUPERADMIN:' : isAdmin ? 'ADMIN:' : user?.role === 'reporter' ? 'REPORTER:' : 'USER:'}
+                    </span>
                     <span className="text-white text-[9.5px] uppercase tracking-wider font-extrabold">{userName}</span>
                   </div>
                 </Link>
@@ -208,15 +221,15 @@ const MainLayout = ({ children }: { children: React.ReactNode }) => {
           </span>
         </a>
 
-        {user?.role === 'reporter' ? (
+        {hasReporterAccess ? (
           <>
-            {/* 2. News Tab (Reporters) */}
+            {/* 2. News Tab */}
             <Link to="/" className="flex flex-col items-center justify-center flex-1 h-full pt-1 active:scale-95 transition-transform">
               <Globe className="w-6 h-6" style={{ color: '#0C447C' }} />
               <span className="text-[11px] font-bold mt-1" style={{ color: '#0C447C' }}>News</span>
             </Link>
 
-            {/* 3. Center Raised Button (Create for reporters) */}
+            {/* 3. Center Raised Button (Create for reporters and superadmins) */}
             <Link to="/generate" className="flex flex-col items-center justify-center flex-1 relative h-full active:scale-95 transition-transform">
               <div className="absolute -top-5 w-[54px] h-[54px] rounded-full flex items-center justify-center" style={{ background: '#FFFFFF', border: '2.5px solid #CC1E1E', padding: '3px', boxShadow: '0 4px 12px rgba(204,30,30,0.22)' }}>
                 <div className="w-full h-full rounded-full flex items-center justify-center" style={{ background: '#CC1E1E' }}>
@@ -226,11 +239,19 @@ const MainLayout = ({ children }: { children: React.ReactNode }) => {
               <span className="text-[11px] font-bold mt-[26px]" style={{ color: '#CC1E1E' }}>Create</span>
             </Link>
 
-            {/* 4. Stats Tab (Reporters) */}
+            {/* 4. Stats Tab */}
             <Link to="/stats" className="flex flex-col items-center justify-center flex-1 h-full pt-1 active:scale-95 transition-transform">
               <svg className="w-6 h-6" style={{ color: '#0C447C' }} fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" /></svg>
               <span className="text-[11px] font-bold mt-1" style={{ color: '#0C447C' }}>Stats</span>
             </Link>
+
+            {/* 5. Admin Tab (Only for Superadmin & Admin) */}
+            {(isSuperAdmin || isAdmin) && (
+              <Link to="/admin" className="flex flex-col items-center justify-center flex-1 h-full pt-1 active:scale-95 transition-transform">
+                <Shield className="w-6 h-6" style={{ color: '#CC1E1E' }} />
+                <span className="text-[11px] font-bold mt-1" style={{ color: '#CC1E1E' }}>Admin</span>
+              </Link>
+            )}
           </>
         ) : (
           /* 2. Center Raised Button (News for users) */
@@ -257,11 +278,13 @@ const MainLayout = ({ children }: { children: React.ReactNode }) => {
 };
 
 import { GoogleAuth } from '@codetrix-studio/capacitor-google-auth';
+import { initPush } from './lib/push';
 
 function AppUrlListener() {
   const navigate = useNavigate();
+  const user = useAuthStore((state) => state.user);
+
   useEffect(() => {
-    // Handle password-reset redirects
     const handleUrlOpen = (ev: Event) => {
       const customEv = ev as CustomEvent;
       const type = customEv.detail?.type;
@@ -271,11 +294,27 @@ function AppUrlListener() {
     };
     window.addEventListener('appUrlOpenRoute', handleUrlOpen);
 
-    // Handle deep links: rtiexpress.in/n/<id>  and  /r/<slug>
-    initDeepLinks(navigate);
+    // Auto initialize push notifications if enabled
+    const savedNotifs = localStorage.getItem('spotnews_notifications');
+    let pushEnabled = true;
+    if (savedNotifs) {
+      try {
+        pushEnabled = JSON.parse(savedNotifs).browserPush !== false;
+      } catch {}
+    }
+    if (pushEnabled) {
+      initPush({
+        userId: user?.id,
+        districtId: (user as any)?.district_id || 1,
+        navigate,
+      });
+    }
 
-    return () => window.removeEventListener('appUrlOpenRoute', handleUrlOpen);
-  }, [navigate]);
+    return () => {
+      window.removeEventListener('appUrlOpenRoute', handleUrlOpen);
+    };
+  }, [navigate, user?.id]);
+
   return null;
 }
 
@@ -286,9 +325,15 @@ function App() {
   const login = useAuthStore((state) => state.login);
   const updateUser = useAuthStore((state) => state.updateUser);
   const setPendingCropImageSrc = useUIStore((state) => state.setPendingCropImageSrc);
+  const isSuperAdmin = isSuperAdminUser(user);
+  const isAdmin = isAdminUser(user);
+  const hasReporterAccess = user?.role === 'reporter' || isSuperAdmin || isAdmin;
 
 
   useEffect(() => {
+    // Initialize Google AdMob SDK
+    admobService.initialize();
+
     // Initialize Google Auth plugin (Web only, native handles it via config/strings.xml)
     const isWeb = true;
     if (isWeb) {
@@ -344,14 +389,18 @@ function App() {
     });
 
     const { data: authListener } = supabase.auth.onAuthStateChange((_event, session) => {
-      if (session) {
+      // Only auto-update if the user is ALREADY authenticated in the application store.
+      // Explicit login flows (handleLogin, handleGoogleLogin, VerifyOtpScreen) manage the initial login
+      // after database validation and application status verification.
+      if (session && useAuthStore.getState().isAuthenticated) {
         const email = session.user?.email;
         const savedName = getReporterName(email);
         const savedPhoto = getReporterPhoto(email);
+        const metaName = (session.user as any)?.user_metadata?.full_name || (session.user as any)?.user_metadata?.name || (session.user as any)?.full_name || '';
         const userObj = {
           ...session.user,
-          full_name: savedName || (session.user as any)?.user_metadata?.full_name || (session.user as any)?.user_metadata?.name || (session.user as any)?.full_name || '',
-          firstName: savedName || (session.user as any)?.user_metadata?.full_name || '',
+          full_name: metaName || savedName || '',
+          firstName: metaName || savedName || '',
           avatarUrl: savedPhoto || (session.user as any)?.user_metadata?.avatar_url || (session.user as any)?.user_metadata?.picture || '',
         };
         
@@ -367,26 +416,12 @@ function App() {
               .single();
             if (!error && data?.role && useAuthStore.getState().user?.id === session.user.id) {
               updateUser({ role: data.role });
-            } else if (email) {
-              const { data: appData } = await supabase
-                .from('reporter_applications')
-                .select('status')
-                .eq('email', email.trim())
-                .order('created_at', { ascending: false })
-                .limit(1)
-                .single();
-              if (appData?.status === 'approved' && useAuthStore.getState().user?.role !== 'admin' && useAuthStore.getState().user?.role !== 'superadmin') {
-                updateUser({ role: 'reporter' });
-              }
             }
           } catch (e) {
             console.error(e);
           }
         };
         fetchRole();
-
-        // Push notifications require a valid google-services.json from Firebase Console.
-        // Disabled to prevent native crash on PushNotifications.register() / FCM calls.
       }
     });
 
@@ -434,6 +469,17 @@ function App() {
           element={<ForgotPasswordScreen />}
         />
 
+        {/* ── Reporter Approval Flow Routes ── */}
+        <Route path="/reporter/waiting" element={<ApplicationWaitingScreen />} />
+        <Route path="/reporter/payment" element={<PaymentScreen />} />
+        <Route path="/reporter/payment-pending" element={<PaymentPendingScreen />} />
+        <Route path="/reporter/activated" element={<PaymentSuccessScreen />} />
+        <Route path="/reporter/payment-success" element={<PaymentSuccessScreen />} />
+        <Route path="/reporter/payment-failed" element={<PaymentFailedScreen />} />
+        <Route path="/reporter/generating" element={<IdGeneratingScreen />} />
+        <Route path="/reporter/id-card" element={<ReporterIdCardScreen />} />
+        <Route path="/reporter/rejected" element={<ApplicationRejectedScreen />} />
+
         {/* ── Admin Route (standalone, only for verified admins) ── */}
         <Route
           path="/admin"
@@ -448,11 +494,7 @@ function App() {
 
         <Route
           path="/preview/:id"
-          element={<PreviewScreen />}
-        />
-        <Route
-          path="/news/:id"
-          element={<PreviewScreen />}
+          element={isAuthenticated ? <PreviewScreen /> : <Navigate to="/login" />}
         />
 
         <Route
@@ -462,14 +504,16 @@ function App() {
               <MainLayout>
                 <Routes>
                   <Route path="/" element={<FeedScreen />} />
-                  <Route path="/stats" element={user?.role === 'reporter' ? <StatsScreen /> : <Navigate to="/" />} />
+                  <Route path="/ad-requests" element={hasReporterAccess ? <ReporterAdRequestsScreen /> : <Navigate to="/" />} />
+                  <Route path="/stats" element={hasReporterAccess ? <StatsScreen /> : <Navigate to="/" />} />
                   <Route path="/dashboard" element={<DashboardScreen />} />
-                  <Route path="/generate" element={user?.role === 'reporter' ? <GenerateScreen /> : <Navigate to="/" />} />
+                  <Route path="/generate" element={hasReporterAccess ? <GenerateScreen /> : <Navigate to="/" />} />
                   <Route path="/templates" element={<TemplatesScreen />} />
                   <Route path="/news" element={<NewsScreen />} />
                   <Route path="/history" element={<NewsScreen />} />
                   <Route path="/settings" element={<SettingsScreen />} />
                   <Route path="/settings/profile" element={<ProfileSettingsScreen />} />
+                  <Route path="/admin" element={<Navigate to="/admin" replace />} />
                   <Route path="*" element={<Navigate to="/" />} />
                 </Routes>
               </MainLayout>

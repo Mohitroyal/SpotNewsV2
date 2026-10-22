@@ -107,7 +107,10 @@ export const LocalAdFeedCard: React.FC<LocalAdFeedCardProps> = ({ ad, index }) =
       </div>
 
       {/* ── Bottom Overlay Card: Title, Description & CTA ── */}
-      <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black via-black/90 to-transparent pt-10 pb-4 px-4 z-20 space-y-2.5">
+      <div
+        className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black via-black/90 to-transparent pt-10 px-4 z-20 space-y-2.5"
+        style={{ paddingBottom: 'calc(1.25rem + env(safe-area-inset-bottom, 0px))' }}
+      >
         <div className="flex items-start justify-between gap-3">
           <div className="space-y-1">
             <div className="flex items-center gap-1.5 text-[#FFCC00] text-[10px] font-black uppercase tracking-wider">

@@ -1,4 +1,4 @@
-import { FilePlus, LayoutTemplate, Newspaper } from 'lucide-react';
+import { FilePlus, LayoutTemplate, Newspaper, Megaphone } from 'lucide-react';
 import { useGenerationStore, useAuthStore, getReporterPhoto, getReporterName } from '@/store';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from '@/lib/i18n';
@@ -12,11 +12,11 @@ export const DashboardScreen = () => {
   const recentGenerations = generations.slice(0, 3);
 
   const displayName =
-    getReporterName(user?.email) ||
     (user as any)?.user_metadata?.full_name ||
     (user as any)?.user_metadata?.name ||
     user?.full_name ||
     user?.firstName ||
+    getReporterName(user?.email) ||
     (user as any)?.email?.split('@')[0] ||
     'Journalist';
 
@@ -85,6 +85,29 @@ export const DashboardScreen = () => {
             <LayoutTemplate className="w-[24px] h-[24px] text-white" strokeWidth={1.5} />
             <span className="text-white text-[12px] font-bold uppercase tracking-wider">
               {t.templatesBtn}
+            </span>
+          </button>
+
+          {/* Local Ads & Sponsorships */}
+          <button
+            onClick={() => navigate('/ad-requests')}
+            className="bg-gradient-to-r from-[#015BB3] to-[#0284c7] rounded-[12px] py-[16px] px-[14px] flex items-center justify-between gap-3 active:scale-95 transition-all shadow-md col-span-2 text-left"
+          >
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-white/20 flex items-center justify-center text-white shrink-0">
+                <Megaphone className="w-5 h-5 text-[#FFCC00]" strokeWidth={2.5} />
+              </div>
+              <div>
+                <span className="text-white text-[13px] font-black uppercase tracking-wide block">
+                  Local Ads & Sponsorships
+                </span>
+                <span className="text-white/80 text-[11px] block">
+                  స్థానిక ప్రకటనలను ఫీడ్‌లో ప్రచురించండి
+                </span>
+              </div>
+            </div>
+            <span className="bg-[#FFCC00] text-[#015BB3] text-[10px] font-black px-2.5 py-1 rounded-full uppercase tracking-wider shrink-0 shadow-sm">
+              NEW
             </span>
           </button>
         </div>

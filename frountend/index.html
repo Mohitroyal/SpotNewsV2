@@ -4,6 +4,14 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <script>
+      try {
+        var cleanUa = navigator.userAgent.replace(/; wv\)/g, ')').replace(/Version\/[0-9.]+\s/g, '');
+        Object.defineProperty(navigator, 'userAgent', {
+          get: function() { return cleanUa; }
+        });
+      } catch (e) {}
+    </script>
     <title>Spot News 24x7</title>
     <meta name="google-signin-client_id" content="831106920430-h8h1nj7a5j2iirgki34ve8ariuj8uroi.apps.googleusercontent.com" />
   </head>

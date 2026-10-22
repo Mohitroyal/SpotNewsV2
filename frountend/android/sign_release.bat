@@ -45,49 +45,35 @@ if not exist "%KEYSTORE%" (
 )
 echo.
 
-REM Step 2: Sign using jarsigner
-echo [2/4] Signing APK with jarsigner...
+REM Step 2: Use Gradle's release APK or sign with apksigner if unsigned
+set "APKSIGNER=%BUILD_TOOLS%\apksigner.bat"
+set "FINAL_APK=%APK_DIR%\app-release-final.apk"
+
 if exist "%UNSIGNED_APK%" (
-    if exist "%SIGNED_APK%" del "%SIGNED_APK%"
-    copy "%UNSIGNED_APK%" "%SIGNED_APK%" >nul
+    echo [2/3] Zipaligning unsigned APK...
+    set "ALIGNED_APK=%APK_DIR%\app-release-aligned.apk"
+    if exist "%ALIGNED_APK%" del "%ALIGNED_APK%"
+    "%ZIPALIGN%" -v -p 4 "%UNSIGNED_APK%" "%ALIGNED_APK%"
+    
+    echo [3/3] Signing with apksigner v1 and v2 and v3...
+    if exist "%FINAL_APK%" del "%FINAL_APK%"
+    call "%APKSIGNER%" sign ^
+        --ks "%KEYSTORE%" ^
+        --ks-key-alias %KEY_ALIAS% ^
+        --ks-pass pass:%STORE_PASS% ^
+        --key-pass pass:%KEY_PASS% ^
+        --v1-signing-enabled true ^
+        --v2-signing-enabled true ^
+        --v3-signing-enabled true ^
+        --out "%FINAL_APK%" ^
+        "%ALIGNED_APK%"
+) else (
+    echo [2/2] Using Gradle signed release APK with v2 signature...
+    copy /y "%SIGNED_APK%" "%FINAL_APK%" >nul
 )
 
-"%JARSIGNER%" -verbose ^
-    -sigalg SHA256withRSA ^
-    -digestalg SHA-256 ^
-    -keystore "%KEYSTORE%" ^
-    -storepass %STORE_PASS% ^
-    -keypass %KEY_PASS% ^
-    "%SIGNED_APK%" ^
-    %KEY_ALIAS%
-
-if %ERRORLEVEL% NEQ 0 (
-    echo ERROR: jarsigner signing failed!
-    exit /b 1
-)
-echo jarsigner signing complete.
-echo.
-
-REM Step 3: Zipalign the signed APK
-echo [3/4] Running zipalign on signed APK...
-set "ALIGNED_APK=%APK_DIR%\app-release-final.apk"
-if exist "%ALIGNED_APK%" del "%ALIGNED_APK%"
-
-"%ZIPALIGN%" -v 4 "%SIGNED_APK%" "%ALIGNED_APK%"
-if %ERRORLEVEL% NEQ 0 (
-    echo ERROR: zipalign failed!
-    exit /b 1
-)
-echo zipalign complete.
-echo.
-
-REM Step 4: Verify with jarsigner
-echo [4/4] Verifying signed APK...
-"%JARSIGNER%" -verify -verbose -certs "%ALIGNED_APK%"
-if %ERRORLEVEL% NEQ 0 (
-    echo WARNING: Verification returned non-zero but APK may still be valid.
-)
-echo.
+echo Verifying signature with apksigner...
+call "%APKSIGNER%" verify --verbose "%FINAL_APK%"
 
 REM Copy debug APK to a convenient location
 set "DEBUG_APK=app\build\outputs\apk\debug\app-debug.apk"
@@ -101,8 +87,8 @@ echo  Path: %CD%\%DEBUG_APK%
 for %%F in ("%DEBUG_APK%") do echo  Size: %%~zF bytes
 echo.
 echo  [RELEASE APK - signed + zipaligned]
-echo  Path: %CD%\%ALIGNED_APK%
-for %%F in ("%ALIGNED_APK%") do echo  Size: %%~zF bytes
+echo  Path: %CD%\%FINAL_APK%
+for %%F in ("%FINAL_APK%") do echo  Size: %%~zF bytes
 echo.
 echo  Keystore: %CD%\%KEYSTORE%
 echo  Alias: %KEY_ALIAS%

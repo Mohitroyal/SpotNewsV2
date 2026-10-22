@@ -16,8 +16,9 @@ export const VerifyOtpScreen = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const login = useAuthStore((state: any) => state.login);
+  const storedOtpPhone = useAuthStore((state: any) => state.otpState?.phoneNumber);
   
-  const { phoneNumber } = location.state || {};
+  const phoneNumber = location.state?.phoneNumber || storedOtpPhone;
 
   useEffect(() => {
     let timer: any;
@@ -44,7 +45,7 @@ export const VerifyOtpScreen = () => {
     setInfoMessage('');
 
     try {
-      const res = await OTPWidget.verifyOTP({ mobile: phoneNumber, otp: cleanOtp });
+      const res = await OTPWidget.verifyOTP({ phone: phoneNumber, mobile: phoneNumber, otp: cleanOtp });
       
       if (res.success && res.token && res.user) {
         // Save authenticated session in Zustand store
@@ -68,7 +69,7 @@ export const VerifyOtpScreen = () => {
     setInfoMessage('');
 
     try {
-      const res = await OTPWidget.retryOTP({ mobile: phoneNumber });
+      const res = await OTPWidget.retryOTP({ phone: phoneNumber, mobile: phoneNumber });
       if (res.success) {
         setInfoMessage('New OTP sent successfully!');
         setCooldown(60);

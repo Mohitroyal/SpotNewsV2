@@ -1,5 +1,32 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android" xmlns:tools="http://schemas.android.com/tools">
+
+    <!-- Allow Android to detect and launch installed UPI apps (GPay, PhonePe, Paytm, etc.) -->
+    <queries>
+        <package android:name="com.google.android.apps.nbu.paisa.user" />
+        <package android:name="com.phonepe.app" />
+        <package android:name="net.one97.paytm" />
+        <package android:name="in.org.npci.upiapp" />
+        <package android:name="in.amazon.mShop.android.shopping" />
+        <package android:name="com.whatsapp" />
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:scheme="upi" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:scheme="tez" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:scheme="phonepe" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:scheme="paytmmp" />
+        </intent>
+    </queries>
+
     <application
         android:allowBackup="true"
         android:icon="@mipmap/ic_launcher"
@@ -26,23 +53,6 @@
                 <data android:scheme="https" android:host="news-frount.vercel.app" />
             </intent-filter>
 
-            <!-- App Links: Supabase edge function URLs for /n/... and /r/... -->
-            <intent-filter android:autoVerify="true">
-                <action android:name="android.intent.action.VIEW" />
-                <category android:name="android.intent.category.DEFAULT" />
-                <category android:name="android.intent.category.BROWSABLE" />
-                <data android:scheme="https" android:host="rffrqokpnqoycpozrjuc.supabase.co" android:pathPrefix="/functions/v1/share-page/n/" />
-                <data android:scheme="https" android:host="rffrqokpnqoycpozrjuc.supabase.co" android:pathPrefix="/functions/v1/share-page/r/" />
-            </intent-filter>
-
-            <!-- Custom Scheme: spotnews://n/... and spotnews://r/... -->
-            <intent-filter>
-                <action android:name="android.intent.action.VIEW" />
-                <category android:name="android.intent.category.DEFAULT" />
-                <category android:name="android.intent.category.BROWSABLE" />
-                <data android:scheme="spotnews" />
-            </intent-filter>
-
             <intent-filter>
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
@@ -58,21 +68,23 @@
             android:grantUriPermissions="true">
             <meta-data android:name="android.support.FILE_PROVIDER_PATHS" android:resource="@xml/file_paths" />
         </provider>
+
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_icon"
+            android:resource="@drawable/ic_stat_logo" />
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_color"
+            android:resource="@color/notification_color" />
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_channel_id"
+            android:value="news" />
+
         <!-- Google AdMob Application ID (RTI EXPRESS Spot news 24x7) -->
         <meta-data
             android:name="com.google.android.gms.ads.APPLICATION_ID"
             android:value="ca-app-pub-5229942501184833~5967466877" />
 
     </application>
-
-    <!-- Queries for Direct Social Sharing (Android 11+) -->
-    <queries>
-        <package android:name="com.whatsapp" />
-        <package android:name="com.whatsapp.w4b" />
-        <package android:name="com.instagram.android" />
-        <package android:name="com.facebook.katana" />
-        <package android:name="com.twitter.android" />
-    </queries>
 
     <!-- Permissions -->
     <uses-permission android:name="android.permission.INTERNET" />

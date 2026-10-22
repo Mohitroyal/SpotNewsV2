@@ -17,7 +17,9 @@ const mapUser = (user: any, profile?: any, generations = 0): AdminUserProfile =>
     is_active_today: user.is_active_today ?? (user.generations_today > 0 || (loginTime >= today.getTime() && loginTime <= Date.now())),
     avatar_url: user.avatar_url || profile?.avatar_url || '', preferred_language: user.preferred_language || 'English',
     is_banned: Boolean(user.is_banned || profile?.is_banned || (user.banned_until && Date.parse(user.banned_until) > Date.now())),
-    banned_until: user.banned_until || profile?.banned_until || null };
+    banned_until: user.banned_until || profile?.banned_until || null,
+    district: user.district || profile?.district || '',
+    state: user.state || profile?.state || '' };
 };
 
 export const getAdminUsers = async (): Promise<AdminUserProfile[]> => {
@@ -43,7 +45,7 @@ export const getAdminUsers = async (): Promise<AdminUserProfile[]> => {
 
   const [{ data: users, error: usersError }, { data: profiles }, { data: clippings }] = await Promise.all([
     supabase.from('users').select('id, email, full_name, avatar_url, created_at, preferred_language, phone_number').order('created_at', { ascending: false }),
-    supabase.from('profiles').select('id, role, plan, last_sign_in_at, is_banned, banned_until, phone_number'),
+    supabase.from('profiles').select('id, role, plan, last_sign_in_at, is_banned, banned_until, phone_number, district, state'),
     supabase.from('clippings').select('user_id'),
   ]);
   if (usersError) throw usersError;

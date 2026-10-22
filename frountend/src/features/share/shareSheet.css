@@ -1,0 +1,21 @@
+/* Share sheet bottom drawer */
+.ss-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,.55); z-index: 9999; display: flex; align-items: flex-end; justify-content: center; }
+.ss { background: #fff; border-radius: 24px 24px 0 0; width: 100%; max-width: 540px; padding: 20px 16px 32px; box-shadow: 0 -6px 32px rgba(0,0,0,.18); }
+.ss-title { text-align: center; font-weight: 900; font-size: 16px; color: #1a1a1a; margin-bottom: 14px; }
+.ss-tabs { display: flex; gap: 8px; margin-bottom: 14px; }
+.ss-tabs button { flex: 1; padding: 9px 0; border-radius: 10px; border: 1.5px solid #e0ddd5; background: #f8f5ed; font-size: 13px; font-weight: 700; cursor: pointer; transition: all .15s; }
+.ss-tabs button.on { background: #0e2a66; color: #fff; border-color: #0e2a66; }
+.ss-preview { width: 100%; background: #f0ede5; border-radius: 12px; overflow: hidden; display: flex; align-items: center; justify-content: center; min-height: 160px; margin-bottom: 12px; }
+.ss-preview img { max-width: 100%; max-height: 320px; object-fit: contain; display: block; }
+.ss-wait { color: #888; font-size: 13px; font-weight: 700; padding: 24px; }
+.ss-apps { display: flex; gap: 8px; margin-bottom: 10px; flex-wrap: wrap; }
+.ss-apps button { flex: 1; min-width: 60px; padding: 10px 4px; border-radius: 10px; border: none; font-size: 13px; font-weight: 800; cursor: pointer; transition: transform .1s; }
+.ss-apps button:active { transform: scale(.95); }
+.ss-apps button:disabled { opacity: .5; }
+.ss-apps .wa  { background: #25d366; color: #fff; }
+.ss-apps .ig  { background: linear-gradient(135deg,#f58529,#dd2a7b,#8134af,#515bd4); color: #fff; }
+.ss-apps .fb  { background: #1877f2; color: #fff; }
+.ss-apps .x   { background: #000; color: #fff; }
+.ss-apps .more { background: #f0ede5; color: #333; }
+.ss-note { font-size: 12px; color: #666; text-align: center; margin-bottom: 8px; line-height: 1.45; font-family: "Noto Sans Telugu", sans-serif; }
+.ss-link { width: 100%; padding: 10px; border-radius: 10px; border: 1.5px dashed #c0bbae; background: #f8f5ed; color: #0e2a66; font-size: 12px; font-weight: 700; cursor: pointer; margin-top: 4px; }

@@ -11,24 +11,61 @@ def admin_generations(request):
         offset = (page - 1) * page_size
         
         user_id = request.GET.get('user_id')
+        district = request.GET.get('district')
+        status = request.GET.get('status')
+        from_date = request.GET.get('from_date')
+        to_date = request.GET.get('to_date')
         
-        query = "SELECT c.id, c.status, c.created_at, c.user_id, c.headline, c.template_id, c.language, c.tone, c.publication_name, c.publication_date, c.layout_columns, c.font_family, c.png_url, c.pdf_url, p.email, p.full_name, p.plan FROM clippings c LEFT JOIN profiles p ON c.user_id = p.id"
+        query = (
+            "SELECT c.id, c.status, c.created_at, c.user_id, c.headline, c.template_id, "
+            "c.language, c.tone, c.publication_name, c.publication_date, c.layout_columns, "
+            "c.font_family, c.png_url, c.pdf_url, p.email, p.full_name, p.plan, "
+            "c.district, c.state, c.is_posted "
+            "FROM clippings c LEFT JOIN profiles p ON c.user_id = p.id"
+        )
         count_query = "SELECT COUNT(*) FROM clippings c"
+        
+        where_clauses = []
         params = []
         
         if user_id:
-            query += " WHERE c.user_id = %s"
-            count_query += " WHERE c.user_id = %s"
+            where_clauses.append("c.user_id = %s")
             params.append(user_id)
             
+        if district and district.strip().lower() != 'all':
+            where_clauses.append("LOWER(TRIM(COALESCE(c.district, ''))) = LOWER(TRIM(%s))")
+            params.append(district.strip())
+            
+        if status and status.strip().lower() != 'all':
+            st = status.strip().lower()
+            if st == 'pending':
+                where_clauses.append("(c.status = 'pending_approval' OR (COALESCE(c.is_posted, false) = false AND c.status != 'rejected'))")
+            elif st == 'approved':
+                where_clauses.append("(c.is_posted = true OR c.status = 'approved')")
+            elif st == 'rejected':
+                where_clauses.append("c.status = 'rejected'")
+
+        if from_date:
+            where_clauses.append("c.created_at >= %s")
+            params.append(f"{from_date} 00:00:00+05:30")
+        if to_date:
+            where_clauses.append("c.created_at <= %s")
+            params.append(f"{to_date} 23:59:59+05:30")
+            
+        if where_clauses:
+            where_sql = " WHERE " + " AND ".join(where_clauses)
+            query += where_sql
+            count_query += where_sql
+            
+        query_params = list(params)
         query += " ORDER BY c.created_at DESC LIMIT %s OFFSET %s"
-        params.extend([page_size, offset])
+        query_params.extend([page_size, offset])
         
         with connection.cursor() as cursor:
-            cursor.execute(count_query, params[:-2] if user_id else [])
+            cursor.execute(count_query, params)
             total = cursor.fetchone()[0]
             
-            cursor.execute(query, params)
+            cursor.execute(query, query_params)
             rows = cursor.fetchall()
             
             results = []
@@ -51,7 +88,10 @@ def admin_generations(request):
                     "pdf_url": r[13] or "",
                     "user_email": r[14] or "",
                     "user_name": r[15] or "",
-                    "user_plan": r[16] or "free"
+                    "user_plan": r[16] or "free",
+                    "district": r[17] or "",
+                    "state": r[18] or "",
+                    "is_posted": bool(r[19]) if r[19] is not None else False
                 })
                 
         return JsonResponse({"total": total, "results": results})
@@ -66,13 +106,61 @@ def admin_user_role(request, user_id):
             data = json.loads(request.body)
             role = data.get('role', 'user')
             plan = data.get('plan')
+            district = data.get('district')
+            phone_number = data.get('phone_number')
+            
             if role not in ('superadmin', 'admin', 'reporter', 'user'):
                 return JsonResponse({"detail": f"Invalid role: {role}"}, status=400)
+                
             with connection.cursor() as cursor:
-                if plan and plan in ('free', 'pro', 'enterprise'):
-                    cursor.execute("UPDATE profiles SET role = %s, plan = %s WHERE id = %s", [role, plan, user_id])
+                # If promoting to admin, enforce: every district will get one admin only
+                if role == 'admin':
+                    if not district or not str(district).strip():
+                        return JsonResponse({
+                            "detail": "An admin must be assigned to a specific district. Every district will get one admin only."
+                        }, status=400)
+                    
+                    cleaned_district = str(district).strip()
+                    # Check if another admin already occupies this district
+                    cursor.execute("""
+                        SELECT email, full_name, district 
+                        FROM profiles 
+                        WHERE role = 'admin' 
+                          AND LOWER(TRIM(COALESCE(district, ''))) = LOWER(TRIM(%s)) 
+                          AND id != %s
+                    """, [cleaned_district, user_id])
+                    existing = cursor.fetchone()
+                    if existing:
+                        admin_name = existing[0] or existing[1] or "another administrator"
+                        return JsonResponse({
+                            "detail": f"District '{cleaned_district}' already has an assigned admin ({admin_name}). Every district will get one admin only."
+                        }, status=400)
+                    
+                    target_plan = plan or 'admin'
+                    cursor.execute(
+                        "UPDATE profiles SET role = %s, district = %s, plan = %s WHERE id = %s",
+                        [role, cleaned_district, target_plan, user_id]
+                    )
                 else:
-                    cursor.execute("UPDATE profiles SET role = %s WHERE id = %s", [role, user_id])
+                    # Role is superadmin, reporter, or user
+                    cleaned_district = str(district).strip() if district else None
+                    if plan and plan in ('free', 'pro', 'enterprise', 'reporter', 'superadmin'):
+                        cursor.execute(
+                            "UPDATE profiles SET role = %s, plan = %s, district = COALESCE(%s, district) WHERE id = %s",
+                            [role, plan, cleaned_district, user_id]
+                        )
+                    else:
+                        cursor.execute(
+                            "UPDATE profiles SET role = %s, district = COALESCE(%s, district) WHERE id = %s",
+                            [role, cleaned_district, user_id]
+                        )
+                
+                if phone_number and str(phone_number).strip():
+                    cursor.execute(
+                        "UPDATE profiles SET phone_number = %s WHERE id = %s",
+                        [str(phone_number).strip(), user_id]
+                    )
+                    
             return JsonResponse({"success": True})
         except Exception as e:
             return JsonResponse({"detail": str(e)}, status=400)

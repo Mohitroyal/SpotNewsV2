@@ -1,26 +1,6 @@
 import { supabase } from '@/lib/supabase';
 import api from '@/lib/axios';
-import { useAuthStore } from '@/store';
-
-async function getAuthHeaders(): Promise<Record<string, string>> {
-  let token = useAuthStore.getState().token;
-  if (!token) {
-    try {
-      const { data } = await supabase.auth.getSession();
-      token = data?.session?.access_token || null;
-    } catch {}
-  }
-  if (!token && typeof window !== "undefined") {
-    const raw = localStorage.getItem("newscraft-auth");
-    if (raw) {
-      try {
-        const { state } = JSON.parse(raw);
-        token = state?.token || null;
-      } catch {}
-    }
-  }
-  return token ? { Authorization: `Bearer ${token}` } : {};
-}
+import axios from 'axios';
 
 export interface EligibleArticle {
   id: string;
@@ -285,6 +265,26 @@ export async function generateClientSidePreviewHtml(config: DailyNewspaperConfig
   return { html, total_pages: totalPages, total_articles: totalArticles };
 }
 
+const getDjangoClient = () => {
+  const djangoUrl = import.meta.env.VITE_DJANGO_API_URL || import.meta.env.VITE_API_URL || 'https://spotnewsv2.onrender.com';
+  const instance = axios.create({
+    baseURL: djangoUrl,
+    headers: { "Content-Type": "application/json" }
+  });
+
+  if (typeof window !== "undefined") {
+    const raw = localStorage.getItem("newscraft-auth");
+    if (raw) {
+      try {
+        const { state } = JSON.parse(raw);
+        if (state?.token) {
+          instance.defaults.headers.common.Authorization = `Bearer ${state.token}`;
+        }
+      } catch {}
+    }
+  }
+  return instance;
+};
 
 export const dailyNewspaperService = {
   /**
@@ -294,17 +294,13 @@ export const dailyNewspaperService = {
   async getEligibleClippings(dateStr: string): Promise<{ total: number; articles: EligibleArticle[] }> {
     // 1. Try Backend API
     try {
-      const headers = await getAuthHeaders();
-      const res = await api.get('/api/v1/admin/daily-newspaper/clippings', {
-        params: { date: dateStr },
-        headers,
-        timeout: 20_000,
-      });
+      const client = getDjangoClient();
+      const res = await client.get('/api/v1/admin/daily-newspaper/clippings', { params: { date: dateStr } });
       if (res.data && Array.isArray(res.data.articles) && res.data.articles.length > 0) {
         return { total: res.data.total_eligible ?? res.data.articles.length, articles: res.data.articles };
       }
     } catch (err) {
-      console.warn('[DailyNewspaper] Backend clippings unavailable:', err);
+      console.warn('[DailyNewspaper] Backend unavailable:', err);
     }
 
     // 2. Direct Supabase — all clippings created on this date (IST-aware)
@@ -381,11 +377,16 @@ export const dailyNewspaperService = {
 
   async preview(config: DailyNewspaperConfig): Promise<{ html: string; total_pages: number; total_articles: number }> {
     try {
-      const headers = await getAuthHeaders();
-      const res = await api.post('/api/v1/admin/daily-newspaper/preview', config, { headers, timeout: 30_000 });
+      const client = getDjangoClient();
+      const res = await client.post('/api/v1/admin/daily-newspaper/preview', config);
       return res.data;
     } catch {
-      return generateClientSidePreviewHtml(config);
+      try {
+        const res = await api.post('/api/v1/admin/daily-newspaper/preview', config);
+        return res.data;
+      } catch {
+        return generateClientSidePreviewHtml(config);
+      }
     }
   },
 
@@ -393,35 +394,67 @@ export const dailyNewspaperService = {
     success: boolean;
     edition_id: string;
     pdf_url: string;
-    pdf_base64?: string | null;
     total_pages: number;
     total_articles: number;
     message: string;
   }> {
-    // Backend API (Playwright Chromium server-side generation with guaranteed A3 styling)
-    let lastError: any = null;
     try {
-      const headers = await getAuthHeaders();
-      const res = await api.post('/api/v1/admin/daily-newspaper/generate', config, {
-        headers,
-        timeout: 180_000,
-      });
-      if (res.data && res.data.success) {
-        return res.data;
-      }
-    } catch (apiErr: any) {
-      console.error('[DailyNewspaper] Backend generate failed:', apiErr);
-      lastError = apiErr;
-    }
+      const preview = await generateClientSidePreviewHtml(config);
+      
+      // Use an iframe instead of a div because injecting full HTML into a div strips the <style> and <head> tags!
+      const iframe = document.createElement('iframe');
+      iframe.style.position = 'fixed'; // Keep in viewport so Capacitor doesn't cull it
+      iframe.style.top = '0';
+      iframe.style.left = '0';
+      iframe.style.width = '297mm';
+      iframe.style.height = '100vh';
+      iframe.style.opacity = '0.01'; // Almost invisible but tricks WebView into painting it
+      iframe.style.pointerEvents = 'none';
+      iframe.style.zIndex = '-999';
+      document.body.appendChild(iframe);
 
-    const errorMsg = lastError?.response?.data?.detail || lastError?.message || 'Server PDF generation failed. Please try again.';
-    throw new Error(errorMsg);
+      const doc = iframe.contentWindow?.document;
+      if (!doc) throw new Error("Iframe not initialized");
+      
+      doc.open();
+      doc.write(preview.html);
+      doc.close();
+
+      // Wait a moment for layout and images to fully load
+      await new Promise(resolve => setTimeout(resolve, 3000));
+
+      const html2pdf = (await import('html2pdf.js')).default;
+      const opt = {
+        margin: 0,
+        filename: `DailyNewspaper-${config.edition_date}.pdf`,
+        image: { type: 'jpeg' as 'jpeg', quality: 0.98 },
+        html2canvas: { scale: 2, useCORS: true, logging: false, windowWidth: 1122 }, // 1122px approx 297mm
+        jsPDF: { unit: 'mm', format: 'a3', orientation: 'portrait' as const }
+      };
+
+      const pdfBlob = await html2pdf().set(opt).from(doc.body).output('blob');
+      const pdfBlobUrl = URL.createObjectURL(pdfBlob);
+      
+      document.body.removeChild(iframe);
+
+      return {
+        success: true,
+        edition_id: `edition-${Date.now()}`,
+        pdf_url: pdfBlobUrl,
+        total_pages: preview.total_pages,
+        total_articles: preview.total_articles,
+        message: `Generated local PDF successfully.`,
+      };
+    } catch (err: any) {
+      console.error('Local PDF Generation Error:', err);
+      throw new Error(err.message || 'Failed to generate PDF locally');
+    }
   },
 
   async getDailyEditions(): Promise<DailyEditionRecord[]> {
     try {
-      const headers = await getAuthHeaders();
-      const res = await api.get('/api/v1/admin/daily-newspaper/editions', { headers, timeout: 20_000 });
+      const client = getDjangoClient();
+      const res = await client.get('/api/v1/admin/daily-newspaper/editions');
       if (Array.isArray(res.data)) return res.data;
     } catch {
       console.warn('[DailyNewspaper] Backend editions unavailable.');

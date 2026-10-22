@@ -1,0 +1,28 @@
+/* Reporter share card — rendered off-screen at full size, then turned into a PNG by shareImage.ts */
+.rc { position: absolute; left: -9999px; top: 0; width: 1080px; background: #faf6ec; color: #1a1a1a; font-family: "Noto Sans Telugu", sans-serif; box-sizing: border-box; overflow: hidden; z-index: -100; pointer-events: none; }
+.rc-square { height: 1080px; padding: 44px 52px; border: 6px solid #1f1f1f; border-radius: 40px; }
+.rc-story  { height: 1920px; padding: 70px 60px; }
+.rc-head { display: flex; align-items: center; gap: 22px; }
+.rc-logo { width: 150px; height: 150px; }
+.rc-tag { background: #c1121f; color: #fff; font-weight: 900; font-size: 34px; padding: 10px 24px 16px; border-radius: 12px; }
+.rc-who { flex: 1; text-align: right; line-height: 1.25; }
+.rc-name { font-family: Georgia, "Times New Roman", serif; font-weight: 700; font-size: 40px; white-space: nowrap; }
+.rc-ver { color: #15803d; font-weight: 800; font-size: 30px; }
+.rc-stars { font-size: 30px; font-weight: 800; } .rc-stars span { color: #f5a400; letter-spacing: 2px; } .rc-stars small { color: #7a705e; font-size: 24px; }
+.rc-avatar { width: 150px; height: 150px; border-radius: 50%; border: 5px solid #1f1f1f; background: #8b5cf6 center/cover; color: #fff; font-size: 64px; font-weight: 900; display: flex; align-items: center; justify-content: center; }
+.rc-rule { border-top: 6px solid #1f1f1f; border-bottom: 2px solid #1f1f1f; height: 14px; margin-top: 22px; }
+.rc-meta { display: flex; justify-content: space-between; margin-top: 16px; font-size: 30px; font-weight: 700; color: #3a3226; }
+.rc-headline { text-align: center; font-weight: 900; font-size: 64px; line-height: 1.35; margin-top: 16px; }
+.rc-thumb { height: 330px; margin-top: 16px; border: 3px solid #1f1f1f; border-radius: 14px; overflow: hidden; background: #fff; }
+.rc-thumb img { width: 100%; height: 100%; object-fit: cover; object-position: top; display: block; }
+.rc-chips { display: flex; gap: 12px; justify-content: center; margin-top: 20px; }
+.rc-chips span { background: #fff; border: 2px solid #e3dccb; border-radius: 999px; padding: 8px 20px; font-size: 24px; font-weight: 800; color: #3a3226; }
+.rc-bar { position: absolute; left: 52px; right: 52px; bottom: 40px; height: 150px; background: #1f1f1f; color: #fff; border-radius: 16px; display: flex; align-items: center; gap: 22px; padding: 0 20px; }
+.rc-qr { width: 122px; height: 122px; background: #fff; border-radius: 12px; }
+.rc-cta { font-size: 34px; font-weight: 900; } .rc-link { font-size: 30px; font-weight: 800; color: #ffd43b; } .rc-play { font-size: 22px; font-weight: 700; opacity: .9; }
+/* story layout tweaks */
+.rc-story .rc-head { flex-wrap: wrap; justify-content: center; text-align: center; }
+.rc-story .rc-who { flex-basis: 100%; text-align: center; }
+.rc-story .rc-avatar { width: 300px; height: 300px; order: -1; margin: 0 auto; box-shadow: 0 0 0 10px #ffd43b; }
+.rc-story .rc-name { font-size: 70px; } .rc-story .rc-stars { font-size: 52px; }
+.rc-story .rc-bar { left: 60px; right: 60px; bottom: 60px; height: 230px; } .rc-story .rc-qr { width: 180px; height: 180px; }

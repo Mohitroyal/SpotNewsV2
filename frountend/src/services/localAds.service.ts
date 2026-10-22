@@ -207,11 +207,12 @@ export const localAdsService = {
    */
   async acceptAdRequest(adId: string, amountInr: number): Promise<{ success: boolean; error?: string }> {
     try {
+      const cleanAmount = typeof amountInr === 'number' && !isNaN(amountInr) ? Math.max(0, amountInr) : 0;
       const { error } = await supabase
         .from('local_ads')
         .update({
           status: 'accepted_payment_pending',
-          amount_inr: amountInr,
+          amount_inr: cleanAmount,
           rejection_reason: null,
         })
         .eq('id', adId);
@@ -279,80 +280,55 @@ export const localAdsService = {
   },
 
   /**
+   * Launch UPI intent deep link for an ad payment without premature activation.
+   */
+  launchUpiPaymentIntent(ad: LocalAd): { success: boolean; upiDeepLink: string } {
+    const paymentAmount = ad.amount_inr ?? 0;
+    const upiDeepLink = `upi://pay?pa=baba.journlist@sbi&pn=FOUZIYA%20PUBLICATIONS&am=${paymentAmount}&cu=INR&tn=SpotNews`;
+    try {
+      window.location.href = upiDeepLink;
+      return { success: true, upiDeepLink };
+    } catch (e) {
+      console.warn('Direct UPI intent trigger notice:', e);
+      return { success: false, upiDeepLink };
+    }
+  },
+
+  /**
+   * Confirm payment and activate ad in database.
+   */
+  async confirmPaymentAndActivate(adId: string, paymentRef?: string): Promise<{ success: boolean; error?: string }> {
+    try {
+      const paymentId = paymentRef || `upi_pay_${Date.now()}`;
+      const { error: updateError } = await supabase
+        .from('local_ads')
+        .update({
+          status: 'active',
+          razorpay_payment_id: paymentId,
+          paid_at: new Date().toISOString(),
+        })
+        .eq('id', adId);
+
+      if (updateError) throw updateError;
+      return { success: true };
+    } catch (err: any) {
+      console.error('[LocalAds] Failed to update ad to active:', err);
+      return { success: false, error: err.message || 'Failed to activate ad.' };
+    }
+  },
+
+  /**
    * Reporter pays for the accepted ad.
-   * Launches Razorpay checkout and on success, updates ad status to 'active'.
+   * If free, immediately activates. If paid, triggers UPI intent without premature activation.
    */
   async payAndPublishAd(ad: LocalAd): Promise<{ success: boolean; paymentId?: string; error?: string }> {
-    return new Promise(async (resolve) => {
-      try {
-        const amountPaise = Math.round((ad.amount_inr || 500) * 100);
-        const razorpayKey = (import.meta as any).env.VITE_RAZORPAY_KEY_ID || 'rzp_test_51TYsfpCxIW5sS3';
-
-        // Check if Razorpay script is present
-        if (typeof (window as any).Razorpay !== 'undefined') {
-          const options = {
-            key: razorpayKey,
-            amount: amountPaise,
-            currency: 'INR',
-            name: 'SpotNews Local Advertisement',
-            description: `Ad: ${ad.title}`,
-            image: '/logo192.png',
-            prefill: {
-              name: ad.reporter_name || 'Reporter',
-              email: ad.reporter_email || '',
-              contact: ad.reporter_phone || '',
-            },
-            theme: { color: '#015BB3' },
-            modal: {
-              ondismiss: () => {
-                resolve({ success: false, error: 'Payment was cancelled.' });
-              },
-            },
-            handler: async (response: any) => {
-              const paymentId = response.razorpay_payment_id || `pay_${Date.now()}`;
-              // Update status in Supabase to active
-              const { error: updateError } = await supabase
-                .from('local_ads')
-                .update({
-                  status: 'active',
-                  razorpay_payment_id: paymentId,
-                  paid_at: new Date().toISOString(),
-                })
-                .eq('id', ad.id);
-
-              if (updateError) {
-                console.error('[LocalAds] Failed to update ad to active:', updateError);
-                resolve({ success: false, error: 'Payment received, but failed to activate ad automatically. Please contact admin.' });
-                return;
-              }
-
-              resolve({ success: true, paymentId });
-            },
-          };
-
-          const rzp = new (window as any).Razorpay(options);
-          rzp.open();
-          return;
-        }
-
-        // Test fallback (simulation if Razorpay SDK script isn't loaded in web browser)
-        await new Promise((r) => setTimeout(r, 1200));
-        const simPaymentId = `pay_sim_${Date.now()}`;
-        const { error: updateError } = await supabase
-          .from('local_ads')
-          .update({
-            status: 'active',
-            razorpay_payment_id: simPaymentId,
-            paid_at: new Date().toISOString(),
-          })
-          .eq('id', ad.id);
-
-        if (updateError) throw updateError;
-        resolve({ success: true, paymentId: simPaymentId });
-      } catch (err: any) {
-        resolve({ success: false, error: err.message || 'Payment processing failed.' });
-      }
-    });
+    const amountInr = ad.amount_inr ?? 0;
+    if (amountInr <= 0) {
+      const res = await this.confirmPaymentAndActivate(ad.id, 'free_ad');
+      return { success: res.success, paymentId: 'free_ad', error: res.error };
+    }
+    this.launchUpiPaymentIntent(ad);
+    return { success: true, paymentId: 'upi_intent_launched' };
   },
 
   /**

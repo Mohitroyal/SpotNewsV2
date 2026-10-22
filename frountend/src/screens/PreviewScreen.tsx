@@ -1,13 +1,15 @@
 import { useParams, useNavigate } from 'react-router-dom';
 import { useGenerationStore, useAuthStore } from '@/store';
-import { ArrowLeft, Download, FileDown, Share2, MoreHorizontal, FileText, Send, CheckCircle2, Clock } from 'lucide-react';
+import { ArrowLeft, Download, FileDown, Share2, FileText, Send, CheckCircle2, Clock } from 'lucide-react';
 import { generationService } from '@/services/generation.service';
 import { supabase } from '@/lib/supabase';
 import api from '@/lib/axios';
 import { useState, useEffect, useRef } from 'react';
 import { Capacitor } from '@capacitor/core';
 import { Filesystem, Directory } from '@capacitor/filesystem';
-import { Share } from '@capacitor/share';
+import { stampClipping } from '@/features/share/stampClipping';
+import { ShareAfterClipping } from '@/features/share/ShareAfterClipping';
+import { newsLink } from '@/features/share/links';
 
 // ─── Stage → Progress mapping ───────────────────────────────────────────────
 const STAGE_PROGRESS: Record<string, number> = {
@@ -59,6 +61,7 @@ export const PreviewScreen = () => {
   const [isPosted, setIsPosted] = useState(false);
   const [approvalStatus, setApprovalStatus] = useState<'none' | 'pending' | 'approved' | 'rejected'>('none');
   
+  const user = useAuthStore((state) => state.user);
   const userState = useAuthStore((state) => state.userState) || '';
   const district = useAuthStore((state) => state.district) || '';
 
@@ -206,13 +209,26 @@ export const PreviewScreen = () => {
     );
   }
 
-  const handleDownload = async (format: 'jpg' | 'pdf') => {
+  const handleDownload = async (format: 'jpg' | 'pdf' | 'mp4') => {
     setDownloading(true);
     try {
       let blob;
-      if (format === 'jpg') {
+      if (format === 'mp4') {
+        const videoSrc = generation.mp4_url || (generation as any).mp4Url || generation.config?.videoUrl;
+        if (!videoSrc) throw new Error("Video URL not available");
+        const res = await fetch(videoSrc);
+        blob = await res.blob();
+      } else if (format === 'jpg') {
         if (!generation.png_url) throw new Error("JPG URL not available");
-        const res = await fetch(generation.png_url);
+        let downloadSrc = generation.png_url;
+        try {
+          const reporterSlug = (generation.config?.reporterName || 'reporter').toLowerCase().replace(/\s+/g, '-');
+          const link = newsLink(generation.id, reporterSlug);
+          downloadSrc = await stampClipping(generation.png_url, link);
+        } catch (stampErr) {
+          console.warn("Could not stamp clipping, proceeding with raw image:", stampErr);
+        }
+        const res = await fetch(downloadSrc);
         blob = await res.blob();
       } else {
         if (generation.pdf_url) {
@@ -263,114 +279,6 @@ export const PreviewScreen = () => {
     }
   };
 
-  const handleShareOptionClick = async (optionName: string) => {
-    if (!generation.png_url) return;
-
-    setDownloading(true);
-    setIsShareSheetOpen(false);
-
-    try {
-      const title = generation.config?.headline || 'RTI EXPRESS';
-      const text = `${generation.config?.headline || ''}\n\nRTI EXPRESS – India’s First Breaking News App.`;
-
-      // Fetch image blob
-      const res = await fetch(generation.png_url);
-      const blob = await res.blob();
-
-      if (Capacitor.isNativePlatform()) {
-        const reader = new FileReader();
-        reader.readAsDataURL(blob);
-        reader.onloadend = async () => {
-          let base64data = reader.result as string;
-          if (base64data.includes(',')) base64data = base64data.split(',')[1];
-          try {
-            const tempFileName = `newscraft-share-${generation.id}.jpg`;
-            const writeResult = await Filesystem.writeFile({
-              path: tempFileName,
-              data: base64data,
-              directory: Directory.Cache
-            });
-
-            await Share.share({
-              title,
-              text,
-              url: writeResult.uri,
-              dialogTitle: 'Share Newspaper Clipping'
-            });
-          } catch (e) {
-            console.error("Filesystem share error", e);
-            alert(`Failed to share: ${e}`);
-          } finally {
-            setDownloading(false);
-          }
-        };
-      } else {
-        const shareUrl = generation.png_url;
-
-        // Try Web Share API if supported
-        if (navigator.share) {
-          try {
-            const file = new File([blob], `newscraft-${generation.id}.jpg`, { type: blob.type });
-            if (navigator.canShare && navigator.canShare({ files: [file] })) {
-              await navigator.share({
-                title,
-                text,
-                files: [file]
-              });
-              setDownloading(false);
-              return;
-            }
-          } catch (e) {
-            console.log("Web file sharing failed, falling back to URL sharing", e);
-          }
-        }
-
-        // Web Social Share Fallbacks
-        let url = '';
-        switch (optionName) {
-          case 'WhatsApp':
-            url = `https://api.whatsapp.com/send?text=${encodeURIComponent(text + '\n' + shareUrl)}`;
-            break;
-          case 'Facebook':
-            url = `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(shareUrl)}`;
-            break;
-          case 'Instagram':
-            await navigator.clipboard.writeText(shareUrl);
-            alert('Image link copied to clipboard! Share it on Instagram.');
-            setDownloading(false);
-            return;
-          case 'X (Twitter)':
-            url = `https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}&url=${encodeURIComponent(shareUrl)}`;
-            break;
-          case 'Telegram':
-            url = `https://t.me/share/url?url=${encodeURIComponent(shareUrl)}&text=${encodeURIComponent(text)}`;
-            break;
-          case 'Gmail':
-            url = `mailto:?subject=${encodeURIComponent(title)}&body=${encodeURIComponent(text + '\n\n' + shareUrl)}`;
-            break;
-          default:
-            if (navigator.share) {
-              await navigator.share({ title, text, url: shareUrl });
-            } else {
-              await navigator.clipboard.writeText(shareUrl);
-              alert('Image link copied to clipboard!');
-            }
-            setDownloading(false);
-            return;
-        }
-
-        if (url) {
-          window.open(url, '_blank');
-        }
-        setDownloading(false);
-      }
-    } catch (err) {
-      console.error(err);
-      alert('Failed to share clipping');
-      setDownloading(false);
-    }
-  };
-
   const handlePostToFeed = async () => {
     if (!generation?.id) return;
     if (!userState || !district) {
@@ -405,7 +313,11 @@ export const PreviewScreen = () => {
           .in('role', ['admin', 'superadmin']);
 
         const targetAdmins = (admins || []).filter(
-          (adm) => adm.role === 'superadmin' || !adm.district || adm.district.toLowerCase() === district.toLowerCase()
+          (adm) =>
+            adm.role === 'superadmin' ||
+            (adm.role === 'admin' &&
+              adm.district &&
+              adm.district.trim().toLowerCase() === district.trim().toLowerCase())
         );
 
         if (targetAdmins.length > 0) {
@@ -624,25 +536,51 @@ export const PreviewScreen = () => {
 
              <div className="w-full shrink-0 flex flex-col gap-2">
                 <div className="flex w-full gap-2">
-                  <button
-                    onClick={() => handleDownload('jpg')}
-                    disabled={downloading}
-                    className="flex-1 py-[14px] bg-[#cc2222] hover:bg-[#ff3333] active:bg-[#a01b1b] text-white rounded-[8px] font-bold text-xs tracking-wider uppercase transition-all flex items-center justify-center gap-2 shadow-sm hover:shadow-[0_4px_12px_rgba(204,34,34,0.3)] animate-in slide-in-from-bottom-2 duration-300 delay-200 fill-mode-both relative overflow-hidden group"
-                  >
-                    <div className="absolute inset-0 bg-white/20 translate-x-[-100%] group-hover:animate-[shimmerSweep_1s_ease-out]" />
-                    <Download className="w-4 h-4 shrink-0" />
-                    <span>Save JPG</span>
-                  </button>
+                  {(generation.mp4_url || (generation as any).mp4Url || generation.config?.videoUrl) ? (
+                    <>
+                      <button
+                        onClick={() => handleDownload('mp4')}
+                        disabled={downloading}
+                        className="flex-1 py-[14px] bg-[#cc2222] hover:bg-[#ff3333] active:bg-[#a01b1b] text-white rounded-[8px] font-bold text-xs tracking-wider uppercase transition-all flex items-center justify-center gap-2 shadow-sm hover:shadow-[0_4px_12px_rgba(204,34,34,0.3)] animate-in slide-in-from-bottom-2 duration-300 delay-200 fill-mode-both relative overflow-hidden group"
+                      >
+                        <div className="absolute inset-0 bg-white/20 translate-x-[-100%] group-hover:animate-[shimmerSweep_1s_ease-out]" />
+                        <Download className="w-4 h-4 shrink-0" />
+                        <span>Save Video</span>
+                      </button>
 
-                  <button
-                    onClick={() => handleDownload('pdf')}
-                    disabled={downloading}
-                    className="flex-1 py-[14px] bg-[#015BB3] hover:bg-[#145AB1] active:bg-[#015BB3] text-white rounded-[8px] font-bold text-xs tracking-wider uppercase transition-all flex items-center justify-center gap-2 shadow-sm hover:shadow-[0_4px_12px_rgba(1,91,179,0.3)] animate-in slide-in-from-bottom-2 duration-300 delay-300 fill-mode-both relative overflow-hidden group"
-                  >
-                    <div className="absolute inset-0 bg-white/10 translate-x-[-100%] group-hover:animate-[shimmerSweep_1s_ease-out]" />
-                    <FileDown className="w-4 h-4 shrink-0" />
-                    <span>Save PDF</span>
-                  </button>
+                      <button
+                        onClick={() => handleDownload('jpg')}
+                        disabled={downloading}
+                        className="flex-1 py-[14px] bg-[#015BB3] hover:bg-[#145AB1] active:bg-[#015BB3] text-white rounded-[8px] font-bold text-xs tracking-wider uppercase transition-all flex items-center justify-center gap-2 shadow-sm hover:shadow-[0_4px_12px_rgba(1,91,179,0.3)] animate-in slide-in-from-bottom-2 duration-300 delay-300 fill-mode-both relative overflow-hidden group"
+                      >
+                        <div className="absolute inset-0 bg-white/10 translate-x-[-100%] group-hover:animate-[shimmerSweep_1s_ease-out]" />
+                        <Download className="w-4 h-4 shrink-0" />
+                        <span>Save JPG</span>
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      <button
+                        onClick={() => handleDownload('jpg')}
+                        disabled={downloading}
+                        className="flex-1 py-[14px] bg-[#cc2222] hover:bg-[#ff3333] active:bg-[#a01b1b] text-white rounded-[8px] font-bold text-xs tracking-wider uppercase transition-all flex items-center justify-center gap-2 shadow-sm hover:shadow-[0_4px_12px_rgba(204,34,34,0.3)] animate-in slide-in-from-bottom-2 duration-300 delay-200 fill-mode-both relative overflow-hidden group"
+                      >
+                        <div className="absolute inset-0 bg-white/20 translate-x-[-100%] group-hover:animate-[shimmerSweep_1s_ease-out]" />
+                        <Download className="w-4 h-4 shrink-0" />
+                        <span>Save JPG</span>
+                      </button>
+
+                      <button
+                        onClick={() => handleDownload('pdf')}
+                        disabled={downloading}
+                        className="flex-1 py-[14px] bg-[#015BB3] hover:bg-[#145AB1] active:bg-[#015BB3] text-white rounded-[8px] font-bold text-xs tracking-wider uppercase transition-all flex items-center justify-center gap-2 shadow-sm hover:shadow-[0_4px_12px_rgba(1,91,179,0.3)] animate-in slide-in-from-bottom-2 duration-300 delay-300 fill-mode-both relative overflow-hidden group"
+                      >
+                        <div className="absolute inset-0 bg-white/10 translate-x-[-100%] group-hover:animate-[shimmerSweep_1s_ease-out]" />
+                        <FileDown className="w-4 h-4 shrink-0" />
+                        <span>Save PDF</span>
+                      </button>
+                    </>
+                  )}
                 </div>
 
                 <div className="flex w-full gap-2">
@@ -666,7 +604,7 @@ export const PreviewScreen = () => {
                         ? 'bg-[#F59E0B] text-white border-[1px] border-[#D97706]'
                         : approvalStatus === 'rejected'
                         ? 'bg-[#EF4444] text-white border-[1px] border-[#DC2626]'
-                        : 'bg-[#015BB3] hover:bg-[#0A2540] active:scale-[0.98] text-white border-[1px] border-[#015BB3]'
+                        : 'bg-[#fff] hover:bg-[#f0f0f0] active:bg-[#e0e0e0] text-[#015BB3] border-[1px] border-[#015BB3]'
                     }`}
                   >
                     {isPosted || approvalStatus === 'approved' ? (
@@ -687,87 +625,44 @@ export const PreviewScreen = () => {
                     ) : (
                       <>
                         <Send className="w-4 h-4 shrink-0" />
-                        <span>{isPosting ? 'Submitting...' : 'Proceed to Feed'}</span>
+                        <span>{isPosting ? 'Submitting...' : 'Send for Approval'}</span>
                       </>
                     )}
                   </button>
                 </div>
-                
-                {/* District Admin Approval notice for reporter */}
-                <p className="text-[11px] text-[#415A77] text-center mt-2 font-medium px-2">
-                  {isPosted || approvalStatus === 'approved'
-                    ? '✅ Approved by District Admin & live on the public feed.'
-                    : approvalStatus === 'pending'
-                    ? `⏳ Submitted to ${district || 'your'} District Admin. It will appear on the feed once approved.`
-                    : `Click "Proceed to Feed" to submit to ${district || 'your'} District Admin for feed approval.`
-                  }
-                </p>
              </div>
           </div>
         )}
       </div>
 
-      {/* ── Share Bottom Sheet (styled to match palette) ─────────────────── */}
-      {isShareSheetOpen && (
-        <div 
-          className="fixed inset-0 bg-[#0a2540]/60 backdrop-blur-sm z-[60] transition-opacity duration-300"
-          onClick={() => setIsShareSheetOpen(false)}
-        >
-          <div 
-            className="fixed bottom-0 left-0 right-0 bg-white border-t-[3px] border-[#cc2222] rounded-t-[20px] p-6 pb-safe z-[60] transform transition-transform duration-300 shadow-2xl animate-in slide-in-from-bottom-full"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="w-12 h-1 bg-[#b8d4e8] rounded-full mx-auto mb-6" />
-            <h3 className="text-[#0a2540] font-bold text-lg mb-6 text-center" style={{ fontFamily: 'Georgia, serif' }}>Share Newspaper Clipping</h3>
-            
-            <div className="grid grid-cols-4 gap-y-6 gap-x-2 justify-items-center mb-6">
-              {/* WhatsApp */}
-              <button onClick={() => handleShareOptionClick('WhatsApp')} className="flex flex-col items-center gap-2 text-[#0a1a2e] hover:scale-105 active:scale-95 transition-transform">
-                <div className="w-12 h-12 rounded-full bg-[#25D366] flex items-center justify-center shadow-sm">
-                  <svg className="w-6 h-6 text-white" viewBox="0 0 24 24" fill="currentColor">
-                    <path d="M.057 24l1.687-6.163c-1.041-1.804-1.588-3.849-1.587-5.946C.06 5.348 5.397.01 12.008.01c3.202.001 6.212 1.246 8.477 3.514 2.266 2.268 3.507 5.28 3.505 8.484-.004 6.657-5.34 11.997-11.953 11.997-2.005-.001-3.973-.502-5.713-1.455L0 24zm6.59-11.597c-.279-.314-.555-.262-.773-.272-.2-.008-.428-.008-.656-.008-.228 0-.6-.086-.913-.429-.314-.343-1.198-1.172-1.198-2.859 0-1.687 1.226-3.314 1.398-3.543.171-.228 2.413-3.685 5.845-5.17.816-.353 1.453-.564 1.948-.72.822-.262 1.572-.225 2.164-.137.66.099 2.03.83 2.314 1.632.285.803.285 1.49.201 1.632-.083.14-.308.228-.651.4l-2.102 1.03c-.342.166-.591.248-.846.634-.255.38-.973 1.226-1.195 1.48-.222.254-.443.286-.786.114-.343-.171-1.447-.533-2.755-1.7c-1.018-.908-1.704-2.03-1.902-2.372-.199-.343-.021-.528.15-.699.153-.153.343-.4.514-.6.171-.2.228-.343.343-.571.114-.229.057-.429-.028-.6-.086-.171-.773-1.857-1.059-2.543-.278-.669-.561-.578-.773-.589z"/>
-                  </svg>
-                </div>
-                <span className="text-[10px] font-semibold text-center leading-tight">WhatsApp</span>
-              </button>
-
-              {/* Facebook */}
-              <button onClick={() => handleShareOptionClick('Facebook')} className="flex flex-col items-center gap-2 text-[#0a1a2e] hover:scale-105 active:scale-95 transition-transform">
-                <div className="w-12 h-12 rounded-full bg-[#1877F2] flex items-center justify-center shadow-sm">
-                  <svg className="w-6 h-6 text-white" viewBox="0 0 24 24" fill="currentColor">
-                    <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/>
-                  </svg>
-                </div>
-                <span className="text-[10px] font-semibold text-center leading-tight">Facebook</span>
-              </button>
-
-              {/* X (Twitter) */}
-              <button onClick={() => handleShareOptionClick('X (Twitter)')} className="flex flex-col items-center gap-2 text-[#0a1a2e] hover:scale-105 active:scale-95 transition-transform">
-                <div className="w-12 h-12 rounded-full bg-black flex items-center justify-center shadow-sm">
-                  <svg className="w-5 h-5 text-white" viewBox="0 0 24 24" fill="currentColor">
-                    <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/>
-                  </svg>
-                </div>
-                <span className="text-[10px] font-semibold text-center leading-tight">X (Twitter)</span>
-              </button>
-
-              {/* More Apps */}
-              <button onClick={() => handleShareOptionClick('More Apps')} className="flex flex-col items-center gap-2 text-[#0a1a2e] hover:scale-105 active:scale-95 transition-transform">
-                <div className="w-12 h-12 rounded-full bg-[#b8d4e8] flex items-center justify-center shadow-sm text-[#0a2540]">
-                  <MoreHorizontal className="w-5 h-5" />
-                </div>
-                <span className="text-[10px] font-semibold text-center leading-tight">More Apps</span>
-              </button>
-            </div>
-            
-            <button
-              onClick={() => setIsShareSheetOpen(false)}
-              className="w-full py-[14px] bg-[#dceef8] hover:bg-[#b8d4e8] active:bg-[#a0c4dc] text-[#0a2540] font-bold rounded-[8px] text-xs tracking-wider uppercase transition-colors border border-[#b8d4e8]"
-            >
-              Cancel
-            </button>
-          </div>
-        </div>
+      {/* ── Share After Clipping Modal (Clipping, Reporter Card, Status) ─── */}
+      {isShareSheetOpen && (generation?.png_url || generation?.mp4_url || (generation as any)?.mp4Url || generation?.config?.videoUrl) && (
+        <ShareAfterClipping
+          post={{
+            id: generation.id,
+            headline: generation.config?.headline || 'RTI Express Spot News',
+            place: district || userState || 'హైదరాబాద్',
+            date: new Date().toLocaleDateString('te-IN', { day: 'numeric', month: 'short' }),
+            clippingUrl: generation.png_url || "",
+            thumbUrl: generation.png_url || "",
+            videoUrl: generation.mp4_url || (generation as any)?.mp4Url || generation.config?.videoUrl || undefined,
+          }}
+          reporter={{
+            id: (generation as any)?.user_id || user?.id || 'reporter',
+            name: generation.config?.reporterName || user?.full_name || 'Spot News Reporter',
+            slug: (generation.config?.reporterName || user?.full_name || 'reporter')
+              .toLowerCase()
+              .replace(/\s+/g, '-'),
+            verified: true,
+            avgStars: 4.8,
+            ratingsCount: 28,
+            stories: 18,
+            views: 320,
+            experienceYears: 3,
+            photoUrl: user?.avatarUrl,
+          }}
+          onClose={() => setIsShareSheetOpen(false)}
+        />
       )}
 
       {/* CSS Animations */}

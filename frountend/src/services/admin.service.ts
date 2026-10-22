@@ -462,6 +462,10 @@ export const updateUserRole = async (
     }
   } catch (backendErr: any) {
     console.warn('[AdminService] Backend role update error:', backendErr?.response?.data || backendErr?.message);
+    const detail = backendErr?.response?.data?.detail;
+    if (detail) {
+      return { success: false, error: detail };
+    }
   }
 
   // 2. Fallback: direct Supabase upsert

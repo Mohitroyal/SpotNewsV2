@@ -4,8 +4,6 @@ import {
   BannerAdPosition,
 } from '@capacitor-community/admob';
 import type {
-  BannerAdOptions,
-  AdOptions,
   RewardAdOptions,
 } from '@capacitor-community/admob';
 import { Capacitor } from '@capacitor/core';
@@ -43,7 +41,7 @@ class AdMobService {
   private isPreparingInterstitial = false;
   private isInterstitialReady = false;
   private clippingViewCounter = 0;
-  private readonly CLIPPINGS_PER_AD = 5;
+  private readonly CLIPPINGS_PER_AD = 3;
 
   /**
    * Initializes the Google AdMob SDK.
@@ -59,17 +57,29 @@ class AdMobService {
         initializeForTesting: false,
       });
       this.isInitialized = true;
-      console.log('✅ Google AdMob initialized successfully with production credentials');
+      console.log('✅ Google AdMob initialized successfully');
 
       // Pre-load the first interstitial ad so it's ready when needed
       this.preloadInterstitial();
+      // Show sticky banner ad
+      this.showBanner();
     } catch (error) {
       console.error('❌ Failed to initialize Google AdMob:', error);
+      // Attempt fallback initialization with testing enabled
+      try {
+        await AdMob.initialize({ initializeForTesting: true });
+        this.isInitialized = true;
+        this.preloadInterstitial();
+        this.showBanner();
+      } catch (e) {
+        console.warn('Fallback AdMob initialization error:', e);
+      }
     }
   }
 
   /**
    * Prepares/caches an interstitial ad in background memory.
+   * Automatically falls back to Google's official test ad unit if production ad unit returns no-fill or error.
    */
   async preloadInterstitial(): Promise<void> {
     if (!Capacitor.isNativePlatform() || this.isPreparingInterstitial || this.isInterstitialReady) {
@@ -77,21 +87,30 @@ class AdMobService {
     }
 
     this.isPreparingInterstitial = true;
+    const isAndroid = Capacitor.getPlatform() === 'android';
+
     try {
-      const isAndroid = Capacitor.getPlatform() === 'android';
-      const adId = isAndroid ? PRODUCTION_AD_UNITS.android.interstitial : PRODUCTION_AD_UNITS.ios.interstitial;
-
-      const options: AdOptions = {
-        adId,
+      const prodAdId = isAndroid ? PRODUCTION_AD_UNITS.android.interstitial : PRODUCTION_AD_UNITS.ios.interstitial;
+      await AdMob.prepareInterstitial({
+        adId: prodAdId,
         isTesting: false,
-      };
-
-      await AdMob.prepareInterstitial(options);
+      });
       this.isInterstitialReady = true;
-      console.log('✅ Interstitial ad preloaded');
+      console.log('✅ Production interstitial ad preloaded');
     } catch (error) {
-      console.warn('⚠️ Could not preload interstitial ad:', error);
-      this.isInterstitialReady = false;
+      console.warn('⚠️ Could not preload production interstitial (falling back to test ad unit):', error);
+      try {
+        const testAdId = isAndroid ? TEST_AD_UNITS.android.interstitial : TEST_AD_UNITS.ios.interstitial;
+        await AdMob.prepareInterstitial({
+          adId: testAdId,
+          isTesting: true,
+        });
+        this.isInterstitialReady = true;
+        console.log('✅ Fallback test interstitial ad preloaded');
+      } catch (fallbackError) {
+        console.warn('⚠️ Fallback interstitial also failed:', fallbackError);
+        this.isInterstitialReady = false;
+      }
     } finally {
       this.isPreparingInterstitial = false;
     }
@@ -131,7 +150,7 @@ class AdMobService {
 
   /**
    * Tracks viewed clippings. Automatically triggers an interstitial ad
-   * every 5 clippings.
+   * every 3 clippings.
    */
   onClippingViewed(): void {
     this.clippingViewCounter += 1;
@@ -152,6 +171,7 @@ class AdMobService {
 
   /**
    * Displays a sticky banner ad at the bottom.
+   * If production ad unit returns no-fill, falls back to Google test banner.
    */
   async showBanner(): Promise<void> {
     if (!Capacitor.isNativePlatform()) return;
@@ -159,17 +179,29 @@ class AdMobService {
     try {
       await this.initialize();
       const isAndroid = Capacitor.getPlatform() === 'android';
-      const adId = isAndroid ? PRODUCTION_AD_UNITS.android.banner : PRODUCTION_AD_UNITS.ios.banner;
+      const prodAdId = isAndroid ? PRODUCTION_AD_UNITS.android.banner : PRODUCTION_AD_UNITS.ios.banner;
 
-      const options: BannerAdOptions = {
-        adId,
-        adSize: BannerAdSize.BANNER,
-        position: BannerAdPosition.BOTTOM_CENTER,
-        margin: 64, // Keep elevated above the bottom navigation bar
-        isTesting: false,
-      };
-
-      await AdMob.showBanner(options);
+      try {
+        await AdMob.showBanner({
+          adId: prodAdId,
+          adSize: BannerAdSize.BANNER,
+          position: BannerAdPosition.BOTTOM_CENTER,
+          margin: 64, // Keep elevated above bottom navigation bar
+          isTesting: false,
+        });
+        console.log('✅ Production banner ad shown');
+      } catch (prodErr) {
+        console.warn('⚠️ Production banner failed (likely no fill or verification pending), falling back to test banner:', prodErr);
+        const testAdId = isAndroid ? TEST_AD_UNITS.android.banner : TEST_AD_UNITS.ios.banner;
+        await AdMob.showBanner({
+          adId: testAdId,
+          adSize: BannerAdSize.BANNER,
+          position: BannerAdPosition.BOTTOM_CENTER,
+          margin: 64,
+          isTesting: true,
+        });
+        console.log('✅ Fallback test banner ad shown');
+      }
     } catch (error) {
       console.warn('⚠️ Error showing banner ad:', error);
     }

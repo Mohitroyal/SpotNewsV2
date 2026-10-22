@@ -1,6 +1,6 @@
 import React, { useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ChevronLeft, Camera, Check, AlertCircle } from 'lucide-react';
+import { ChevronLeft, Camera, Check, AlertCircle, Lock } from 'lucide-react';
 import { useAuthStore, getReporterPhoto, saveReporterPhoto, getReporterName, saveReporterName } from '@/store';
 import { supabase } from '@/lib/supabase';
 
@@ -10,7 +10,10 @@ export const ProfileSettingsScreen: React.FC = () => {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Derive initial values from auth user state and local persistence
-  const currentEmail = user?.email || 'reporter@rtiexpress.com';
+  const currentEmail = (user?.email || 'reporter@rtiexpress.com').toLowerCase().trim();
+  const isIdPhotoLocked =
+    localStorage.getItem(`spotnews_id_photo_confirmed_${currentEmail}`) === 'true' ||
+    !!localStorage.getItem(`spotnews_id_card_photo_${currentEmail}`);
   const initialName =
     getReporterName(currentEmail) ||
     (user as any)?.user_metadata?.full_name ||
@@ -19,6 +22,7 @@ export const ProfileSettingsScreen: React.FC = () => {
     user?.firstName ||
     'Reporter';
   const initialPhoto =
+    (isIdPhotoLocked ? localStorage.getItem(`spotnews_id_card_photo_${currentEmail}`) : null) ||
     getReporterPhoto(currentEmail) ||
     user?.avatarUrl ||
     (user as any)?.user_metadata?.avatar_url ||
@@ -76,7 +80,7 @@ export const ProfileSettingsScreen: React.FC = () => {
 
     // 1. Persist name & photo to localStorage helpers
     saveReporterName(currentEmail, trimmedName);
-    if (newPhotoUrl) {
+    if (!isIdPhotoLocked && newPhotoUrl) {
       saveReporterPhoto(currentEmail, newPhotoUrl);
     }
 
@@ -156,20 +160,33 @@ export const ProfileSettingsScreen: React.FC = () => {
             )}
           </div>
 
-          <button
-            type="button"
-            onClick={() => fileInputRef.current?.click()}
-            className="text-[#145AB1] font-bold text-sm hover:underline cursor-pointer flex items-center gap-1.5 mt-3 active:scale-95 transition-transform"
-          >
-            <Camera className="w-4 h-4 text-[#145AB1]" />
-            <span>Change photo</span>
-          </button>
+          {isIdPhotoLocked ? (
+            <div className="flex flex-col items-center mt-3 space-y-1.5">
+              <div className="flex items-center gap-1.5 px-3 py-1 bg-slate-200/80 text-slate-700 border border-slate-300 text-xs font-bold rounded-lg shadow-2xs">
+                <Lock className="w-3.5 h-3.5 text-slate-600" />
+                <span>Official ID Photo Locked</span>
+              </div>
+              <p className="text-[11px] text-[#64748B] text-center max-w-[260px] leading-tight">
+                Photo cannot be changed here. It can only be changed on your Official Press ID Card screen.
+              </p>
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              className="text-[#145AB1] font-bold text-sm hover:underline cursor-pointer flex items-center gap-1.5 mt-3 active:scale-95 transition-transform"
+            >
+              <Camera className="w-4 h-4 text-[#145AB1]" />
+              <span>Change photo</span>
+            </button>
+          )}
 
           <input
             type="file"
             ref={fileInputRef}
             onChange={handlePhotoSelect}
             accept="image/*"
+            disabled={isIdPhotoLocked}
             className="hidden"
           />
         </div>

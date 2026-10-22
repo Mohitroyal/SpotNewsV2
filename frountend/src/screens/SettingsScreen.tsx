@@ -1,13 +1,18 @@
-import { useState, useEffect } from 'react';
-import { useAuthStore, useUIStore, useGenerationStore, getReporterPhoto, getReporterName, isAdminUser, isSuperAdminUser } from '@/store';
+import { useState, useEffect, useRef } from 'react';
+import { useAuthStore, useUIStore, useGenerationStore, getReporterPhoto, saveReporterPhoto, getReporterName, isAdminUser, isSuperAdminUser, getEffectiveReporterPhoto } from '@/store';
 import { useNavigate } from 'react-router-dom';
-import { Bell, Moon, Trash2, Shield, Check, QrCode, LogOut, AlertTriangle, User as UserIcon, UserCircle, ChevronRight, FileText, History, Crown, Loader2, MapPin } from 'lucide-react';
+import { Bell, Moon, Trash2, Shield, Check, QrCode, LogOut, AlertTriangle, User as UserIcon, UserCircle, ChevronRight, FileText, History, Crown, Loader2, MapPin, Megaphone, Download, Share2, Printer, FileImage, ExternalLink, RotateCw, Mail } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { supabase } from '@/lib/supabase';
 import { GoogleAuth } from '@codetrix-studio/capacitor-google-auth';
 import { useTranslation } from '@/lib/i18n';
 import { authService } from '@/services/auth.service';
 import { INDIA_STATES } from '@/utils/indiaStates';
+import { initPush, disablePush, requestPushPermission, checkPushPermission, isPushSupported } from '@/lib/push';
+import { RtiIdCard, type RtiCardData } from '@/components/RtiIdCard';
+import { exportIdCardPdf, exportIdCardPng, printIdCard, shareIdCard } from '@/utils/idCardExport';
+import { reporterApprovalService } from '@/services/reporterApproval.service';
+import { notificationService, type NotificationType } from '@/services/notification.service';
 
 function ToggleSwitch({ enabled, onToggle }: { enabled: boolean; onToggle: () => void }) {
   return (
@@ -108,6 +113,192 @@ export const SettingsScreen = () => {
     })();
   }, [user?.id]);
 
+  // ── Reporter ID Card State inside Settings ──
+  const [reporterAppData, setReporterAppData] = useState<any>(null);
+  const [idCardSide, setIdCardSide] = useState<'front' | 'back'>('front');
+  const [isExportingCard, setIsExportingCard] = useState(false);
+  const [idCardMessage, setIdCardMessage] = useState('');
+  const [idCardExpanded, setIdCardExpanded] = useState(true);
+
+  const settingsFileInputRef = useRef<HTMLInputElement>(null);
+
+  const [settingsPhotoUrl, setSettingsPhotoUrl] = useState<string>(() => {
+    return (
+      getReporterPhoto(user?.email) ||
+      localStorage.getItem('spotnews_active_reporter_photo') ||
+      (user as any)?.avatarUrl ||
+      ''
+    );
+  });
+
+  useEffect(() => {
+    const email = user?.email;
+    if (!email) return;
+    reporterApprovalService
+      .checkStatus(email)
+      .then((data) => {
+        if (data) {
+          setReporterAppData(data);
+          if (data.avatarUrl && !settingsPhotoUrl) {
+            setSettingsPhotoUrl(data.avatarUrl);
+          }
+        }
+      })
+      .catch((e) => console.warn('Could not fetch reporter app details in settings:', e));
+  }, [user?.email, settingsPhotoUrl]);
+
+  const handleSettingsPhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const cleanEmail = (user?.email || reporterAppData?.email || '').toLowerCase().trim();
+    const isIdPhotoLocked =
+      localStorage.getItem(`spotnews_id_photo_confirmed_${cleanEmail}`) === 'true' ||
+      !!localStorage.getItem(`spotnews_id_card_photo_${cleanEmail}`);
+
+    if (isIdPhotoLocked) {
+      setIdCardMessage('Photo is permanently locked to your Official ID Card and cannot be changed from Settings.');
+      setTimeout(() => setIdCardMessage(''), 4000);
+      return;
+    }
+
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      const dataUrl = reader.result as string;
+      setSettingsPhotoUrl(dataUrl);
+      if (user?.email) {
+        saveReporterPhoto(user.email, dataUrl);
+      }
+      if (reporterAppData?.email) {
+        saveReporterPhoto(reporterAppData.email, dataUrl);
+      }
+      localStorage.setItem('spotnews_active_reporter_photo', dataUrl);
+      useAuthStore.getState().updateUser({ avatarUrl: dataUrl });
+      setIdCardMessage('Photo updated successfully on your ID card!');
+      setTimeout(() => setIdCardMessage(''), 4000);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const storedReporterName =
+    getReporterName(user?.email) ||
+    getReporterName(reporterAppData?.email) ||
+    localStorage.getItem('spotnews_active_reporter_name');
+
+  const settingsReporterName =
+    storedReporterName ||
+    reporterAppData?.name ||
+    'POKKALA MOHITH ROYAL';
+
+  const effectivePhoto = getEffectiveReporterPhoto(
+    user?.email || reporterAppData?.email,
+    [
+      settingsPhotoUrl,
+      reporterAppData?.avatarUrl,
+      user?.avatarUrl,
+    ]
+  );
+
+  const settingsCardData: RtiCardData = {
+    cardNo:
+      reporterAppData?.reporterId ||
+      (reporterAppData?.refNo
+        ? `RTI ${reporterAppData.refNo.replace(/\D/g, '').slice(-4) || '1147'}`
+        : 'SNP-TE-2026-16EDF5'),
+    name: settingsReporterName,
+    designation: `${(reporterAppData?.district || district || 'PRESS').toUpperCase()} REPORTER`,
+    center: (reporterAppData?.district || district || userState || 'HYDERABAD').toUpperCase(),
+    validUpto: reporterAppData?.validUntil || '16 OCT 2027',
+    photoUrl: effectivePhoto || '/dummy.jpg',
+    address: `${reporterAppData?.district || district || 'Hyderabad'}, ${reporterAppData?.state || userState || 'Telangana'}, Andhra Pradesh & Telangana`,
+    pin: '515001',
+    phone: reporterAppData?.phone || user?.phone_number || '7668886666',
+    relation: 'S/O',
+    guardian: '',
+    mediaType: 'PRINT MEDIA',
+    actLine: 'RTI ACT-2005',
+    logoUrl: '/logo_spotnews.png',
+  };
+
+  const handleExportPdfFromSettings = async () => {
+    setIsExportingCard(true);
+    setIdCardMessage('');
+    try {
+      const frontEl = document.getElementById('rti-card-front');
+      const backEl = document.getElementById('rti-card-back');
+      if (!frontEl) throw new Error('ID card element not found');
+      const res = await exportIdCardPdf(settingsCardData.cardNo, frontEl, backEl);
+      if (res.message) {
+        setIdCardMessage(res.message);
+        setTimeout(() => setIdCardMessage(''), 5000);
+      }
+    } catch (e: any) {
+      setIdCardMessage(e.message || 'Error exporting PDF');
+      setTimeout(() => setIdCardMessage(''), 5000);
+    } finally {
+      setIsExportingCard(false);
+    }
+  };
+
+  const handleExportPngFromSettings = async (targetSide: 'front' | 'back') => {
+    setIsExportingCard(true);
+    setIdCardMessage('');
+    try {
+      setIdCardSide(targetSide);
+      const elId = targetSide === 'front' ? 'rti-card-front' : 'rti-card-back';
+      const el = document.getElementById(elId);
+      if (!el) throw new Error('Card element not found');
+      const res = await exportIdCardPng(settingsCardData.cardNo, el, targetSide === 'front' ? 'FRONT' : 'BACK', false);
+      if (res.message) {
+        setIdCardMessage(res.message);
+        setTimeout(() => setIdCardMessage(''), 5000);
+      }
+    } catch (e: any) {
+      setIdCardMessage(e.message || 'Error exporting PNG');
+      setTimeout(() => setIdCardMessage(''), 5000);
+    } finally {
+      setIsExportingCard(false);
+    }
+  };
+
+  const handleShareCardFromSettings = async () => {
+    const shareText = `Official RTI EXPRESS Spot News 24x7 Press ID Card\n` +
+      `Reporter: ${settingsCardData.name}\n` +
+      `Designation: ${settingsCardData.designation}\n` +
+      `Card No: ${settingsCardData.cardNo}\n` +
+      `Valid Upto: ${settingsCardData.validUpto}\n` +
+      `Verification Helpline: 7668886666`;
+
+    try {
+      const frontEl = document.getElementById('rti-card-front');
+      const res = await shareIdCard(settingsCardData.cardNo, shareText, frontEl);
+      if (res.message) {
+        setIdCardMessage(res.message);
+        setTimeout(() => setIdCardMessage(''), 4000);
+      }
+    } catch (e: any) {
+      console.error(e);
+    }
+  };
+
+  const handlePrintCardFromSettings = async () => {
+    setIsExportingCard(true);
+    try {
+      const frontEl = document.getElementById('rti-card-front');
+      const backEl = document.getElementById('rti-card-back');
+      if (!frontEl) throw new Error('ID card element not found');
+      const res = await printIdCard(settingsCardData.cardNo, frontEl, backEl);
+      if (res.message) {
+        setIdCardMessage(res.message);
+        setTimeout(() => setIdCardMessage(''), 4000);
+      }
+    } catch (e: any) {
+      console.error(e);
+    } finally {
+      setIsExportingCard(false);
+    }
+  };
+
   // Use persistent UI store
   const logoMode = useUIStore((state) => state.logoMode);
   const showInnerBorders = useUIStore((state) => state.showInnerBorders);
@@ -122,9 +313,102 @@ export const SettingsScreen = () => {
     emailUpdates: true,
     browserPush: true,
   });
+  const [sendingNotificationType, setSendingNotificationType] = useState<string | null>(null);
 
-  const toggle = (key: keyof typeof notifications) => {
-    setNotifications((prev) => ({ ...prev, [key]: !prev[key] }));
+  useEffect(() => {
+    // 1. Fetch preferences from Supabase service
+    notificationService.getPreferences(user?.id, user?.email).then((prefs) => {
+      setNotifications(prefs);
+    });
+
+    // 2. Also check device push permission
+    checkPushPermission().then((granted) => {
+      setNotifications((prev) => ({ ...prev, browserPush: granted }));
+    });
+  }, [user?.id, user?.email]);
+
+  const toggle = async (key: keyof typeof notifications) => {
+    if (key === 'browserPush') {
+      const willEnable = !notifications.browserPush;
+      if (willEnable) {
+        const isNative = await isPushSupported();
+        if (!isNative) {
+          const next = { ...notifications, browserPush: true };
+          setNotifications(next);
+          await notificationService.savePreferences(user?.id, user?.email, next);
+          showToast('Push notifications enabled (web)', 'success');
+          return;
+        }
+
+        const granted = await requestPushPermission();
+        if (granted) {
+          await initPush({
+            userId: user?.id,
+            districtId: (user as any)?.district_id || 1,
+            navigate,
+          });
+          const next = { ...notifications, browserPush: true };
+          setNotifications(next);
+          await notificationService.savePreferences(user?.id, user?.email, next);
+          showToast('Device push notifications enabled', 'success');
+        } else {
+          showToast('Push permission denied. Enable in device settings.', 'error');
+        }
+      } else {
+        await disablePush();
+        const next = { ...notifications, browserPush: false };
+        setNotifications(next);
+        await notificationService.savePreferences(user?.id, user?.email, next);
+        showToast('Device push notifications disabled', 'success');
+      }
+      return;
+    }
+
+    const nextVal = !notifications[key];
+    const next = { ...notifications, [key]: nextVal };
+    setNotifications(next);
+
+    // Save preferences to Supabase
+    await notificationService.savePreferences(user?.id, user?.email, next);
+
+    // When enabling an email notification, send immediate notification to Gmail via Supabase service
+    if (nextVal && user?.email) {
+      const typeLabel =
+        key === 'emailGenerations'
+          ? 'Generation Complete'
+          : key === 'emailBilling'
+          ? 'Billing & Subscription'
+          : 'Product Updates';
+
+      showToast(`Notification email dispatching to ${user.email} via Supabase...`, 'success');
+      try {
+        const res = await notificationService.sendNotificationEmail(user.id, user.email, key as NotificationType);
+        showToast(res.message, 'success');
+      } catch (err: any) {
+        console.warn('[SettingsScreen] Notification dispatch error:', err);
+        showToast(`Saved preference to Supabase (${typeLabel})`, 'success');
+      }
+    } else {
+      showToast('Notification preference updated in Supabase', 'success');
+    }
+  };
+
+  const handleSendTestNotification = async (type: NotificationType) => {
+    if (!user?.email) {
+      showToast('Please log in with your Gmail to test notifications.', 'error');
+      return;
+    }
+
+    setSendingNotificationType(type);
+    try {
+      const res = await notificationService.sendNotificationEmail(user.id, user.email, type);
+      showToast(res.message, 'success');
+    } catch (err: any) {
+      console.error('[SettingsScreen] Send notification error:', err);
+      showToast(err.message || 'Failed to send notification email.', 'error');
+    } finally {
+      setSendingNotificationType(null);
+    }
   };
 
   // ── Logout state ───────────────────────────────────────────────────────────────
@@ -300,8 +584,8 @@ export const SettingsScreen = () => {
         <div className="bg-[#E8F2FC] border border-[#D0E2F7] rounded-3xl p-5 shadow-sm flex items-center justify-between gap-4">
           <div className="flex items-center gap-4">
             <div className="relative w-16 h-16 rounded-full border-2 border-[#CC1E1E] bg-[#D6E9FF] flex items-center justify-center shadow-md overflow-hidden shrink-0">
-              {getReporterPhoto(user?.email) || user?.avatarUrl ? (
-                <img src={getReporterPhoto(user?.email) || user?.avatarUrl} alt="Reporter Photo" className="w-full h-full object-cover" />
+              {effectivePhoto ? (
+                <img src={effectivePhoto} alt="Reporter Photo" className="w-full h-full object-cover" />
               ) : (
                 <div className="flex flex-col items-center justify-center text-[#0A2540]">
                   <UserIcon className="w-7 h-7 text-[#0A2540]/60" />
@@ -311,7 +595,7 @@ export const SettingsScreen = () => {
             <div>
               <div className="flex items-center gap-2">
                 <h3 className="font-bold text-[#0A2540] text-base">
-                  {getReporterName(user?.email) || (user as any)?.user_metadata?.full_name || (user as any)?.user_metadata?.name || user?.full_name || user?.firstName || 'Reporter'}
+                  {settingsReporterName}
                 </h3>
                 {isAdminAccess ? (
                   <span className="bg-amber-500/15 text-amber-700 text-[10px] font-bold px-2 py-0.5 rounded-full uppercase flex items-center gap-1 border border-amber-400/30">
@@ -343,6 +627,218 @@ export const SettingsScreen = () => {
             </div>
           </div>
           <ChevronRight className="w-5 h-5 text-[#6B7A90] shrink-0" />
+        </div>
+
+        {/* Official Press ID Card Section inside Settings */}
+        <div className="bg-[#E8F2FC] border border-[#D0E2F7] rounded-3xl overflow-hidden shadow-sm transition-all duration-300">
+          <div className="px-5 py-4 border-b border-[#D0E2F7] flex items-center justify-between bg-[#E8F2FC]">
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 rounded-full bg-[#0B4EA2] text-white flex items-center justify-center shrink-0 shadow-xs">
+                <QrCode className="w-4 h-4" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <h2 className="text-sm font-bold text-[#0A2540]">Official Press ID Card</h2>
+                  <span className="bg-[#CC1E1E] text-white text-[9px] font-black px-1.5 py-0.5 rounded uppercase">
+                    VERIFIED
+                  </span>
+                </div>
+                <p className="text-xs text-[#6B7A90] mt-0.5">RTI EXPRESS Spot News 24×7 Official Credential</p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => setIdCardExpanded(!idCardExpanded)}
+              className="text-xs font-bold text-[#0B4EA2] hover:underline cursor-pointer"
+            >
+              {idCardExpanded ? 'Hide' : 'Show'}
+            </button>
+          </div>
+
+          {idCardExpanded && (
+            <div className="p-4 sm:p-5 space-y-4">
+              {/* Hidden file input for changing passport photo */}
+              <input
+                ref={settingsFileInputRef}
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={handleSettingsPhotoUpload}
+              />
+
+              {/* Status & Feedback message */}
+              {idCardMessage && (
+                <div className="p-3 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-2xl text-xs font-semibold flex items-center gap-2 shadow-xs animate-in fade-in">
+                  <Check className="w-4 h-4 shrink-0 text-emerald-600" />
+                  <span>{idCardMessage}</span>
+                </div>
+              )}
+
+              {/* Side toggle tabs */}
+              <div className="flex items-center justify-center p-1 bg-[#D0E2F7] rounded-2xl gap-1 max-w-xs mx-auto">
+                <button
+                  type="button"
+                  onClick={() => setIdCardSide('front')}
+                  className={`flex-1 py-1.5 text-xs font-bold rounded-xl transition-all cursor-pointer ${
+                    idCardSide === 'front' ? 'bg-white text-[#0B4EA2] shadow-sm' : 'text-[#64748B]'
+                  }`}
+                >
+                  Front Side
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setIdCardSide('back')}
+                  className={`flex-1 py-1.5 text-xs font-bold rounded-xl transition-all cursor-pointer ${
+                    idCardSide === 'back' ? 'bg-white text-[#0B4EA2] shadow-sm' : 'text-[#64748B]'
+                  }`}
+                >
+                  Back Side
+                </button>
+              </div>
+
+              {/* Centered Realistic 3D Flipping ID Card Preview */}
+              <div className="flex flex-col items-center justify-center py-2 bg-gradient-to-b from-slate-200/50 to-slate-200/20 rounded-2xl border border-slate-300/60 p-3 overflow-x-auto shadow-inner">
+                <RtiIdCard
+                  data={settingsCardData}
+                  side={idCardSide}
+                  scale={0.92}
+                  onPhotoClick={() => showToast('Reporter photo is permanently locked to your official application photo.', 'success')}
+                  onCardFlip={() => setIdCardSide((prev) => (prev === 'front' ? 'back' : 'front'))}
+                />
+                <p className="text-[10px] text-[#64748B] mt-2 font-medium">Tap card or tab to flip 3D view</p>
+              </div>
+
+              {/* Official Photo Status Banner (Locked) */}
+              <div className="flex items-center justify-between p-3 bg-white/90 border border-[#CBD5E1] rounded-2xl shadow-xs">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-8 h-8 rounded-full bg-emerald-50 text-emerald-600 flex items-center justify-center">
+                    <Shield className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <p className="text-xs font-bold text-[#0F172A]">Official Reporter Passport Photo</p>
+                    <p className="text-[11px] text-[#64748B]">Fixed & locked from official application</p>
+                  </div>
+                </div>
+                <span className="px-3 py-1.5 bg-emerald-50 text-emerald-700 text-xs font-bold rounded-xl flex items-center gap-1 border border-emerald-200">
+                  <Check className="w-3.5 h-3.5" />
+                  Verified & Locked
+                </span>
+              </div>
+
+              {/* Quick Info Bar */}
+              <div className="bg-white/80 border border-[#D0E2F7] rounded-2xl p-3 space-y-1.5 text-xs text-[#0F172A]">
+                <div className="flex items-center justify-between font-bold">
+                  <span className="text-[#0B4EA2]">Card No:</span>
+                  <span className="font-mono text-xs font-black text-[#0A2540] bg-[#EEF4FB] px-2 py-0.5 rounded border border-[#C6DCF4]">
+                    {settingsCardData.cardNo}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between text-[#64748B] text-[11px]">
+                  <span>Valid Through:</span>
+                  <span className="font-semibold text-emerald-700">{settingsCardData.validUpto}</span>
+                </div>
+              </div>
+
+              {/* Action Buttons */}
+              <div className="space-y-2">
+                <button
+                  type="button"
+                  onClick={handleExportPdfFromSettings}
+                  disabled={isExportingCard}
+                  className="w-full py-3 px-4 bg-[#0B4EA2] hover:bg-[#093F84] active:scale-[0.99] text-white font-bold text-xs rounded-xl transition-all shadow-sm flex items-center justify-center gap-2 cursor-pointer disabled:opacity-70"
+                >
+                  {isExportingCard ? (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  ) : (
+                    <Download className="w-3.5 h-3.5" />
+                  )}
+                  <span>Download Print-Ready ID Card (PDF)</span>
+                </button>
+
+                {/* Dedicated 3D Card Flip Controls */}
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setIdCardSide('front')}
+                    className={`py-2.5 px-3 border rounded-xl font-bold text-xs transition-all flex items-center justify-center gap-1.5 cursor-pointer shadow-xs ${
+                      idCardSide === 'front'
+                        ? 'bg-[#0B4EA2] text-white border-[#0B4EA2]'
+                        : 'bg-white hover:bg-slate-50 border-[#D0E2F7] text-[#0F172A]'
+                    }`}
+                  >
+                    <RotateCw className="w-3.5 h-3.5" />
+                    <span>Flip to Front</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setIdCardSide('back')}
+                    className={`py-2.5 px-3 border rounded-xl font-bold text-xs transition-all flex items-center justify-center gap-1.5 cursor-pointer shadow-xs ${
+                      idCardSide === 'back'
+                        ? 'bg-[#0B4EA2] text-white border-[#0B4EA2]'
+                        : 'bg-white hover:bg-slate-50 border-[#D0E2F7] text-[#0F172A]'
+                    }`}
+                  >
+                    <RotateCw className="w-3.5 h-3.5" />
+                    <span>Flip to Back</span>
+                  </button>
+                </div>
+
+                {/* Save PNG directly to Photos / Gallery without sharing */}
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => handleExportPngFromSettings('front')}
+                    disabled={isExportingCard}
+                    className="py-2.5 px-3 bg-white hover:bg-slate-50 border border-[#D0E2F7] text-[#0F172A] font-bold text-xs rounded-xl transition-all flex items-center justify-center gap-1.5 cursor-pointer shadow-xs"
+                  >
+                    <FileImage className="w-3.5 h-3.5 text-[#0B4EA2]" />
+                    <span>Save Front PNG</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => handleExportPngFromSettings('back')}
+                    disabled={isExportingCard}
+                    className="py-2.5 px-3 bg-white hover:bg-slate-50 border border-[#D0E2F7] text-[#0F172A] font-bold text-xs rounded-xl transition-all flex items-center justify-center gap-1.5 cursor-pointer shadow-xs"
+                  >
+                    <FileImage className="w-3.5 h-3.5 text-[#0B4EA2]" />
+                    <span>Save Back PNG</span>
+                  </button>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={handleShareCardFromSettings}
+                    className="py-2.5 px-3 bg-white hover:bg-slate-50 border border-[#D0E2F7] text-[#0F172A] font-bold text-xs rounded-xl transition-all flex items-center justify-center gap-1.5 cursor-pointer shadow-xs"
+                  >
+                    <Share2 className="w-3.5 h-3.5 text-[#0B4EA2]" />
+                    <span>Share ID Card</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={handlePrintCardFromSettings}
+                    disabled={isExportingCard}
+                    className="py-2.5 px-3 bg-white hover:bg-slate-50 border border-[#D0E2F7] text-[#0F172A] font-bold text-xs rounded-xl transition-all flex items-center justify-center gap-1.5 cursor-pointer shadow-xs"
+                  >
+                    <Printer className="w-3.5 h-3.5 text-[#0B4EA2]" />
+                    <span>Print Card</span>
+                  </button>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => navigate('/reporter/id-card')}
+                  className="w-full py-2.5 px-4 bg-white/70 hover:bg-white text-[#0B4EA2] font-bold text-xs rounded-xl border border-[#D0E2F7] transition-all flex items-center justify-center gap-1.5 cursor-pointer"
+                >
+                  <ExternalLink className="w-3.5 h-3.5" />
+                  <span>Open Fullscreen ID Card Page</span>
+                </button>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Templates Card */}
@@ -378,6 +874,25 @@ export const SettingsScreen = () => {
           </div>
           <ChevronRight className="w-5 h-5 text-[#6B7A90] shrink-0" />
         </div>
+
+        {/* Local Ads & Sponsorships Card */}
+        {(isAdminAccess || user?.role === 'reporter') && (
+          <div
+            onClick={() => navigate('/ad-requests')}
+            className="bg-[#E8F2FC] border border-[#D0E2F7] rounded-[12px] p-4 shadow-sm flex items-center justify-between gap-4 cursor-pointer active:scale-[0.99] transition-all"
+          >
+            <div className="flex items-center gap-3.5">
+              <div className="w-10 h-10 rounded-full bg-[#D6E9FF] flex items-center justify-center shrink-0">
+                <Megaphone className="w-5 h-5 text-[#015BB3]" />
+              </div>
+              <div>
+                <h3 className="text-sm font-bold text-[#0A2540]">Local Ads & Sponsorships</h3>
+                <p className="text-xs text-[#6B7A90] mt-0.5">Submit & manage feed advertisements</p>
+              </div>
+            </div>
+            <ChevronRight className="w-5 h-5 text-[#6B7A90] shrink-0" />
+          </div>
+        )}
 
         {/* Admin Panel Card — only visible to approved admins (DB-checked) */}
         {isAdminAccess && (
@@ -489,25 +1004,114 @@ export const SettingsScreen = () => {
 
         {/* Notifications */}
         <SettingsSection title={t.notifications} icon={Bell}>
+          {/* Supabase Gmail routing indicator */}
+          <div className="px-5 py-3 bg-blue-50/60 border-b border-[#D0E2F7] flex flex-wrap items-center justify-between gap-2">
+            <div className="flex items-center gap-2 min-w-0">
+              <span className="relative flex h-2.5 w-2.5">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
+              </span>
+              <div className="text-xs truncate">
+                <span className="text-[#64748B]">Send alerts to: </span>
+                <span className="font-bold text-[#0A2540]">{user?.email || 'Logged in Gmail'}</span>
+              </div>
+            </div>
+            <span className="text-[10px] font-bold text-[#0B4EA2] bg-white border border-blue-200 px-2.5 py-0.5 rounded-full shadow-2xs">
+              Supabase Service Active
+            </span>
+          </div>
+
           <SettingsRow
             label={t.emailGen}
             description={t.emailGenDesc}
-            control={<ToggleSwitch enabled={notifications.emailGenerations} onToggle={() => toggle("emailGenerations")} />}
+            control={
+              <div className="flex items-center gap-2.5">
+                <button
+                  type="button"
+                  onClick={() => handleSendTestNotification('emailGenerations')}
+                  disabled={sendingNotificationType === 'emailGenerations'}
+                  className="px-2.5 py-1.5 text-[11px] font-bold text-[#0B4EA2] bg-white hover:bg-blue-50 active:scale-95 border border-[#D0E2F7] rounded-xl transition-all flex items-center gap-1.5 cursor-pointer shadow-2xs disabled:opacity-50"
+                  title="Send generation test email to Gmail"
+                >
+                  {sendingNotificationType === 'emailGenerations' ? (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin text-[#0B4EA2]" />
+                  ) : (
+                    <Mail className="w-3.5 h-3.5 text-[#0B4EA2]" />
+                  )}
+                  <span>Send to Gmail</span>
+                </button>
+                <ToggleSwitch enabled={notifications.emailGenerations} onToggle={() => toggle("emailGenerations")} />
+              </div>
+            }
           />
           <SettingsRow
             label={t.emailBilling}
             description={t.emailBillingDesc}
-            control={<ToggleSwitch enabled={notifications.emailBilling} onToggle={() => toggle("emailBilling")} />}
+            control={
+              <div className="flex items-center gap-2.5">
+                <button
+                  type="button"
+                  onClick={() => handleSendTestNotification('emailBilling')}
+                  disabled={sendingNotificationType === 'emailBilling'}
+                  className="px-2.5 py-1.5 text-[11px] font-bold text-[#0B4EA2] bg-white hover:bg-blue-50 active:scale-95 border border-[#D0E2F7] rounded-xl transition-all flex items-center gap-1.5 cursor-pointer shadow-2xs disabled:opacity-50"
+                  title="Send billing alert email to Gmail"
+                >
+                  {sendingNotificationType === 'emailBilling' ? (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin text-[#0B4EA2]" />
+                  ) : (
+                    <Mail className="w-3.5 h-3.5 text-[#0B4EA2]" />
+                  )}
+                  <span>Send to Gmail</span>
+                </button>
+                <ToggleSwitch enabled={notifications.emailBilling} onToggle={() => toggle("emailBilling")} />
+              </div>
+            }
           />
           <SettingsRow
             label={t.emailUpdates}
             description={t.emailUpdatesDesc}
-            control={<ToggleSwitch enabled={notifications.emailUpdates} onToggle={() => toggle("emailUpdates")} />}
+            control={
+              <div className="flex items-center gap-2.5">
+                <button
+                  type="button"
+                  onClick={() => handleSendTestNotification('emailUpdates')}
+                  disabled={sendingNotificationType === 'emailUpdates'}
+                  className="px-2.5 py-1.5 text-[11px] font-bold text-[#0B4EA2] bg-white hover:bg-blue-50 active:scale-95 border border-[#D0E2F7] rounded-xl transition-all flex items-center gap-1.5 cursor-pointer shadow-2xs disabled:opacity-50"
+                  title="Send product update email to Gmail"
+                >
+                  {sendingNotificationType === 'emailUpdates' ? (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin text-[#0B4EA2]" />
+                  ) : (
+                    <Mail className="w-3.5 h-3.5 text-[#0B4EA2]" />
+                  )}
+                  <span>Send to Gmail</span>
+                </button>
+                <ToggleSwitch enabled={notifications.emailUpdates} onToggle={() => toggle("emailUpdates")} />
+              </div>
+            }
           />
           <SettingsRow
             label={t.browserPush}
             description={t.browserPushDesc}
-            control={<ToggleSwitch enabled={notifications.browserPush} onToggle={() => toggle("browserPush")} />}
+            control={
+              <div className="flex items-center gap-2.5">
+                <button
+                  type="button"
+                  onClick={() => handleSendTestNotification('browserPush')}
+                  disabled={sendingNotificationType === 'browserPush'}
+                  className="px-2.5 py-1.5 text-[11px] font-bold text-[#0B4EA2] bg-white hover:bg-blue-50 active:scale-95 border border-[#D0E2F7] rounded-xl transition-all flex items-center gap-1.5 cursor-pointer shadow-2xs disabled:opacity-50"
+                  title="Send test push alert"
+                >
+                  {sendingNotificationType === 'browserPush' ? (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin text-[#0B4EA2]" />
+                  ) : (
+                    <Bell className="w-3.5 h-3.5 text-[#0B4EA2]" />
+                  )}
+                  <span>Test Push</span>
+                </button>
+                <ToggleSwitch enabled={notifications.browserPush} onToggle={() => toggle("browserPush")} />
+              </div>
+            }
           />
         </SettingsSection>
 

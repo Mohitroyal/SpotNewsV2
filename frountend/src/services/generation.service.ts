@@ -74,17 +74,22 @@ export const generationService = {
     
     try {
       // Send the clipping configuration directly to the Django backend endpoint
-      const res = await api.post(`/api/v1/generate`, {
+      const res = await api.post(`/v1/generate`, {
         headline: config.headline,
         article_content: config.articleContent,
         image_url: config.imageUrls?.[0] || config.imageUrl || null,
         image_urls: config.imageUrls || [],
-        video_url: config.videoUrl || null,
+        video_url: (config as any).videoUrl || (config as any).video_url || null,
+        videoUrl: (config as any).videoUrl || (config as any).video_url || null,
         template_id: config.templateId,
         language: config.language,
         layout_columns: config.layoutColumns,
         publication_name: config.publicationName,
         reporter_name: config.reporterName,
+        reporter_image: (config as any).reporterImage || (config as any).reporter_image || null,
+        heading_bg: (config as any).headingBg || (config as any).heading_bg || null,
+        border_color: (config as any).borderColor || (config as any).border_color || null,
+        image_layout: (config as any).imageLayout || (config as any).image_layout || null,
         // Include any other required fields for the backend
       }, {
         timeout: 0 // No timeout, wait for processing to start
@@ -116,25 +121,32 @@ export const generationService = {
     const generations: Generation[] = (data || []).map(row => ({
       id: row.id,
       userId: row.user_id,
+      png_url: row.png_url,
+      pngUrl: row.png_url,
+      pdf_url: row.pdf_url,
+      pdfUrl: row.pdf_url,
+      mp4_url: row.mp4_url || row.custom_layout?.mp4_url,
+      mp4Url: row.mp4_url || row.custom_layout?.mp4_url,
+      stage: row.custom_layout?.stage,
+      progress: row.custom_layout?.progress,
+      headline: row.headline,
+      articleContent: row.article_content,
+      custom_layout: row.custom_layout,
       config: {
         headline: row.headline,
         articleContent: row.article_content,
         imageUrls: row.image_urls || (row.image_url ? [row.image_url] : []),
-        videoUrl: row.custom_layout?.videoUrl,
+        videoUrl: row.mp4_url || row.custom_layout?.mp4_url || row.custom_layout?.videoUrl,
         reporterName: row.custom_layout?.reporterName,
-        // Fill other required fields with defaults
-        language: "en",
-        tone: "formal",
-        templateId: "classic-split",
-        publicationName: "Spot News 24x7",
+        language: row.language || "en",
+        tone: row.tone || "formal",
+        templateId: row.template_id || "classic-split",
+        publicationName: row.publication_name || "Spot News 24x7",
         publicationDate: new Date(row.created_at).toLocaleDateString(),
-        layoutColumns: 1
+        layoutColumns: row.layout_columns || 1
       },
       status: row.status as any,
       createdAt: row.created_at,
-      png_url: row.png_url,
-      pdf_url: row.pdf_url,
-      mp4_url: row.mp4_url,
     }));
 
     return {
@@ -163,38 +175,35 @@ export const generationService = {
 
     if (error) throw error;
 
-    let customLayoutParsed = data.custom_layout || {};
-    if (typeof data.custom_layout === 'string') {
-      try {
-        customLayoutParsed = JSON.parse(data.custom_layout);
-      } catch (e) {}
-    }
-
     const generation: Generation = {
       id: data.id,
       userId: data.user_id,
+      png_url: data.png_url,
+      pngUrl: data.png_url,
+      pdf_url: data.pdf_url,
+      pdfUrl: data.pdf_url,
+      mp4_url: data.mp4_url || data.custom_layout?.mp4_url,
+      mp4Url: data.mp4_url || data.custom_layout?.mp4_url,
+      stage: data.custom_layout?.stage,
+      progress: data.custom_layout?.progress,
+      headline: data.headline,
+      articleContent: data.article_content,
+      custom_layout: data.custom_layout,
       config: {
         headline: data.headline,
         articleContent: data.article_content,
         imageUrls: data.image_urls || (data.image_url ? [data.image_url] : []),
-        videoUrl: customLayoutParsed?.videoUrl,
-        reporterName: customLayoutParsed?.reporterName,
-        // Defaults
-        language: "en",
-        tone: "formal",
-        templateId: "classic-split",
-        publicationName: "Spot News 24x7",
+        videoUrl: data.mp4_url || data.custom_layout?.mp4_url || data.custom_layout?.videoUrl,
+        reporterName: data.custom_layout?.reporterName,
+        language: data.language || "en",
+        tone: data.tone || "formal",
+        templateId: data.template_id || "classic-split",
+        publicationName: data.publication_name || "Spot News 24x7",
         publicationDate: new Date(data.created_at).toLocaleDateString(),
-        layoutColumns: 1
+        layoutColumns: data.layout_columns || 1
       },
       status: data.status as any,
       createdAt: data.created_at,
-      stage: customLayoutParsed?.stage,
-      progress: customLayoutParsed?.progress,
-      error: customLayoutParsed?.error,
-      png_url: data.png_url,
-      pdf_url: data.pdf_url,
-      mp4_url: data.mp4_url || customLayoutParsed?.mp4_url,
     };
 
     return { success: true, data: generation, message: "Fetched successfully" };

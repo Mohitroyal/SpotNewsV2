@@ -7,6 +7,7 @@ import {
 import { Capacitor } from '@capacitor/core';
 import { Filesystem, Directory } from '@capacitor/filesystem';
 import { Share } from '@capacitor/share';
+import { Browser } from '@capacitor/browser';
 import {
   dailyNewspaperService,
   type EligibleArticle,
@@ -51,7 +52,6 @@ export const DailyNewspaperGeneratorModal: React.FC<Props> = ({ isOpen, onClose,
   const [generationProgress, setGenerationProgress] = useState(0);
   const [generatedResult, setGeneratedResult] = useState<{
     pdf_url: string;
-    pdf_base64?: string | null;
     total_pages: number;
     total_articles: number;
     edition_id: string;
@@ -220,7 +220,6 @@ export const DailyNewspaperGeneratorModal: React.FC<Props> = ({ isOpen, onClose,
 
       setGeneratedResult({
         pdf_url: res.pdf_url,
-        pdf_base64: res.pdf_base64 || null,
         total_pages: res.total_pages,
         total_articles: res.total_articles,
         edition_id: res.edition_id,
@@ -232,113 +231,7 @@ export const DailyNewspaperGeneratorModal: React.FC<Props> = ({ isOpen, onClose,
       clearInterval(progressInterval);
       setGenerating(false);
       setGenerationProgress(0);
-      const msg = err?.response?.data?.detail || err?.message || 'Failed to generate Daily Newspaper PDF.';
-      setErrorMsg(`${msg} (Tip: If server memory is busy, you can use "Print / Save PDF" to download immediately.)`);
-    }
-  };
-
-  const [savingPdf, setSavingPdf] = useState(false);
-
-  const handlePrintOrSavePDF = async () => {
-    // If running inside Capacitor mobile app (Android / iOS):
-    if (Capacitor.isNativePlatform()) {
-      setSavingPdf(true);
-      setErrorMsg(null);
-      try {
-        if (!selectedLogo) {
-          setLogoError('Selection required! Please select a publication logo.');
-          return;
-        }
-        const config: DailyNewspaperConfig = {
-          publication_code: selectedLogo.publication_code,
-          publication_name: selectedLogo.name,
-          logo_url: selectedLogo.logo_url,
-          edition_date: editionDate,
-          articles: activeSelectedArticles.map((a) => ({
-            ...a,
-            content: a.custom_excerpt || a.content || a.summary || '',
-          })),
-          lead_story_id: leadStoryId || undefined,
-          overwrite_existing: true,
-        };
-        const res = await dailyNewspaperService.generate(config);
-        setGeneratedResult({
-          pdf_url: res.pdf_url,
-          pdf_base64: res.pdf_base64 || null,
-          total_pages: res.total_pages,
-          total_articles: res.total_articles,
-          edition_id: res.edition_id,
-        });
-
-        const fileName = `DailyNewspaper-${editionDate}-${Date.now()}.pdf`;
-        let base64data = res.pdf_base64;
-        if (!base64data) {
-          const fetched = await fetch(res.pdf_url);
-          const blob = await fetched.blob();
-          base64data = await new Promise<string>((resolve) => {
-            const reader = new FileReader();
-            reader.readAsDataURL(blob);
-            reader.onloadend = () => {
-              let d = reader.result as string;
-              if (d.includes(',')) d = d.split(',')[1];
-              resolve(d);
-            };
-          });
-        }
-
-        if (Capacitor.getPlatform() === 'android') {
-          try { await Filesystem.requestPermissions(); } catch {}
-        }
-
-        await Filesystem.writeFile({
-          path: fileName,
-          data: base64data,
-          directory: Directory.Documents,
-          recursive: true,
-        });
-
-        let shareUri = res.pdf_url;
-        try {
-          const cacheResult = await Filesystem.writeFile({
-            path: fileName,
-            data: base64data,
-            directory: Directory.Cache,
-            recursive: true,
-          });
-          if (cacheResult.uri) shareUri = cacheResult.uri;
-        } catch {}
-
-        try {
-          await Share.share({
-            title: fileName,
-            text: `Daily Newspaper A3 Edition - ${editionDate}`,
-            url: shareUri,
-            dialogTitle: 'Print or Save Daily Newspaper PDF',
-          });
-        } catch {}
-
-        setStep(4);
-      } catch (err: any) {
-        const msg = err?.response?.data?.detail || err?.message || 'Failed to save/print Daily Newspaper PDF.';
-        setErrorMsg(msg);
-      } finally {
-        setSavingPdf(false);
-      }
-      return;
-    }
-
-    // On Desktop / Web browser:
-    if (!previewHtml) return;
-    try {
-      const iframe = document.querySelector('iframe[title="Daily Newspaper A3 Preview"]') as HTMLIFrameElement;
-      if (iframe && iframe.contentWindow) {
-        iframe.contentWindow.focus();
-        iframe.contentWindow.print();
-        return;
-      }
-      window.print();
-    } catch (printErr) {
-      console.error('Print preview error:', printErr);
+      setErrorMsg(err?.response?.data?.detail || err?.message || 'Failed to generate Daily Newspaper PDF.');
     }
   };
 
@@ -354,92 +247,51 @@ export const DailyNewspaperGeneratorModal: React.FC<Props> = ({ isOpen, onClose,
     setDownloading(true);
     try {
       const targetUrl = generatedResult.pdf_url;
-      // Use the base64 PDF from the server response directly to avoid
-      // ephemeral filesystem / 404 issues when fetching from URL
-      const b64 = generatedResult.pdf_base64;
-      const fileName = `DailyNewspaper-${editionDate}-${Date.now()}.pdf`;
 
       if (Capacitor.isNativePlatform()) {
-        // Android: write base64 PDF directly to Documents and share
-        let base64data: string;
-        if (b64) {
-          base64data = b64;
-        } else {
-          // Fallback: fetch from URL
-          const res = await fetch(targetUrl);
-          if (!res.ok) throw new Error(`Server returned HTTP ${res.status} when fetching PDF`);
-          const blob = await res.blob();
-          base64data = await new Promise<string>((resolve) => {
-            const reader = new FileReader();
-            reader.readAsDataURL(blob);
-            reader.onloadend = () => {
-              let d = reader.result as string;
-              if (d.includes(',')) d = d.split(',')[1];
-              resolve(d);
-            };
-          });
-        }
-        try {
-          if (Capacitor.getPlatform() === 'android') await Filesystem.requestPermissions();
-          // Write to Documents for permanent device storage
-          await Filesystem.writeFile({
-            path: fileName,
-            data: base64data,
-            directory: Directory.Documents,
-            recursive: true,
-          });
-
-          // Write a copy to Cache for safe Android file-sharing
-          let shareUrl = targetUrl;
+        // Android: save PDF to Documents and share via native sheet
+        const res = await fetch(targetUrl);
+        const blob = await res.blob();
+        const reader = new FileReader();
+        reader.readAsDataURL(blob);
+        reader.onloadend = async () => {
+          let base64data = reader.result as string;
+          if (base64data.includes(',')) base64data = base64data.split(',')[1];
+          const fileName = `DailyNewspaper-${editionDate}.pdf`;
           try {
-            const cacheResult = await Filesystem.writeFile({
+            if (Capacitor.getPlatform() === 'android') await Filesystem.requestPermissions();
+            const writeRes = await Filesystem.writeFile({
               path: fileName,
               data: base64data,
-              directory: Directory.Cache,
+              directory: Directory.Documents,
               recursive: true,
             });
-            if (cacheResult.uri) {
-              shareUrl = cacheResult.uri;
+            try {
+              await Share.share({
+                title: fileName,
+                text: `Daily Newspaper A3 Edition - ${editionDate}`,
+                url: writeRes.uri || targetUrl,
+                dialogTitle: 'Open/Save Daily Newspaper Edition',
+              });
+            } catch {
+              await Browser.open({ url: targetUrl });
             }
-          } catch {}
-
-          try {
-            await Share.share({
-              title: fileName,
-              text: `Daily Newspaper A3 Edition - ${editionDate}`,
-              url: shareUrl,
-              dialogTitle: 'Open/Share Daily Newspaper Edition',
-            });
-          } catch {}
-
-          alert(`Daily Newspaper saved to your Documents as ${fileName}`);
-        } catch (e: any) {
-          console.error('Filesystem write error', e);
-          alert(`Download saved, but error sharing: ${e.message || e}`);
-        } finally {
-          setDownloading(false);
-        }
+            alert(`Saved to Documents as ${fileName}.`);
+          } catch (e: any) {
+            console.error('Filesystem write error', e);
+            try { await Browser.open({ url: targetUrl }); } catch {}
+          } finally {
+            setDownloading(false);
+          }
+        };
       } else {
-        // Web: create blob URL from base64 or fallback to direct URL
-        if (b64) {
-          const bytes = Uint8Array.from(atob(b64), c => c.charCodeAt(0));
-          const blob = new Blob([bytes], { type: 'application/pdf' });
-          const blobUrl = URL.createObjectURL(blob);
-          const a = document.createElement('a');
-          a.href = blobUrl;
-          a.download = fileName;
-          document.body.appendChild(a);
-          a.click();
-          document.body.removeChild(a);
-          URL.revokeObjectURL(blobUrl);
-        } else {
-          const a = document.createElement('a');
-          a.href = targetUrl;
-          a.download = fileName;
-          document.body.appendChild(a);
-          a.click();
-          document.body.removeChild(a);
-        }
+        // Web: trigger standard download anchor
+        const a = document.createElement('a');
+        a.href = targetUrl;
+        a.download = `DailyNewspaper-${editionDate}.pdf`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
         setDownloading(false);
       }
     } catch (err: any) {
@@ -794,15 +646,6 @@ export const DailyNewspaperGeneratorModal: React.FC<Props> = ({ isOpen, onClose,
                     Edit
                   </button>
                   <button
-                    onClick={handlePrintOrSavePDF}
-                    disabled={savingPdf || generating}
-                    className="px-4 py-2 bg-indigo-600 text-white rounded-xl text-xs font-bold hover:bg-indigo-700 disabled:opacity-50 transition-all shadow-md flex items-center gap-1.5"
-                    title="Directly print or save the A3 newspaper from your device"
-                  >
-                    {savingPdf ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
-                    {savingPdf ? 'Saving PDF...' : '🖨️ Print / Save PDF'}
-                  </button>
-                  <button
                     onClick={handleGeneratePDF}
                     disabled={generating}
                     className="px-5 py-2 bg-emerald-600 text-white rounded-xl text-xs font-black hover:bg-emerald-700 transition-all shadow-md flex items-center gap-2"
@@ -817,6 +660,7 @@ export const DailyNewspaperGeneratorModal: React.FC<Props> = ({ isOpen, onClose,
                 <iframe
                   title="Daily Newspaper A3 Preview"
                   srcDoc={previewHtml}
+                  sandbox="allow-scripts allow-same-origin allow-popups"
                   className="w-full h-full border-0 bg-white"
                 />
               </div>

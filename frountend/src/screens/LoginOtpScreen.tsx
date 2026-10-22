@@ -35,7 +35,7 @@ export const LoginOtpScreen = () => {
 
     try {
       OTPWidget.initializeWidget();
-      const res = await OTPWidget.sendOTP({ phone: formattedPhone });
+      const res = await OTPWidget.sendOTP({ phone: formattedPhone, mobile: formattedPhone });
       
       if (res.success || res.type === 'success') {
         if (setOtpState) {

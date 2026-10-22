@@ -1,19 +1,14 @@
-import axios from 'axios';
-
-// Call the existing backend APIs (Django or FastAPI)
-const API_URL = import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000/api';
+import { OTPWidget } from '@/services/otpService';
 
 export const authApi = {
   sendOtp: async (mobile: string) => {
-    const res = await axios.post(`${API_URL}/auth/send-otp`, { mobile });
-    return res.data;
+    return OTPWidget.sendOTP({ phone: mobile, mobile });
   },
   verifyOtp: async (mobile: string, otp: string) => {
-    const res = await axios.post(`${API_URL}/auth/verify-otp`, { mobile, otp });
-    return res.data;
+    return OTPWidget.verifyOTP({ phone: mobile, mobile, otp });
   },
   logout: async () => {
-    const res = await axios.post(`${API_URL}/auth/logout`);
-    return res.data;
+    return { success: true };
   }
 };
+

@@ -65,29 +65,110 @@ def run_clipping_generation_background(clipping_id, data, user_id):
             # 2. Text Translation & Formatting via Grok
             formatted_data = await grok_service.format_article(content, language, image_count)
             
+            original_template_id = str(data.get("template_id") or "classic").strip()
+            normalized_id = original_template_id.lower().replace(" ", "").replace("_", "").replace("-", "")
+
+            valid_templates = ["classic", "rti_express", "bharath_reporter", "national_news", "hero-image", "hero_image", "modern", "custom", "pattern_b"]
+            
+            if original_template_id not in valid_templates and normalized_id not in valid_templates:
+                intended_template = "rti_express"
+                logo_id = data.get("logo_id")
+                if logo_id:
+                    norm_lid = str(logo_id).lower().replace(" ", "").replace("_", "").replace("-", "")
+                    if logo_id in valid_templates or norm_lid in valid_templates:
+                        intended_template = logo_id
+                template_id = intended_template
+            else:
+                template_id = original_template_id
+
+            custom_dict = data.get("custom_layout") or {}
+            raw_image_layout = str(data.get("image_layout") or custom_dict.get("image_layout") or "").lower().replace("_", "").replace("-", "")
+            resolved_image_layout = raw_image_layout or "default"
+            total_imgs = len(image_urls)
+
+            is_custom_template = (
+                template_id == "custom" or
+                data.get("logo_id") == "custom" or
+                "custom" in str(template_id) or
+                data.get("show_summary") is True
+            )
+
+            if video_url:
+                # Video clipping ALWAYS uses hero-image video template
+                template_id = "hero-image"
+                resolved_image_layout = "default"
+            else:
+                # Image clipping layout & pattern resolution
+                if not resolved_image_layout or resolved_image_layout in ["default", "auto"]:
+                    if "patterna" in normalized_id or normalized_id.endswith("a"):
+                        resolved_image_layout = "pattern_a"
+                    elif "patternb" in normalized_id or normalized_id.endswith("b"):
+                        resolved_image_layout = "pattern_b"
+                    elif "patternc" in normalized_id or normalized_id.endswith("c") or total_imgs == 2:
+                        resolved_image_layout = "pattern_c"
+                    elif "patternd" in normalized_id or normalized_id.endswith("d"):
+                        resolved_image_layout = "pattern_d"
+                    elif "patterne" in normalized_id or normalized_id.endswith("e"):
+                        resolved_image_layout = "pattern_e"
+                    elif "patternf" in normalized_id or normalized_id.endswith("f"):
+                        resolved_image_layout = "pattern_f"
+                    elif "patterng" in normalized_id or normalized_id.endswith("g"):
+                        resolved_image_layout = "pattern_g"
+                    elif "single" in normalized_id or "hero" in normalized_id:
+                        resolved_image_layout = "single_image"
+                    elif total_imgs == 2:
+                        resolved_image_layout = "pattern_c"
+                    else:
+                        resolved_image_layout = "pattern_b"
+
+                if total_imgs <= 1 and not is_custom_template:
+                    if template_id in ["pattern_b", "hero-image", "hero_image", "classic"] or "patternb" in normalized_id:
+                        template_id = "pattern_b"
+                        resolved_image_layout = "pattern_b"
+
+            should_show_summary = True if (not video_url and is_custom_template) else False
+
+            pub_date = data.get("publication_date")
+            if not pub_date:
+                pub_date = datetime.utcnow().strftime("%d %B %Y")
+
             render_data = {
                 **formatted_data,
                 "id": clipping_id,
+                "template_id": template_id,
+                "show_summary": should_show_summary,
+                "article_text": content,
+                "raw_content": content,
                 "article_content": content,
                 "headline": data.get("headline") or formatted_data.get("headline"),
-                "publication_name": data.get("publication_name", "Newsflow"),
-                "publication_date": data.get("publication_date", ""),
+                "subheadline": data.get("subheadline") or formatted_data.get("subheadline", ""),
+                "publication_name": data.get("publication_name") or "RTI EXPRESS",
+                "publication_date": pub_date,
+                "reporter_name": data.get("reporter_name") or "RTI REPORTER",
+                "reporter_image": data.get("reporter_image"),
                 "image_urls": image_urls,
-                "video_url": data.get("video_url") or data.get("videoUrl"),
+                "image_url": image_urls[0] if image_urls else "",
+                "video_url": video_url,
                 "language": language,
                 "layout_columns": data.get("layout_columns", "auto"),
-                "font_family": data.get("font_family", "playfair"),
-                "logo_id": data.get("logo_id", data.get("template_id", "classic")),
+                "font_family": data.get("font_family", "noto_serif"),
+                "logo_id": data.get("logo_id") or template_id,
+                "logo_url": data.get("logo_url"),
                 "is_premium": False,
                 "show_watermark": data.get("show_watermark", True),
-                "image_layout": data.get("image_layout", "default"),
+                "show_inner_borders": data.get("show_inner_borders", True),
+                "show_outer_border": data.get("show_outer_border", True),
+                "image_layout": resolved_image_layout,
                 "heading_bg": data.get("heading_bg", None),
                 "border_color": data.get("border_color", None),
                 "primary_color": data.get("primary_color", None),
+                "category": data.get("category", ""),
+                "state": data.get("state", ""),
+                "district": data.get("district", ""),
+                "mandal": data.get("mandal", ""),
             }
             
             # 3. HTML Rendering via Jinja2
-            template_id = data.get("template_id", "classic")
             html = await render_service.render_html(render_data, f"{template_id}.html")
             
             # 4. Screenshot / PDF Generation via Playwright
@@ -235,11 +316,11 @@ def run_clipping_generation_background(clipping_id, data, user_id):
         with connection.cursor() as cursor:
             try:
                 cursor.execute(
-                    "UPDATE clippings SET status = %s, png_url = %s, pdf_url = %s, mp4_url = %s WHERE id = %s",
-                    ['completed', png_url, pdf_url, mp4_url, clipping_id]
+                    "UPDATE clippings SET status = %s, png_url = %s, pdf_url = %s, mp4_url = %s, template_id = %s, publication_name = %s, publication_date = %s, state = %s, district = %s WHERE id = %s",
+                    ['completed', png_url, pdf_url, mp4_url, template_id, render_data["publication_name"], render_data["publication_date"], render_data.get("state"), render_data.get("district"), clipping_id]
                 )
             except Exception as db_err:
-                print(f"[BACKGROUND ERROR] Failed to update mp4_url column: {db_err}")
+                print(f"[BACKGROUND ERROR] Failed to update mp4_url or extra columns: {db_err}")
                 connection.rollback()
                 cursor.execute(
                     "UPDATE clippings SET status = %s, png_url = %s, pdf_url = %s WHERE id = %s",
@@ -332,9 +413,9 @@ def create_clipping(request):
         with connection.cursor() as cursor:
             cursor.execute("""
                 INSERT INTO clippings (
-                    id, user_id, headline, article_content, language, template_id, status, created_at, custom_layout
-                ) VALUES (%s, %s, %s, %s, %s, %s, %s, NOW(), %s::jsonb)
-            """, [clipping_id, user_id, headline, article_content, language, template_id, 'processing', json.dumps(custom_layout_data)])
+                    id, user_id, headline, article_content, language, template_id, status, created_at, custom_layout, state, district
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s, NOW(), %s::jsonb, %s, %s)
+            """, [clipping_id, user_id, headline, article_content, language, template_id, 'processing', json.dumps(custom_layout_data), data.get('state'), data.get('district')])
             
         # Spawn background thread for processing (Django synchronous environment)
         thread = threading.Thread(target=run_clipping_generation_background, args=(clipping_id, data, user_id))

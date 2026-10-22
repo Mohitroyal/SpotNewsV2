@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Newspaper, MapPin, RefreshCw, X, Send, Share2, Copy, Check } from 'lucide-react';
+import { Newspaper, MapPin, RefreshCw, X, Send, Share2 } from 'lucide-react';
 import { useAuthStore, useUIStore } from '@/store';
 import { supabase } from '@/lib/supabase';
 import { NewsDetailCardStack } from '@/components/NewsDetailCardStack';
@@ -7,6 +7,9 @@ import { admobService } from '@/services/admob.service';
 import { localAdsService } from '@/services/localAds.service';
 import { LocalAdFeedCard } from '@/components/LocalAdFeedCard';
 import type { LocalAd } from '@/types/localAds';
+import { AdvisoryCard, AdvisoryStrip } from '@/features/weather/AdvisoryCard';
+import { useAdvisory } from '@/features/weather/useAdvisory';
+import { ShareAfterClipping } from '@/features/share/ShareAfterClipping';
 
 interface Comment {
   id: string;
@@ -22,10 +25,24 @@ export const FeedScreen: React.FC = () => {
   const district = useAuthStore((state) => state.district) || '';
   const userState = useAuthStore((state) => state.userState) || '';
   const isFullScreenFeed = useUIStore((state) => state.isFullScreenFeed);
+  const setIsFullScreenFeed = useUIStore((state) => state.setIsFullScreenFeed);
   const [clippings, setClippings] = useState<any[]>([]);
   const [localAds, setLocalAds] = useState<LocalAd[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeDetailIndex, setActiveDetailIndex] = useState<number | null>(null);
+
+  // Automatically toggle full-screen mode to hide the bottom railbar during full page preview
+  useEffect(() => {
+    if (activeDetailIndex !== null) {
+      setIsFullScreenFeed(true);
+    }
+  }, [activeDetailIndex, setIsFullScreenFeed]);
+
+  useEffect(() => {
+    return () => {
+      setIsFullScreenFeed(false);
+    };
+  }, [setIsFullScreenFeed]);
 
   // In-memory session guard (prevents firing twice within a single scroll session)
   const viewedIds = useRef<Set<string>>(new Set());
@@ -33,6 +50,10 @@ export const FeedScreen: React.FC = () => {
 
   // Liked clipping IDs by this user (stored in state for toggle)
   const [likedIds, setLikedIds] = useState<Set<string>>(new Set());
+
+  // Weather Advisory
+  const { advisory } = useAdvisory(district);
+  const [showWeatherModal, setShowWeatherModal] = useState(false);
 
   // Comments drawer state
   const [commentOpen, setCommentOpen] = useState<string | null>(null); // clipping id
@@ -42,63 +63,9 @@ export const FeedScreen: React.FC = () => {
   const commentInputRef = useRef<HTMLInputElement>(null);
   // Share drawer state
   const [shareSheetOpen, setShareSheetOpen] = useState<any | null>(null);
-  const [copiedLink, setCopiedLink] = useState(false);
 
-  const handleShareClick = async (clip: any) => {
-    const headline = clip.headline || clip.title || 'News Update';
-    const content = clip.summary || clip.content || '';
-    const shareUrl = clip.png_url || window.location.href;
-    const text = `${headline}\n\n${content}`;
-
-    if (navigator.share) {
-      try {
-        await navigator.share({
-          title: headline,
-          text: text,
-          url: shareUrl
-        });
-        return;
-      } catch (err: any) {
-        if (err?.name === 'AbortError') return;
-      }
-    }
+  const handleShareClick = (clip: any) => {
     setShareSheetOpen(clip);
-  };
-
-  const handleShareOption = (option: string, clip: any) => {
-    const headline = clip.headline || clip.title || 'News Update';
-    const content = clip.summary || clip.content || '';
-    const shareUrl = clip.png_url || window.location.href;
-    const text = `${headline}\n\n${content}`;
-
-    let url = '';
-    switch (option) {
-      case 'WhatsApp':
-        url = `https://api.whatsapp.com/send?text=${encodeURIComponent(text + '\n' + shareUrl)}`;
-        window.open(url, '_blank');
-        break;
-      case 'Facebook':
-        url = `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(shareUrl)}`;
-        window.open(url, '_blank');
-        break;
-      case 'Twitter':
-        url = `https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}&url=${encodeURIComponent(shareUrl)}`;
-        window.open(url, '_blank');
-        break;
-      case 'Telegram':
-        url = `https://t.me/share/url?url=${encodeURIComponent(shareUrl)}&text=${encodeURIComponent(text)}`;
-        window.open(url, '_blank');
-        break;
-      case 'Gmail':
-        url = `mailto:?subject=${encodeURIComponent(headline)}&body=${encodeURIComponent(text + '\n\n' + shareUrl)}`;
-        window.open(url, '_blank');
-        break;
-      case 'Copy':
-        navigator.clipboard.writeText(shareUrl);
-        setCopiedLink(true);
-        setTimeout(() => setCopiedLink(false), 2000);
-        break;
-    }
   };
 
   const fetchFeed = async () => {
@@ -120,7 +87,10 @@ export const FeedScreen: React.FC = () => {
       const { data, error } = await query;
       if (error) throw error;
 
-      const postedClippings = (data || []).filter((c) => c.is_posted === true);
+      // Only display clippings that are posted and explicitly approved (not pending or rejected)
+      const postedClippings = (data || []).filter(
+        (c) => c.is_posted === true && c.status !== 'pending_approval' && c.status !== 'rejected'
+      );
       setClippings(postedClippings);
     } catch (err) {
       console.error('Failed to fetch feed', err);
@@ -291,12 +261,27 @@ export const FeedScreen: React.FC = () => {
               <span>Refresh</span>
             </button>
           </div>
-          <div className="px-4 mt-3">
+          <div className="px-4 mt-3 flex items-center justify-between gap-2">
             <div className="inline-flex items-center gap-1.5 bg-[#015BB3] text-white px-3 py-1.5 rounded-full text-xs font-bold shadow-sm">
               <MapPin className="w-3.5 h-3.5" />
               Showing news for: {district || 'All Regions'}{userState ? `, ${userState}` : ''}
             </div>
+            {advisory && (
+              <button
+                onClick={() => setShowWeatherModal(true)}
+                className={`inline-flex items-center gap-1.5 text-white px-3 py-1.5 rounded-full text-xs font-bold shadow-sm cursor-pointer border-0 adv-strip lvl-${advisory.max_level || 'info'}`}
+                style={{ position: 'static', height: 'auto', display: 'inline-flex' }}
+              >
+                <span>{advisory.report?.advisories?.[0]?.icon || '☀️'}</span>
+                <span>{advisory.report?.now?.temp !== null ? `${Math.round(advisory.report?.now?.temp)}°C` : 'వాతావరణం'}</span>
+              </button>
+            )}
           </div>
+          {advisory && (
+            <div className="px-4 mt-2">
+              <AdvisoryStrip row={advisory} onOpen={() => setShowWeatherModal(true)} />
+            </div>
+          )}
         </div>
       )}
 
@@ -328,6 +313,14 @@ export const FeedScreen: React.FC = () => {
 
               return (
                 <React.Fragment key={clip.id}>
+                  {/* District Weather & Health Advisory Card inserted into feed flow */}
+                  {advisory && (idx === 1 || (idx > 1 && (idx - 1) % 6 === 0)) && (
+                    <div className="w-full h-full snap-start snap-always flex flex-col bg-black border-b border-gray-800 relative p-3 box-border">
+                      <div className="flex-1 w-full bg-white rounded-2xl overflow-hidden shadow-2xl flex flex-col">
+                        <AdvisoryCard row={advisory} />
+                      </div>
+                    </div>
+                  )}
                   <div
                     data-clip-id={clip.id}
                   ref={(el) => {
@@ -508,120 +501,52 @@ export const FeedScreen: React.FC = () => {
           </div>
         </div>
       )}
-      {/* ── Share Bottom Sheet ─────────────────────────────────────────── */}
-      {shareSheetOpen && (
+      {/* ── Weather Advisory Modal Sheet ──────────────────────────────── */}
+      {showWeatherModal && advisory && (
         <div
-          className="fixed inset-0 z-50 flex flex-col justify-end bg-black/60 backdrop-blur-xs transition-opacity"
-          onClick={() => setShareSheetOpen(null)}
+          className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-end justify-center p-0 sm:p-4"
+          onClick={() => setShowWeatherModal(false)}
         >
           <div
-            className="bg-white rounded-t-3xl p-5 shadow-2xl border-t-2 border-[#015BB3] max-w-md mx-auto w-full animate-in slide-in-from-bottom duration-200"
+            className="w-full max-w-lg h-[88dvh] bg-white rounded-t-3xl overflow-hidden shadow-2xl flex flex-col"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="w-12 h-1 bg-gray-300 rounded-full mx-auto mb-4" />
-            
-            <div className="flex items-center justify-between mb-4">
-              <div>
-                <h3 className="text-base font-bold text-[#0A2540]">Share News Clipping</h3>
-                <p className="text-xs text-gray-500 truncate max-w-[260px]">{shareSheetOpen.headline || shareSheetOpen.title || 'News Update'}</p>
-              </div>
-              <button
-                onClick={() => setShareSheetOpen(null)}
-                className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center text-gray-500 hover:bg-gray-200"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-
-            <div className="grid grid-cols-4 gap-4 py-3">
-              {/* WhatsApp */}
-              <button
-                onClick={() => handleShareOption('WhatsApp', shareSheetOpen)}
-                className="flex flex-col items-center gap-1.5 active:scale-95 transition-transform"
-              >
-                <div className="w-12 h-12 rounded-2xl bg-[#25D366] text-white flex items-center justify-center shadow-md">
-                  <svg className="w-6 h-6" viewBox="0 0 24 24" fill="currentColor">
-                    <path d="M.057 24l1.687-6.163c-1.041-1.804-1.588-3.849-1.587-5.946C.06 5.348 5.397.01 12.008.01c3.202.001 6.212 1.246 8.477 3.514 2.266 2.268 3.507 5.28 3.505 8.484-.004 6.657-5.34 11.997-11.953 11.997-2.005-.001-3.973-.502-5.713-1.455L0 24zm6.59-11.597c-.279-.314-.555-.262-.773-.272-.2-.008-.428-.008-.656-.008-.228 0-.6-.086-.913-.429-.314-.343-1.198-1.172-1.198-2.859 0-1.687 1.226-3.314 1.398-3.543.171-.228 2.413-3.685 5.845-5.17.816-.353 1.453-.564 1.948-.72.822-.262 1.572-.225 2.164-.137.66.099 2.03.83 2.314 1.632.285.803.285 1.49.201 1.632-.083.14-.308.228-.651.4l-2.102 1.03c-.342.166-.591.248-.846.634-.255.38-.973 1.226-1.195 1.48-.222.254-.443.286-.786.114-.343-.171-1.447-.533-2.755-1.7c-1.018-.908-1.704-2.03-1.902-2.372-.199-.343-.021-.528.15-.699.153-.153.343-.4.514-.6.171-.2.228-.343.343-.571.114-.229.057-.429-.028-.6-.086-.171-.773-1.857-1.059-2.543-.278-.669-.561-.578-.773-.589z"/>
-                  </svg>
-                </div>
-                <span className="text-[11px] font-semibold text-gray-700">WhatsApp</span>
-              </button>
-
-              {/* Facebook */}
-              <button
-                onClick={() => handleShareOption('Facebook', shareSheetOpen)}
-                className="flex flex-col items-center gap-1.5 active:scale-95 transition-transform"
-              >
-                <div className="w-12 h-12 rounded-2xl bg-[#1877F2] text-white flex items-center justify-center shadow-md">
-                  <svg className="w-6 h-6" viewBox="0 0 24 24" fill="currentColor">
-                    <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/>
-                  </svg>
-                </div>
-                <span className="text-[11px] font-semibold text-gray-700">Facebook</span>
-              </button>
-
-              {/* X / Twitter */}
-              <button
-                onClick={() => handleShareOption('Twitter', shareSheetOpen)}
-                className="flex flex-col items-center gap-1.5 active:scale-95 transition-transform"
-              >
-                <div className="w-12 h-12 rounded-2xl bg-black text-white flex items-center justify-center shadow-md">
-                  <svg className="w-5 h-5" viewBox="0 0 24 24" fill="currentColor">
-                    <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/>
-                  </svg>
-                </div>
-                <span className="text-[11px] font-semibold text-gray-700">X (Twitter)</span>
-              </button>
-
-              {/* Telegram */}
-              <button
-                onClick={() => handleShareOption('Telegram', shareSheetOpen)}
-                className="flex flex-col items-center gap-1.5 active:scale-95 transition-transform"
-              >
-                <div className="w-12 h-12 rounded-2xl bg-[#0088cc] text-white flex items-center justify-center shadow-md">
-                  <Send className="w-5 h-5" />
-                </div>
-                <span className="text-[11px] font-semibold text-gray-700">Telegram</span>
-              </button>
-
-              {/* Copy Link */}
-              <button
-                onClick={() => handleShareOption('Copy', shareSheetOpen)}
-                className="flex flex-col items-center gap-1.5 active:scale-95 transition-transform"
-              >
-                <div className="w-12 h-12 rounded-2xl bg-gray-100 text-gray-700 flex items-center justify-center shadow-md">
-                  {copiedLink ? <Check className="w-5 h-5 text-emerald-600" /> : <Copy className="w-5 h-5" />}
-                </div>
-                <span className="text-[11px] font-semibold text-gray-700">{copiedLink ? 'Copied!' : 'Copy Link'}</span>
-              </button>
-
-              {/* System Share */}
-              {Boolean(navigator.share) && (
-                <button
-                  onClick={() => {
-                    const headline = shareSheetOpen.headline || shareSheetOpen.title || 'News Update';
-                    const content = shareSheetOpen.summary || shareSheetOpen.content || '';
-                    const shareUrl = shareSheetOpen.png_url || window.location.href;
-                    navigator.share({ title: headline, text: `${headline}\n\n${content}`, url: shareUrl }).catch(() => {});
-                  }}
-                  className="flex flex-col items-center gap-1.5 active:scale-95 transition-transform"
-                >
-                  <div className="w-12 h-12 rounded-2xl bg-[#E8F2FC] text-[#015BB3] flex items-center justify-center shadow-md">
-                    <Share2 className="w-5 h-5" />
-                  </div>
-                  <span className="text-[11px] font-semibold text-gray-700">More Apps</span>
-                </button>
-              )}
-            </div>
-
-            <button
-              onClick={() => setShareSheetOpen(null)}
-              className="w-full py-3 mt-3 bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold rounded-xl text-xs uppercase tracking-wider transition-colors"
-            >
-              Cancel
-            </button>
+            <AdvisoryCard row={advisory} onClose={() => setShowWeatherModal(false)} />
           </div>
         </div>
+      )}
+
+      {/* ── RTI Share Sheet (Clipping, Reporter Card 1:1, Status 9:16) ─── */}
+      {shareSheetOpen && (
+        <ShareAfterClipping
+          post={{
+            id: shareSheetOpen.id,
+            headline: shareSheetOpen.headline || shareSheetOpen.title || 'News Update',
+            place: shareSheetOpen.district || district || 'హైదరాబాద్',
+            date: new Date(shareSheetOpen.created_at || Date.now()).toLocaleDateString('te-IN', {
+              day: 'numeric',
+              month: 'short',
+            }),
+            clippingUrl: shareSheetOpen.png_url,
+            thumbUrl: shareSheetOpen.png_url,
+            videoUrl: shareSheetOpen.mp4_url || shareSheetOpen.video_url || shareSheetOpen.custom_layout?.mp4_url || undefined,
+          }}
+          reporter={{
+            id: shareSheetOpen.user_id || user?.id || 'reporter',
+            name: shareSheetOpen.reporter_name || shareSheetOpen.author_name || user?.full_name || 'Spot News Reporter',
+            slug: (shareSheetOpen.reporter_name || shareSheetOpen.author_name || 'reporter')
+              .toLowerCase()
+              .replace(/\s+/g, '-'),
+            verified: true,
+            avgStars: 4.8,
+            ratingsCount: 24,
+            stories: 15,
+            views: shareSheetOpen.views_count || 120,
+            experienceYears: 3,
+            photoUrl: user?.avatarUrl,
+          }}
+          onClose={() => setShareSheetOpen(null)}
+        />
       )}
 
       {/* ── Full Screen News Detail Pager (Covers top & bottom marked areas) ── */}
@@ -629,7 +554,10 @@ export const FeedScreen: React.FC = () => {
         <NewsDetailCardStack
           items={clippings}
           initialIndex={activeDetailIndex}
-          onBack={() => setActiveDetailIndex(null)}
+          onBack={() => {
+            setActiveDetailIndex(null);
+            setIsFullScreenFeed(false);
+          }}
           onLike={handleLike}
           likedIds={likedIds}
           onComment={openComments}

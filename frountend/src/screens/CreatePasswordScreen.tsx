@@ -1,12 +1,18 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
-import { Loader2, Lock, Eye, EyeOff, KeyRound } from 'lucide-react';
-import { useNavigate, Link } from 'react-router-dom';
+import { Loader2, Lock, Eye, EyeOff, KeyRound, Mail, ShieldCheck } from 'lucide-react';
+import { useNavigate, Link, useLocation } from 'react-router-dom';
 import { useAuthStore } from '@/store';
 import { LogoWatermark } from '@/components/LogoWatermark';
 import logoUrl from '@/assets/rti_express_logo.png';
 
 export const CreatePasswordScreen = () => {
+  const location = useLocation();
+  const isNewUser = Boolean(location.state?.isNewUser);
+  const passedEmail = location.state?.email || '';
+  const passedMessage = location.state?.message || '';
+
+  const [email, setEmail] = useState(passedEmail);
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -18,8 +24,11 @@ export const CreatePasswordScreen = () => {
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => {
       setHasSession(!!data.session);
+      if (data.session?.user?.email && !email) {
+        setEmail(data.session.user.email);
+      }
     });
-  }, []);
+  }, [email]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -39,17 +48,26 @@ export const CreatePasswordScreen = () => {
     }
 
     try {
-      // 1. Update user password in Supabase Auth
+      // 1. Update user password in Supabase Auth and mark has_password = true
       const { error: updateError } = await supabase.auth.updateUser({
         password: password,
+        data: {
+          has_password: true,
+        }
       });
 
       if (updateError) throw updateError;
 
-      // Ensure we log them out so they have to log in again with new password
+      // 2. Clear current session so they explicitly sign in with their credentials
       await supabase.auth.signOut();
       useAuthStore.getState().logout();
-      navigate('/login', { state: { message: 'Password updated! Please sign in with your new password.' } });
+      navigate('/login', { 
+        state: { 
+          message: 'Password created successfully! Please sign in with your email and password.',
+          email: email || passedEmail,
+          defaultTab: 'login',
+        } 
+      });
     } catch (err: any) {
       setError(err.message || 'Failed to update password');
     } finally {
@@ -80,15 +98,33 @@ export const CreatePasswordScreen = () => {
         <div className="w-full max-w-md bg-white border border-[#b8d4e8] rounded-xl p-8 shadow-sm">
           
           <div className="mb-6 flex flex-col items-start">
-            <div className="bg-[#0a2540] text-white text-[9px] uppercase tracking-widest font-bold py-1 px-2.5 rounded-full mb-3 shadow-sm">
-              Security
+            <div className="bg-[#0a2540] text-white text-[9px] uppercase tracking-widest font-bold py-1 px-2.5 rounded-full mb-3 shadow-sm flex items-center gap-1.5">
+              <ShieldCheck className="w-3 h-3 text-[#cc2222]" />
+              {isNewUser ? 'Account Setup' : 'Security'}
             </div>
-            <h1 className="text-[#0a1a2e] text-2xl font-bold font-serif mb-2">Set New Password</h1>
+            <h1 className="text-[#0a1a2e] text-2xl font-bold font-serif mb-2">
+              {isNewUser ? 'Create Password' : 'Set New Password'}
+            </h1>
             <p className="text-xs text-[#5b7e9a] font-medium leading-relaxed">
-              Create a secure password for your reporter account.
+              {isNewUser 
+                ? 'Create a secure password for your new account to complete registration.'
+                : 'Create a secure password for your reporter account.'}
             </p>
             <div className="w-12 h-[3px] bg-[#cc2222] rounded-full mt-3"></div>
           </div>
+
+          {passedMessage && (
+            <div className="mb-4 p-3 bg-blue-50 border border-[#015BB3] rounded-[8px] text-[#015BB3] text-xs font-semibold text-center shadow-sm">
+              {passedMessage}
+            </div>
+          )}
+
+          {email && (
+            <div className="mb-4 p-2.5 bg-[#f0f6fc] border border-[#dceef8] rounded-[6px] text-xs flex items-center gap-2 text-[#0a2540]">
+              <Mail className="w-4 h-4 text-[#015BB3] shrink-0" />
+              <span className="truncate">Account: <strong>{email}</strong></span>
+            </div>
+          )}
 
           {error && (
             <div className="mb-4 p-3 bg-red-50 border border-[#cc2222] rounded-[8px] text-[#cc2222] text-xs font-semibold text-center shadow-sm">
@@ -98,7 +134,7 @@ export const CreatePasswordScreen = () => {
 
           {hasSession === false && (
             <div className="mb-4 p-3 bg-amber-50 border border-amber-300 rounded-[8px] text-amber-900 text-xs text-center shadow-sm">
-              Please use the password reset link sent to your email to securely set your new password.
+              Please use the password reset link or sign in with Google to set your password.
             </div>
           )}
 
@@ -139,9 +175,9 @@ export const CreatePasswordScreen = () => {
             <button
               type="submit"
               disabled={loading}
-              className="w-full py-[12px] mt-2 bg-[#cc2222] hover:bg-[#ff3333] active:bg-[#a01b1b] text-white rounded-[6px] font-bold text-sm font-serif tracking-wide transition-colors shadow-sm flex items-center justify-center disabled:opacity-70 disabled:hover:bg-[#cc2222]"
+              className="w-full py-[12px] mt-2 bg-[#cc2222] hover:bg-[#ff3333] active:bg-[#a01b1b] text-white rounded-[6px] font-bold text-sm font-serif tracking-wide transition-colors shadow-sm flex items-center justify-center disabled:opacity-70 disabled:hover:bg-[#cc2222] cursor-pointer"
             >
-              {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : 'Update Password & Sign In'}
+              {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : (isNewUser ? 'Save Password & Sign In' : 'Update Password & Sign In')}
             </button>
           </form>
 

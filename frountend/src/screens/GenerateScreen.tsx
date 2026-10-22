@@ -409,7 +409,7 @@ export const GenerateScreen = () => {
     }
     setLoading(true); setStageIndex(0);
     try {
-      const reporterName = getReporterName(user?.email) || (user as any)?.user_metadata?.full_name || (user as any)?.user_metadata?.name || user?.full_name || user?.firstName || 'Reporter';
+      const reporterName = (user as any)?.user_metadata?.full_name || (user as any)?.user_metadata?.name || user?.full_name || user?.firstName || getReporterName(user?.email) || 'Reporter';
       const reporterImage = getReporterPhoto(user?.email) || user?.avatarUrl || (user as any)?.user_metadata?.avatar_url || (user as any)?.user_metadata?.picture || '';
 
       const configToSave = {
@@ -445,10 +445,7 @@ export const GenerateScreen = () => {
         reporterName,
         reporterImage,
         reporter_name: reporterName,
-        reporter_image: reporterImage,
-        video_url: videoUrl || undefined,
-        image_urls: imageUrls,
-        image_url: imageUrls[0] || ''
+        reporter_image: reporterImage
       };
       setStageIndex(2);
       const renderTimer = setTimeout(() => setStageIndex(3), 8_000);

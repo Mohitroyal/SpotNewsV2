@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
-import { useAuthStore, saveReporterPhoto } from '@/store';
+import { useAuthStore, saveReporterPhoto, saveReporterName, getEffectiveReporterPhoto } from '@/store';
 import { authService } from '@/services/auth.service';
 import { supabase } from '@/lib/supabase';
 import { Loader2, Mail, Lock, User, Camera } from 'lucide-react';
@@ -54,11 +54,19 @@ export const SignupScreen = () => {
           ctx.drawImage(img, offsetX, offsetY, size, size, 0, 0, targetSize, targetSize);
           const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
           setAvatarUrl(dataUrl);
-          if (email) saveReporterPhoto(email, dataUrl);
+          try {
+            localStorage.setItem('spotnews_registration_photo', dataUrl);
+            localStorage.setItem('spotnews_active_reporter_photo', dataUrl);
+          } catch {}
+          saveReporterPhoto(email ? email.trim() : undefined, dataUrl);
         } else {
           const dataUrl = event.target?.result as string;
           setAvatarUrl(dataUrl);
-          if (email) saveReporterPhoto(email, dataUrl);
+          try {
+            localStorage.setItem('spotnews_registration_photo', dataUrl);
+            localStorage.setItem('spotnews_active_reporter_photo', dataUrl);
+          } catch {}
+          saveReporterPhoto(email ? email.trim() : undefined, dataUrl);
         }
       };
       img.src = event.target?.result as string;
@@ -84,38 +92,27 @@ export const SignupScreen = () => {
       });
       if (res.data) {
         const userObj = { ...res.data.user };
+        // Save the newly registered reporter's name under their specific email
+        saveReporterName(email.trim(), name.trim());
         if (avatarUrl) {
           userObj.avatarUrl = avatarUrl;
           saveReporterPhoto(email.trim(), avatarUrl);
           supabase.auth.updateUser({ data: { avatar_url: avatarUrl } }).catch(() => {});
         }
         
-        // Insert into reporter_applications
-        await supabase.from('reporter_applications').insert([
-          {
-            name: name.trim(),
-            email: email.trim(),
-            phone: '',
-            aadhar_card: '',
-            press_id: '',
-            status: 'pending',
-            state: selectedState,
-            district: selectedDistrict
-          }
-        ]);
-        
-        // Also update the profile with state/district
-        try {
-          await supabase.from('profiles').update({
-            state: selectedState,
-            district: selectedDistrict
-          }).eq('email', email.trim());
-        } catch {}
+        // Also update the profile with state/district if provided
+        if (selectedState || selectedDistrict) {
+          try {
+            await supabase.from('profiles').update({
+              state: selectedState,
+              district: selectedDistrict
+            }).eq('email', email.trim());
+          } catch {}
+        }
 
-        // Logout since they need admin approval
-        await authService.logout();
-        alert('Account created successfully. Your account is pending admin approval. You will be able to log in once approved.');
-        navigate('/login');
+        // Regular users log in immediately without admin approval
+        login(userObj, res.data.token);
+        navigate('/');
       }
     } catch (err: any) {
       setError(err.response?.data?.message || err.message || 'Failed to create account');
@@ -141,14 +138,34 @@ export const SignupScreen = () => {
 
         if (sessionData.session) {
           const userObj = { ...sessionData.session.user } as any;
-          const googleEmail = userObj?.email;
-          const finalPhoto = avatarUrl || userObj?.user_metadata?.avatar_url || userObj?.user_metadata?.picture;
-          if (finalPhoto) {
-            userObj.avatarUrl = finalPhoto;
-            if (googleEmail) saveReporterPhoto(googleEmail, finalPhoto);
+          const googleEmail = (userObj?.email || '').toLowerCase().trim();
+          const googleName = name.trim() || userObj?.user_metadata?.full_name || userObj?.user_metadata?.name || userObj?.full_name;
+          if (googleName && googleEmail) {
+            saveReporterName(googleEmail, googleName);
           }
-          login(userObj, sessionData.session.access_token);
-          navigate('/');
+          const finalPhoto = getEffectiveReporterPhoto(googleEmail, [avatarUrl, userObj?.user_metadata?.avatar_url, userObj?.user_metadata?.picture]);
+          if (finalPhoto && googleEmail) {
+            userObj.avatarUrl = finalPhoto;
+            saveReporterPhoto(googleEmail, finalPhoto);
+          }
+
+          if (selectedState || selectedDistrict) {
+            try {
+              await supabase.from('profiles').update({
+                state: selectedState,
+                district: selectedDistrict
+              }).eq('id', userObj.id);
+            } catch {}
+          }
+
+          // Direct new user to create a password for their account
+          navigate('/create-password', {
+            state: {
+              email: googleEmail,
+              isNewUser: true,
+              message: 'Please create a password for your account to complete registration.'
+            }
+          });
         }
       }
 
@@ -333,7 +350,7 @@ export const SignupScreen = () => {
             <p className="text-[#a0c4dc] text-xs font-medium">
               Already have an account?{' '}
               <Link to="/login" className="text-[#0a2540] font-bold hover:underline transition-colors">
-                Sign In
+                Login
               </Link>
             </p>
           </div>

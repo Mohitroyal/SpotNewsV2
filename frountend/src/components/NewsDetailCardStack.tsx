@@ -98,7 +98,7 @@ export const NewsDetailCardStack: React.FC<NewsDetailCardStackProps> = ({
   }, []);
 
   return (
-    <div className="fixed inset-0 z-40 flex flex-col bg-white h-[100dvh] w-full select-none overflow-hidden">
+    <div className="fixed inset-0 z-[9999] flex flex-col bg-white h-[100dvh] w-full select-none overflow-hidden">
       {/* ── 1. FIXED TOP BAR (Always visible, #0A56B3, height 56px + safe-area) ── */}
       <header
         className="flex-shrink-0 bg-[#0A56B3] text-white flex items-center justify-between px-3 z-30 shadow-sm"

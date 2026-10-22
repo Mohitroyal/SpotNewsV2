@@ -15,6 +15,7 @@
     "open:ios": "npx cap open ios"
   },
   "dependencies": {
+    "@capacitor-community/admob": "^6.2.0",
     "@capacitor-community/fcm": "^6.0.1",
     "@capacitor-community/media": "^6.0.0",
     "@capacitor/android": "^6.2.1",

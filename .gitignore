@@ -6,3 +6,13 @@ db.sqlite3
 *.zip
 *.log
 *firebase_service_account*.json
+*.apk
+APK/
+*.pdf
+*.mp4
+*.7z
+*.tar
+pw-browsers/
+temp_pages/
+"frountend (3)/"
+"frountend final/"
