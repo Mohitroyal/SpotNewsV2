@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { ArrowLeft, ThumbsUp, MessageCircle, Share2, Newspaper, FileText, Image as ImageIcon } from 'lucide-react';
-import mastheadLogo from '@/assets/rti_express_logo.png';
+import rtiExpressWatermark from '@/assets/rti_express_watermark.png';
 import { admobService } from '@/services/admob.service';
 import { LocalAdFeedCard } from '@/components/LocalAdFeedCard';
 import type { LocalAd } from '@/types/localAds';
@@ -299,22 +299,12 @@ export const NewsDetailCardStack: React.FC<NewsDetailCardStackProps> = ({
                         </div>
                       </div>
 
-                      <div className="bg-white rounded px-1.5 py-0.5 border border-[#1d70b8] flex items-center justify-center shadow-sm">
-                        <svg viewBox="0 0 100 35" className="h-6 w-auto max-w-[85px]">
-                          <rect x="2" y="2" width="96" height="31" fill="#ffffff" stroke="#1d70b8" strokeWidth="0.8" />
-                          <rect x="3.2" y="3.2" width="93.6" height="28.6" fill="#ffffff" stroke="#1d70b8" strokeWidth="0.3" />
-                          <g transform="translate(6, 5)">
-                            <rect x="0" y="2" width="12" height="18" fill="none" stroke="#1d70b8" strokeWidth="0.8" />
-                            <rect x="3" y="5" width="12" height="18" fill="#ffffff" stroke="#1d70b8" strokeWidth="0.8" />
-                            <circle cx="9" cy="11" r="2.5" fill="#1d70b8" />
-                            <rect x="8.2" y="11" width="1.6" height="7" fill="#1d70b8" />
-                          </g>
-                          <text x="25" y="16" fontSize="12" fontWeight="bold" fill="#1d70b8" fontFamily="serif">RTI</text>
-                          <text x="25" y="26" fontSize="10.5" fontWeight="bold" fill="#1d70b8" fontFamily="serif">EXPRESS</text>
-                          <line x1="25" y1="29" x2="45" y2="29" stroke="#1d70b8" strokeWidth="0.3" />
-                          <text x="58" y="30.5" fontSize="3" fontStyle="italic" fontWeight="bold" fill="#1d70b8" textAnchor="middle" fontFamily="serif">Right to News</text>
-                          <line x1="71" y1="29" x2="92" y2="29" stroke="#1d70b8" strokeWidth="0.3" />
-                        </svg>
+                      <div className="flex items-center justify-center shadow-sm">
+                        <img
+                          src={rtiExpressWatermark}
+                          alt="RTI Express"
+                          className="h-6 w-auto max-w-[85px] object-contain rounded"
+                        />
                       </div>
                     </div>
                   </div>
