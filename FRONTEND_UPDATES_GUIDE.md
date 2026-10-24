@@ -13,9 +13,11 @@ This document records **all customizations, bug fixes, and feature updates** app
    - [3.1 Disable Canvas Footer Band Stamping](#31-disable-canvas-footer-band-stamping)
    - [3.2 Share Untouched Clipping Image](#32-share-untouched-clipping-image)
    - [3.3 Download Pure JPG Without Extra Card](#33-download-pure-jpg-without-extra-card)
-4. [Video Clipping Support](#4-video-clipping-support)
+4. [Sharing & Media Fixes](#4-sharing--media-fixes)
    - [4.1 Video Player in Detail & Feed](#41-video-player-in-detail--feed)
    - [4.2 Video Direct-to-App Sharing](#42-video-direct-to-app-sharing)
+   - [4.3 Clipping & Image Direct Sharing Fix](#43-clipping--image-sharing-fix-savetocache)
+   - [4.4 News Reader Share & Comment Layering Fix](#44-news-reader-share--comment-layering-fix)
 5. [Deep Links & Routing](#5-deep-links--routing)
 6. [Android APK Build Commands](#6-android-apk-build-commands)
 
@@ -28,6 +30,8 @@ When migrating to a new frontend:
 - [ ] Replace any crude placeholder vector SVG in the author strip with the crisp official asset: `rti_express_watermark.png`.
 - [ ] Ensure `stampClipping.ts` does NOT append an extra canvas footer card (which ruins clipping height, aspect ratio, and adds unwanted duplicate QR codes).
 - [ ] Verify `PreviewScreen.tsx` downloads `generation.png_url` directly.
+- [ ] Ensure `saveToCache()` in `src/features/share/shareImage.ts` supports remote `http`/`https` URLs via `Filesystem.downloadFile()` rather than assuming base64 Data URLs.
+- [ ] Ensure `<NewsDetailCardStack>` in `src/screens/FeedScreen.tsx` is rendered **before** modal overlays (`<ShareAfterClipping>` and `<Comments>`), and `.ss-backdrop` in `shareSheet.css` has `z-index: 99999 !important;`.
 - [ ] Check that `tsc -b` compiles cleanly without unused variable errors (`noUnusedLocals`).
 
 ---
@@ -186,6 +190,19 @@ const clipping = post.clippingUrl || "";
   - `TargetSharePlugin.java`: Added WhatsApp Business (`com.whatsapp.w4b`) auto-detection and safe `content://` / `file://` resolution.
   - `AndroidManifest.xml`: Added social packages (`com.whatsapp`, `com.whatsapp.w4b`, `com.instagram.android`, `com.facebook.katana`, `com.twitter.android`) to `<queries>`.
 
+
+### 4.4 News Reader Share & Comment Layering Fix
+- **Files**:
+  - `src/screens/FeedScreen.tsx`
+  - `src/features/share/shareSheet.css`
+  - `src/components/NewsDetailCardStack.tsx`
+- **Issue**:
+  - Inside the news card reader (`NewsDetailCardStack`, `z-[9999]`), tapping the bottom blue Share button opened the share sheet `<ShareAfterClipping>` behind the reader view because `<NewsDetailCardStack>` was placed later in the React render tree.
+  - The circular Share button's click boundary did not include the "SHARE" text label beneath it.
+- **Fix**:
+  - In `FeedScreen.tsx`: Render `<NewsDetailCardStack>` **before** the modal components (`<Comments>` and `<ShareAfterClipping>`).
+  - In `shareSheet.css`: Set `.ss-backdrop { z-index: 99999 !important; }` so the share sheet always displays on top of any active screen.
+  - In `NewsDetailCardStack.tsx`: Wrapped the circular button and the "SHARE" label inside a shared clickable container so clicking anywhere in the center share button triggers the share sheet.
 
 ---
 
