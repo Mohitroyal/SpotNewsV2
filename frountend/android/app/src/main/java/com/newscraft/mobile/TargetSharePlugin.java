@@ -36,19 +36,35 @@ public class TargetSharePlugin extends Plugin {
         String text = call.getString("text", "");
         String mime = call.getString("mime", "image/*");
 
-        Uri parsed = Uri.parse(fileUri);
-        String path = parsed.getPath();
-        File file = (path != null) ? new File(path) : new File(fileUri);
-        if (!file.exists() && fileUri.startsWith("file://")) {
-            file = new File(fileUri.substring(7));
+        if ("com.whatsapp".equals(pkg)) {
+            try {
+                getContext().getPackageManager().getPackageInfo("com.whatsapp", 0);
+            } catch (Exception e1) {
+                try {
+                    getContext().getPackageManager().getPackageInfo("com.whatsapp.w4b", 0);
+                    pkg = "com.whatsapp.w4b";
+                } catch (Exception ignored) {
+                }
+            }
         }
 
         try {
-            Uri contentUri = FileProvider.getUriForFile(
-                getContext(),
-                getContext().getPackageName() + ".fileprovider",
-                file
-            );
+            Uri contentUri;
+            if (fileUri.startsWith("content://")) {
+                contentUri = Uri.parse(fileUri);
+            } else {
+                Uri parsed = Uri.parse(fileUri);
+                String path = parsed.getPath();
+                File file = (path != null) ? new File(path) : new File(fileUri);
+                if (!file.exists() && fileUri.startsWith("file://")) {
+                    file = new File(fileUri.substring(7));
+                }
+                contentUri = FileProvider.getUriForFile(
+                    getContext(),
+                    getContext().getPackageName() + ".fileprovider",
+                    file
+                );
+            }
 
             Intent intent = new Intent(Intent.ACTION_SEND);
             intent.setType(mime);

@@ -113,8 +113,11 @@ export function ShareAfterClipping(props: {
     }
 
     // 2. Image share (clipping image / reporter card / story card)
-    const dataUrl = images[tab] || post.clippingUrl;
-    if (!dataUrl) return;
+    const dataUrl = images[tab] || (tab === "clipping" ? post.clippingUrl : undefined);
+    if (!dataUrl) {
+      alert("కార్డ్ ఇంకా సిద్ధమవుతోంది, దయచేసి ఒక్క క్షణం ఆగండి");
+      return;
+    }
     setBusy(true);
     setStatusMsg("కార్డ్ సిద్ధమవుతోంది...");
     try {
@@ -128,6 +131,7 @@ export function ShareAfterClipping(props: {
       });
     } catch (err: any) {
       console.error("Image share error:", err);
+      alert(`షేర్ విఫలమైంది: ${err?.message || err}`);
     } finally {
       setBusy(false);
       setStatusMsg("");

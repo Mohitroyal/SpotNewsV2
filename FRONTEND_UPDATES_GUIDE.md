@@ -178,6 +178,15 @@ const clipping = post.clippingUrl || "";
 - **File**: `src/features/share/shareImage.ts`
 - Added `shareVideo()` function to save video to native cache via `@capacitor/filesystem` and share directly to WhatsApp (`com.whatsapp`) via `TargetShare` or system share sheet.
 
+### 4.3 Clipping & Image Sharing Fix (`saveToCache`)
+- **File**: `src/features/share/shareImage.ts`
+- **Issue**: `saveToCache()` previously assumed `dataUrl` was always a base64 Data URL and did `dataUrl.split(",")[1]`. When sharing clippings directly, `post.clippingUrl` is an HTTPS URL, which caused `dataUrl.split(",")[1]` to evaluate to `undefined` and throw an unhandled error inside `Filesystem.writeFile`, silently failing the share.
+- **Fix**: Updated `saveToCache()` to detect `http://` / `https://` URLs, download via `Filesystem.downloadFile()` (with fallback to `fetch -> blob -> FileReader base64 -> Filesystem.writeFile`), and return the cache `file://` URI.
+- **Native Android Enhancement**:
+  - `TargetSharePlugin.java`: Added WhatsApp Business (`com.whatsapp.w4b`) auto-detection and safe `content://` / `file://` resolution.
+  - `AndroidManifest.xml`: Added social packages (`com.whatsapp`, `com.whatsapp.w4b`, `com.instagram.android`, `com.facebook.katana`, `com.twitter.android`) to `<queries>`.
+
+
 ---
 
 ## 5. Deep Links & Routing

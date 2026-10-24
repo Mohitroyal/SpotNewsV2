@@ -30,12 +30,56 @@ export async function nodeToImage(node: HTMLElement) {
 }
 
 async function saveToCache(dataUrl: string, name: string) {
-  const { uri } = await Filesystem.writeFile({
+  let base64 = "";
+  if (dataUrl.startsWith("http://") || dataUrl.startsWith("https://")) {
+    try {
+      const dlResult = await Filesystem.downloadFile({
+        url: dataUrl,
+        path: name,
+        directory: Directory.Cache,
+      });
+      try {
+        const uriResult = await Filesystem.getUri({
+          directory: Directory.Cache,
+          path: name,
+        });
+        return uriResult.uri;
+      } catch {
+        return dlResult.path || "";
+      }
+    } catch (dlErr) {
+      console.warn("downloadFile failed, fallback to fetch blob:", dlErr);
+      const res = await fetch(dataUrl);
+      const blob = await res.blob();
+      base64 = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onloadend = () => {
+          const result = reader.result as string;
+          resolve(result.includes(",") ? result.split(",")[1] : result);
+        };
+        reader.onerror = reject;
+        reader.readAsDataURL(blob);
+      });
+    }
+  } else {
+    base64 = dataUrl.includes(",") ? dataUrl.split(",")[1] : dataUrl;
+  }
+
+  const writeRes = await Filesystem.writeFile({
     path: name,
-    data: dataUrl.split(",")[1],
+    data: base64,
     directory: Directory.Cache,
   });
-  return uri;
+
+  try {
+    const uriResult = await Filesystem.getUri({
+      directory: Directory.Cache,
+      path: name,
+    });
+    return uriResult.uri;
+  } catch {
+    return writeRes.uri;
+  }
 }
 
 export async function shareImage(o: {
