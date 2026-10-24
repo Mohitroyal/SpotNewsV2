@@ -65,14 +65,7 @@ export function ShareAfterClipping(props: {
           }
         }
 
-        let clipping = "";
-        if (post.clippingUrl) {
-          try {
-            clipping = await stampClipping(post.clippingUrl, link);
-          } catch {
-            clipping = post.clippingUrl;
-          }
-        }
+        const clipping = post.clippingUrl || "";
 
         if (cancelled) return;
         await new Promise((r) => setTimeout(r, 350)); // let the QR inside the cards render

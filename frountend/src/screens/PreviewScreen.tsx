@@ -220,15 +220,7 @@ export const PreviewScreen = () => {
         blob = await res.blob();
       } else if (format === 'jpg') {
         if (!generation.png_url) throw new Error("JPG URL not available");
-        let downloadSrc = generation.png_url;
-        try {
-          const reporterSlug = (generation.config?.reporterName || 'reporter').toLowerCase().replace(/\s+/g, '-');
-          const link = newsLink(generation.id, reporterSlug);
-          downloadSrc = await stampClipping(generation.png_url, link);
-        } catch (stampErr) {
-          console.warn("Could not stamp clipping, proceeding with raw image:", stampErr);
-        }
-        const res = await fetch(downloadSrc);
+        const res = await fetch(generation.png_url);
         blob = await res.blob();
       } else {
         if (generation.pdf_url) {
