@@ -366,7 +366,13 @@ export const NewsDetailCardStack: React.FC<NewsDetailCardStackProps> = ({
                 </div>
 
                 {/* Center: Raised Circular SHARE button (56x56, #0A56B3, margin-top -24px) */}
-                <div className="absolute left-1/2 -translate-x-1/2 -top-[24px] flex flex-col items-center z-30">
+                <div
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onShare(item);
+                  }}
+                  className="absolute left-1/2 -translate-x-1/2 -top-[24px] flex flex-col items-center z-30 cursor-pointer"
+                >
                   <button
                     onClick={(e) => {
                       e.stopPropagation();

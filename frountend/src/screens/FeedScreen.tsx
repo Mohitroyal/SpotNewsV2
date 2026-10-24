@@ -492,10 +492,28 @@ export const FeedScreen: React.FC = () => {
         )}
       </div>
 
+      {/* ── Full Screen News Detail Pager (Covers top & bottom marked areas) ── */}
+      {activeDetailIndex !== null && (
+        <NewsDetailCardStack
+          items={clippings}
+          initialIndex={activeDetailIndex}
+          onBack={() => {
+            setActiveDetailIndex(null);
+            setIsFullScreenFeed(false);
+          }}
+          onLike={handleLike}
+          likedIds={likedIds}
+          onComment={openComments}
+          onShare={handleShareClick}
+          onEndReached={fetchFeed}
+          localAds={localAds}
+        />
+      )}
+
       {/* ── Comments Bottom Sheet ─────────────────────────────────────────── */}
       {commentOpen && (
         <div
-          className="fixed inset-0 z-50 flex flex-col justify-end"
+          className="fixed inset-0 z-[99999] flex flex-col justify-end"
           style={{ background: 'rgba(0,0,0,0.55)' }}
           onClick={() => setCommentOpen(null)}
         >
@@ -564,7 +582,7 @@ export const FeedScreen: React.FC = () => {
       {/* ── Weather Advisory Modal Sheet ──────────────────────────────── */}
       {showWeatherModal && advisory && (
         <div
-          className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-end justify-center p-0 sm:p-4"
+          className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[99999] flex items-end justify-center p-0 sm:p-4"
           onClick={() => setShowWeatherModal(false)}
         >
           <div
@@ -606,24 +624,6 @@ export const FeedScreen: React.FC = () => {
             photoUrl: user?.avatarUrl,
           }}
           onClose={() => setShareSheetOpen(null)}
-        />
-      )}
-
-      {/* ── Full Screen News Detail Pager (Covers top & bottom marked areas) ── */}
-      {activeDetailIndex !== null && (
-        <NewsDetailCardStack
-          items={clippings}
-          initialIndex={activeDetailIndex}
-          onBack={() => {
-            setActiveDetailIndex(null);
-            setIsFullScreenFeed(false);
-          }}
-          onLike={handleLike}
-          likedIds={likedIds}
-          onComment={openComments}
-          onShare={handleShareClick}
-          onEndReached={fetchFeed}
-          localAds={localAds}
         />
       )}
     </div>
