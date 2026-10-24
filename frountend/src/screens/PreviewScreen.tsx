@@ -7,9 +7,7 @@ import api from '@/lib/axios';
 import { useState, useEffect, useRef } from 'react';
 import { Capacitor } from '@capacitor/core';
 import { Filesystem, Directory } from '@capacitor/filesystem';
-import { stampClipping } from '@/features/share/stampClipping';
 import { ShareAfterClipping } from '@/features/share/ShareAfterClipping';
-import { newsLink } from '@/features/share/links';
 
 // ─── Stage → Progress mapping ───────────────────────────────────────────────
 const STAGE_PROGRESS: Record<string, number> = {

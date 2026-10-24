@@ -3,7 +3,6 @@
 import { useEffect, useRef, useState } from "react";
 import { ReporterCard, type ReporterCardData } from "./ReporterCard";
 import { nodeToImage, shareImage, shareVideo, captureVideoFrame, type Channel } from "./shareImage";
-import { stampClipping } from "./stampClipping";
 import { newsLink, shareCaption } from "./links";
 import "./shareSheet.css";
 
