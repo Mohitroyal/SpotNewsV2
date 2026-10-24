@@ -21,7 +21,9 @@
             align-items: flex-start;
         }
         .newspaper-container {
-            width: 540px;
+            width: 540px !important;
+            max-width: 540px !important;
+            min-width: 540px !important;
             background: #FFFFFF;
             margin: 0 auto;
             overflow: hidden;
@@ -287,7 +289,7 @@
                 </div>
             {% else %}
                 {% set img_src = image_urls[0] if (image_urls and image_urls|length > 0) else image_url %}
-                <img class="hero-img" src="{{ img_src }}" alt="Hero Image" onload="applyDynamicWidth()" />
+                <img class="hero-img" src="{{ img_src }}" alt="Hero Image" />
             {% endif %}
             
             
@@ -395,31 +397,16 @@
 
     <script>
         function applyDynamicWidth() {
-            const heroImg = document.querySelector('.hero-img');
-            if (!heroImg) return;
-            const naturalW = heroImg.naturalWidth;
-            const naturalH = heroImg.naturalHeight;
-            if (naturalH > 0 && naturalW > 0) {
-                const aspectRatio = naturalW / naturalH;
-                const baseHeight = 480;
-                const defaultWidth = 540;
-                const defaultAspect = defaultWidth / baseHeight; // 1.125
-                
-                // When image width increases beyond the default limit width ratio (1.125):
-                // Instead of chopping the original image, increase the width of the clipping dynamically
-                if (aspectRatio > defaultAspect) {
-                    const dynamicWidth = Math.max(defaultWidth, Math.round(baseHeight * aspectRatio));
-                    const container = document.querySelector('.newspaper-container');
-                    if (container) {
-                        container.style.setProperty('width', dynamicWidth + 'px', 'important');
-                        container.style.setProperty('max-width', dynamicWidth + 'px', 'important');
-                        container.style.setProperty('min-width', dynamicWidth + 'px', 'important');
-                    }
-                    const wrapper = document.querySelector('.hero-image-wrapper');
-                    if (wrapper) {
-                        wrapper.style.setProperty('height', baseHeight + 'px', 'important');
-                    }
-                }
+            // Strictly enforce standard 540px width - NEVER widen container on landscape/wide images
+            const container = document.querySelector('.newspaper-container');
+            if (container) {
+                container.style.setProperty('width', '540px', 'important');
+                container.style.setProperty('max-width', '540px', 'important');
+                container.style.setProperty('min-width', '540px', 'important');
+            }
+            const wrapper = document.querySelector('.hero-image-wrapper');
+            if (wrapper) {
+                wrapper.style.setProperty('height', '480px', 'important');
             }
         }
 

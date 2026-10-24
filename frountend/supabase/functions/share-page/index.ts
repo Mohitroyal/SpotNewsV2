@@ -7,7 +7,8 @@ const db = createClient(
   Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || Deno.env.get("SUPABASE_ANON_KEY")!
 );
 const PACKAGE = "com.newscraft.mobile";
-const FALLBACK_DOMAIN = "https://news-frount.vercel.app";
+const FALLBACK_DOMAIN = "https://rtiexpressnews.godaddysites.com";
+const PLAY_STORE_URL = "https://play.google.com/store/apps/details?id=com.newscraft.mobile";
 
 Deno.serve(async (req) => {
   const u = new URL(req.url);
@@ -23,13 +24,13 @@ Deno.serve(async (req) => {
     opened_in: "web"
   }).then(() => {});
 
-  const fallbackUrl = `${FALLBACK_DOMAIN}/preview/${id}`;
+  const fallbackUrl = `${FALLBACK_DOMAIN}/?clipId=${id}`;
   const userAgent = req.headers.get("user-agent") || "";
   const isAndroid = /Android/i.test(userAgent);
 
   if (isAndroid) {
-    // Direct Android Intent to open the Spot News feed directly
-    const intentUrl = `intent://feed?clipId=${id}#Intent;scheme=spotnews;package=${PACKAGE};S.browser_fallback_url=${encodeURIComponent(fallbackUrl)};end`;
+    // Direct Android Intent to open the Spot News feed directly; fall back to Play Store if not installed
+    const intentUrl = `intent://feed?clipId=${id}#Intent;scheme=spotnews;package=${PACKAGE};S.browser_fallback_url=${encodeURIComponent(PLAY_STORE_URL)};end`;
     return new Response(null, {
       status: 302,
       headers: {
@@ -39,6 +40,6 @@ Deno.serve(async (req) => {
     });
   }
 
-  // Desktop / iOS: redirect to Web preview
+  // Desktop / iOS: redirect to GoDaddy site with clipId
   return Response.redirect(fallbackUrl, 302);
 });

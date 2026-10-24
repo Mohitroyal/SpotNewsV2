@@ -35,9 +35,9 @@ export async function stampClipping(clippingSrc: string, link: string, logoSrc =
   g.fillStyle = "#ffffff"; g.font = `900 ${fs}px "Noto Sans Telugu", sans-serif`;
   g.fillText("పూర్తి వార్త, మరిన్ని లోకల్ వార్తలు — యాప్‌లో చదవండి", tx, y0 + pad, W - tx - pad * 6);
   g.fillStyle = "#ffd43b"; g.font = `800 ${Math.round(fs * 0.9)}px "Noto Sans Telugu", sans-serif`;
-  g.fillText(`🔗 ${shortLink(link)}`, tx, y0 + pad + fs * 1.6);
+  g.fillText(`🔗 ${shortLink(link)}`, tx, y0 + pad + fs * 1.6, W - tx - pad * 6);
   g.fillStyle = "rgba(255,255,255,.9)"; g.font = `700 ${Math.round(fs * 0.68)}px "Noto Sans Telugu", sans-serif`;
-  g.fillText("Spot News 24x7 · QR స్కాన్ చేయండి · త్వరలో Google Play లో", tx, y0 + pad + fs * 3.0);
+  g.fillText("Spot News 24x7 · QR స్కాన్ చేయండి · Google Play లో లభ్యం", tx, y0 + pad + fs * 3.0, W - tx - pad * 6);
 
   // logo on the right
   try {

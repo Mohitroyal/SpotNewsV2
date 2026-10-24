@@ -1,0 +1,364 @@
+<!-- =========================================================================
+  RTI Express Spot News 24x7 - GoDaddy Smart Deep Link & App Redirect Script
+  Domain: https://rtiexpressnews.godaddysites.com/
+  Play Store: https://play.google.com/store/apps/details?id=com.newscraft.mobile
+  Package: com.newscraft.mobile
+========================================================================= -->
+
+<style>
+  /* Spot News 24x7 Modal & Card Styles */
+  #spotnews-share-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 9999999;
+    background: rgba(10, 18, 30, 0.88);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 16px;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    color: #ffffff;
+    box-sizing: border-box;
+    animation: spotnewsFadeIn 0.3s ease-out;
+  }
+
+  @keyframes spotnewsFadeIn {
+    from { opacity: 0; transform: scale(0.96); }
+    to { opacity: 1; transform: scale(1); }
+  }
+
+  .spotnews-modal-card {
+    background: linear-gradient(145deg, #132238 0%, #0b1523 100%);
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    border-radius: 20px;
+    box-shadow: 0 24px 60px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.08);
+    width: 100%;
+    max-width: 440px;
+    overflow: hidden;
+    position: relative;
+    text-align: center;
+    padding: 24px 20px 20px;
+  }
+
+  .spotnews-close-btn {
+    position: absolute;
+    top: 14px;
+    right: 14px;
+    background: rgba(255, 255, 255, 0.12);
+    border: none;
+    color: #ffffff;
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    cursor: pointer;
+    font-size: 16px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.2s;
+  }
+  .spotnews-close-btn:hover {
+    background: rgba(255, 255, 255, 0.25);
+  }
+
+  .spotnews-brand-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    background: rgba(18, 90, 177, 0.25);
+    border: 1px solid rgba(20, 90, 177, 0.45);
+    color: #4da3ff;
+    padding: 6px 14px;
+    border-radius: 999px;
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+    margin-bottom: 14px;
+  }
+
+  .spotnews-headline {
+    font-size: 19px;
+    font-weight: 800;
+    line-height: 1.45;
+    color: #ffffff;
+    margin: 0 0 10px;
+    word-break: break-word;
+  }
+
+  .spotnews-subtext {
+    font-size: 13.5px;
+    color: #a0aec0;
+    line-height: 1.5;
+    margin: 0 0 16px;
+  }
+
+  .spotnews-preview-box {
+    margin: 0 auto 16px;
+    max-height: 220px;
+    border-radius: 12px;
+    overflow: hidden;
+    background: #050b14;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    display: none;
+  }
+  .spotnews-preview-box img {
+    width: 100%;
+    height: 100%;
+    max-height: 220px;
+    object-fit: contain;
+    display: block;
+  }
+
+  .spotnews-countdown-strip {
+    font-size: 12px;
+    color: #ffd43b;
+    font-weight: 600;
+    margin-bottom: 14px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+  }
+
+  .spotnews-actions {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .spotnews-btn-playstore {
+    background: linear-gradient(135deg, #00875a 0%, #006644 100%);
+    color: #ffffff !important;
+    text-decoration: none;
+    font-weight: 700;
+    font-size: 15px;
+    padding: 13px 20px;
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    box-shadow: 0 4px 14px rgba(0, 135, 90, 0.4);
+    transition: transform 0.15s, box-shadow 0.15s;
+    cursor: pointer;
+    border: none;
+  }
+  .spotnews-btn-playstore:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 6px 20px rgba(0, 135, 90, 0.55);
+  }
+
+  .spotnews-btn-app {
+    background: #145ab1;
+    color: #ffffff !important;
+    text-decoration: none;
+    font-weight: 700;
+    font-size: 14px;
+    padding: 11px 20px;
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    border: none;
+    cursor: pointer;
+    transition: background 0.15s;
+  }
+  .spotnews-btn-app:hover {
+    background: #0f4b94;
+  }
+
+  .spotnews-footer-note {
+    font-size: 11.5px;
+    color: #718096;
+    margin-top: 14px;
+  }
+</style>
+
+<div id="spotnews-share-overlay" style="display: none;">
+  <div class="spotnews-modal-card">
+    <button class="spotnews-close-btn" id="spotnews-close-btn" title="Close">✕</button>
+    
+    <div class="spotnews-brand-badge">
+      ⚡ RTI Express Spot News 24x7
+    </div>
+
+    <h2 class="spotnews-headline" id="spotnews-title">
+      పూర్తి వార్త &amp; క్లిప్పింగ్ యాప్‌లో తెరవండి
+    </h2>
+
+    <p class="spotnews-subtext">
+      ఈ వార్తను పూర్తి స్పష్టతతో చదవడానికి మరియు మరిన్ని తాజా లోకల్ అప్‌డేట్స్ కోసం మా అధికారిక యాప్‌ను డౌన్‌లోడ్ చేసుకోండి!
+    </p>
+
+    <div class="spotnews-preview-box" id="spotnews-preview-box">
+      <img id="spotnews-preview-img" src="" alt="News Clipping Preview" />
+    </div>
+
+    <div class="spotnews-countdown-strip" id="spotnews-countdown-strip">
+      ⏳ 3 సెకన్లలో గూగుల్ ప్లే స్టోర్‌కి రిడైరెక్ట్ అవుతోంది...
+    </div>
+
+    <div class="spotnews-actions">
+      <!-- 1. Google Play Store Download Button -->
+      <a href="https://play.google.com/store/apps/details?id=com.newscraft.mobile" 
+         id="spotnews-playstore-btn" 
+         class="spotnews-btn-playstore"
+         target="_blank" 
+         rel="noopener">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor">
+          <path d="M3.609 1.814L13.792 12 3.61 22.186a1.986 1.986 0 0 1-.22-.924V2.738c0-.34.08-.655.22-.924zm11.236 11.236l2.383-2.383-12.01-6.934 9.627 9.317zm0 1.898L5.218 24.265l12.01-6.934-2.383-2.383zm1.053-1.052l3.24-1.871c1.149-.664 1.149-1.748 0-2.412l-3.24-1.871-2.122 2.122 2.122 2.122z"/>
+        </svg>
+        Google Play నుండి డౌన్‌లోడ్ చేసుకోండి
+      </a>
+
+      <!-- 2. Open directly in installed app -->
+      <a href="spotnews://feed" id="spotnews-openapp-btn" class="spotnews-btn-app">
+        🚀 యాప్‌లో తెరవండి (Open in App)
+      </a>
+    </div>
+
+    <div class="spotnews-footer-note">
+      యాప్ ఇప్పటికే మీ ఫోన్‌లో ఉంటే "యాప్‌లో తెరవండి" పై క్లిక్ చేయండి.
+    </div>
+  </div>
+</div>
+
+<script>
+(function() {
+  var PACKAGE_NAME = "com.newscraft.mobile";
+  var PLAY_STORE_URL = "https://play.google.com/store/apps/details?id=" + PACKAGE_NAME;
+  
+  // Extract clipId from URL: ?clipId=123 or ?id=123 or ?n=123
+  var params = new URLSearchParams(window.location.search);
+  var clipId = params.get("clipId") || params.get("id") || params.get("n");
+
+  // Check parent window search params if running inside GoDaddy iframe
+  if (!clipId && window.parent && window.parent !== window) {
+    try {
+      var parentParams = new URLSearchParams(window.parent.location.search);
+      clipId = parentParams.get("clipId") || parentParams.get("id") || parentParams.get("n");
+    } catch(e) {}
+  }
+  // Check document referrer if parent was blocked
+  if (!clipId && document.referrer) {
+    try {
+      var refUrl = new URL(document.referrer);
+      clipId = refUrl.searchParams.get("clipId") || refUrl.searchParams.get("id") || refUrl.searchParams.get("n");
+    } catch(e) {}
+  }
+
+  // Only activate if clipId exists
+  if (!clipId) return;
+
+  var overlay = document.getElementById("spotnews-share-overlay");
+  var playBtn = document.getElementById("spotnews-playstore-btn");
+  var openAppBtn = document.getElementById("spotnews-openapp-btn");
+  var closeBtn = document.getElementById("spotnews-close-btn");
+  var titleEl = document.getElementById("spotnews-title");
+  var previewBox = document.getElementById("spotnews-preview-box");
+  var previewImg = document.getElementById("spotnews-preview-img");
+  var countdownEl = document.getElementById("spotnews-countdown-strip");
+
+  // Build intent and scheme URLs
+  var schemeUrl = "spotnews://feed?clipId=" + encodeURIComponent(clipId);
+  var intentUrl = "intent://feed?clipId=" + encodeURIComponent(clipId) + 
+                  "#Intent;scheme=spotnews;package=" + PACKAGE_NAME + 
+                  ";S.browser_fallback_url=" + encodeURIComponent(PLAY_STORE_URL) + ";end";
+
+  function redirectIntent() {
+    try {
+      if (window.top && window.top !== window) {
+        window.top.location.href = intentUrl;
+        return;
+      }
+    } catch(e) {}
+    window.location.href = intentUrl;
+  }
+
+  if (openAppBtn) openAppBtn.href = schemeUrl;
+  if (playBtn) playBtn.href = PLAY_STORE_URL;
+
+  // Show the modal card
+  if (overlay) overlay.style.display = "flex";
+
+  // Check if mobile device
+  var ua = navigator.userAgent || navigator.vendor || window.opera || "";
+  var isAndroid = /Android/i.test(ua);
+  var isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(ua);
+
+  // Auto launch app on Android via Intent
+  if (isAndroid) {
+    try {
+      redirectIntent();
+    } catch(e) {}
+  }
+
+  // Fetch headline and image preview from Supabase
+  try {
+    var supabaseUrl = "https://rffrqokpnqoycpozrjuc.supabase.co/rest/v1/clippings?id=eq." + encodeURIComponent(clipId) + "&select=headline,png_url";
+    var apiKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJmZnJxb2twbnFveWNwb3pyanVjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg5NDE4MjUsImV4cCI6MjA5NDUxNzgyNX0.9BcRAPuhoK1C6SMeUvexABXp5HW2dfEJbdcRT_2FiL4";
+
+    fetch(supabaseUrl, {
+      headers: {
+        "apikey": apiKey,
+        "Authorization": "Bearer " + apiKey
+      }
+    })
+    .then(function(res) { return res.json(); })
+    .then(function(data) {
+      if (data && data.length > 0) {
+        var clip = data[0];
+        if (clip.headline && titleEl) {
+          titleEl.textContent = clip.headline;
+        }
+        if (clip.png_url && previewBox && previewImg) {
+          previewImg.src = clip.png_url;
+          previewBox.style.display = "block";
+        }
+      }
+    })
+    .catch(function(err) {});
+  } catch(e) {}
+
+  // 3-second countdown to Google Play Store redirect
+  var secondsLeft = 3;
+  var countdownTimer = setInterval(function() {
+    secondsLeft--;
+    if (countdownEl) {
+      countdownEl.textContent = "⏳ " + secondsLeft + " సెకన్లలో గూగుల్ ప్లే స్టోర్‌కి రిడైరెక్ట్ అవుతోంది...";
+    }
+    if (secondsLeft <= 0) {
+      clearInterval(countdownTimer);
+      if (countdownEl) countdownEl.style.display = "none";
+      // Redirect to Play Store
+      if (isMobile) {
+        window.location.href = PLAY_STORE_URL;
+      }
+    }
+  }, 1000);
+
+  // User click on open app
+  if (openAppBtn) {
+    openAppBtn.addEventListener("click", function(e) {
+      clearInterval(countdownTimer);
+      if (countdownEl) countdownEl.style.display = "none";
+      if (isAndroid) {
+        e.preventDefault();
+        redirectIntent();
+      }
+    });
+  }
+
+  // Close overlay button
+  if (closeBtn) {
+    closeBtn.addEventListener("click", function() {
+      clearInterval(countdownTimer);
+      if (overlay) overlay.style.display = "none";
+    });
+  }
+})();
+</script>

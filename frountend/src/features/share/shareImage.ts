@@ -231,7 +231,15 @@ export async function shareVideo(o: {
       path: fileName,
       directory: Directory.Cache,
     });
-    fileUri = dlResult.path || "";
+    try {
+      const uriResult = await Filesystem.getUri({
+        directory: Directory.Cache,
+        path: fileName,
+      });
+      fileUri = uriResult.uri;
+    } catch {
+      fileUri = dlResult.path || "";
+    }
   } catch (dlErr) {
     console.warn("Filesystem.downloadFile failed, fallback to fetch blob:", dlErr);
     const res = await fetch(o.videoUrl);
@@ -252,6 +260,10 @@ export async function shareVideo(o: {
       directory: Directory.Cache,
     });
     fileUri = writeRes.uri;
+  }
+
+  if (fileUri && !fileUri.startsWith("file://")) {
+    fileUri = `file://${fileUri}`;
   }
 
   if (!fileUri) {

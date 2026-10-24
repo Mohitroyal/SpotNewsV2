@@ -279,12 +279,16 @@ const MainLayout = ({ children }: { children: React.ReactNode }) => {
 
 import { GoogleAuth } from '@codetrix-studio/capacitor-google-auth';
 import { initPush } from './lib/push';
+import { initDeepLinks } from './lib/deepLinks';
 
 function AppUrlListener() {
   const navigate = useNavigate();
   const user = useAuthStore((state) => state.user);
 
   useEffect(() => {
+    // 1. Initialize custom URL and intent deep linking
+    const cleanupDeepLinks = initDeepLinks(navigate);
+
     const handleUrlOpen = (ev: Event) => {
       const customEv = ev as CustomEvent;
       const type = customEv.detail?.type;
@@ -312,6 +316,7 @@ function AppUrlListener() {
 
     return () => {
       window.removeEventListener('appUrlOpenRoute', handleUrlOpen);
+      if (typeof cleanupDeepLinks === 'function') cleanupDeepLinks();
     };
   }, [navigate, user?.id]);
 

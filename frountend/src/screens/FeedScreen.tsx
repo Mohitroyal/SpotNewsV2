@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { Newspaper, MapPin, RefreshCw, X, Send, Share2 } from 'lucide-react';
 import { useAuthStore, useUIStore } from '@/store';
 import { supabase } from '@/lib/supabase';
@@ -21,6 +22,8 @@ interface Comment {
 }
 
 export const FeedScreen: React.FC = () => {
+  const [searchParams] = useSearchParams();
+  const targetClipId = searchParams.get('clipId') || searchParams.get('id');
   const { user } = useAuthStore();
   const district = useAuthStore((state) => state.district) || '';
   const userState = useAuthStore((state) => state.userState) || '';
@@ -88,9 +91,33 @@ export const FeedScreen: React.FC = () => {
       if (error) throw error;
 
       // Only display clippings that are posted and explicitly approved (not pending or rejected)
-      const postedClippings = (data || []).filter(
+      let postedClippings = (data || []).filter(
         (c) => c.is_posted === true && c.status !== 'pending_approval' && c.status !== 'rejected'
       );
+
+      // Deep link support: If clipId query param is present, prioritize or fetch that clipping
+      const urlParams = new URLSearchParams(window.location.search);
+      const targetClipId = urlParams.get('clipId') || urlParams.get('id');
+      if (targetClipId) {
+        const found = postedClippings.find((c) => String(c.id) === String(targetClipId));
+        if (found) {
+          postedClippings = [found, ...postedClippings.filter((c) => String(c.id) !== String(targetClipId))];
+        } else {
+          try {
+            const { data: directClip } = await supabase
+              .from('clippings')
+              .select('*')
+              .eq('id', targetClipId)
+              .maybeSingle();
+            if (directClip) {
+              postedClippings = [directClip, ...postedClippings];
+            }
+          } catch (e) {
+            console.warn('Could not fetch deep-linked clipping', e);
+          }
+        }
+      }
+
       setClippings(postedClippings);
     } catch (err) {
       console.error('Failed to fetch feed', err);
@@ -240,7 +267,7 @@ export const FeedScreen: React.FC = () => {
       setLocalAds(ads);
     };
     loadAds();
-  }, [district, userState]);
+  }, [district, userState, targetClipId]);
 
   return (
     <div className={`flex flex-col h-[100dvh] bg-black ${!isFullScreenFeed ? 'pb-[60px]' : ''}`}>

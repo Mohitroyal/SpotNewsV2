@@ -1,23 +1,26 @@
 // Opens shared links inside the app.
-// Handles both:
-//   https://rffrqokpnqoycpozrjuc.supabase.co/functions/v1/share-page/n/<id>  →  news story
-//   https://rffrqokpnqoycpozrjuc.supabase.co/functions/v1/share-page/r/<slug>  →  reporter profile
-//   spotnews://n/<id>  →  news story (custom scheme fallback)
+// Handles:
+//   https://rtiexpressnews.godaddysites.com/?clipId=<id>  →  news story
+//   https://rtiexpressnews.godaddysites.com/n/<id>        →  news story
+//   spotnews://feed?clipId=<id>                           →  news story
+//   newscraft://feed?clipId=<id>                          →  news story
 // Logs every open to link_opens table for attribution tracking.
 import { App } from "@capacitor/app";
 import { supabase } from "@/lib/supabase";
 
 export function initDeepLinks(navigate: (path: string) => void) {
-  App.addListener("appUrlOpen", ({ url }) => {
+  const handleUrl = (url: string) => {
     try {
-      // Check query param first (e.g. spotnews://feed?clipId=...)
       let clipId: string | null = null;
-      const paramMatch = url.match(/[?&]clipId=([^&#]+)/);
+
+      // 1. Check query parameter: ?clipId=123, ?id=123, ?n=123
+      const paramMatch = url.match(/[?&](?:clipId|id|n)=([^&#]+)/i);
       if (paramMatch) {
-        clipId = paramMatch[1];
+        clipId = decodeURIComponent(paramMatch[1]);
       } else {
-        const pathMatch = url.match(/(?:spotnews:\/\/|\/)(n|preview)\/([^/?#]+)/i);
-        if (pathMatch) clipId = pathMatch[2];
+        // 2. Check path pattern: /n/123, /preview/123, /clip/123
+        const pathMatch = url.match(/(?:spotnews:\/\/|newscraft:\/\/|\/)(?:n|preview|clip)\/([^/?#]+)/i);
+        if (pathMatch) clipId = decodeURIComponent(pathMatch[1]);
       }
 
       if (clipId) {
@@ -31,10 +34,30 @@ export function initDeepLinks(navigate: (path: string) => void) {
         return;
       }
 
-      const repMatch = url.match(/(?:spotnews:\/\/|\/)r\/([^/?#]+)/i);
-      if (repMatch) {
-        navigate(`/reporter/${repMatch[1]}`);
+      // Reporter profile check
+      const repQueryMatch = url.match(/[?&]reporter=([^&#]+)/i);
+      const repPathMatch = url.match(/(?:spotnews:\/\/|newscraft:\/\/|\/)r\/([^/?#]+)/i);
+      const repSlug = repQueryMatch ? decodeURIComponent(repQueryMatch[1]) : (repPathMatch ? decodeURIComponent(repPathMatch[1]) : null);
+
+      if (repSlug) {
+        navigate(`/reporter/${repSlug}`);
       }
     } catch { /* ignore bad links */ }
+  };
+
+  // 1. Handle runtime incoming URL (when app is already open or backgrounded)
+  const listenerPromise = App.addListener("appUrlOpen", ({ url }) => {
+    handleUrl(url);
   });
+
+  // 2. Handle cold start launch URL (when app was closed and opened directly via link)
+  App.getLaunchUrl().then((launchUrl) => {
+    if (launchUrl && launchUrl.url) {
+      handleUrl(launchUrl.url);
+    }
+  }).catch(() => {});
+
+  return () => {
+    listenerPromise.then((handle) => handle.remove()).catch(() => {});
+  };
 }

@@ -2055,14 +2055,7 @@ class RenderService:
                                 break
                             await asyncio.sleep(0.5)
 
-                        try:
-                            await page.evaluate("""() => {
-                                if (typeof applyDynamicWidth === 'function') {
-                                    applyDynamicWidth();
-                                }
-                            }""")
-                        except Exception:
-                            pass
+
 
                         try:
                             await page.evaluate("""() => {
@@ -2088,9 +2081,6 @@ class RenderService:
                             pass
 
                         layout_info = await page.evaluate("""() => {
-                            if (typeof applyDynamicWidth === 'function') {
-                                applyDynamicWidth();
-                            }
                             const canvas = document.getElementById('compositor-canvas');
                             const cont = document.querySelector('.newspaper-container');
                             
