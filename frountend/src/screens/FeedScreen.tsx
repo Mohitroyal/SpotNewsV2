@@ -97,20 +97,24 @@ export const FeedScreen: React.FC = () => {
 
       // Deep link support: If clipId query param is present, prioritize or fetch that clipping
       const urlParams = new URLSearchParams(window.location.search);
-      const targetClipId = urlParams.get('clipId') || urlParams.get('id');
-      if (targetClipId) {
-        const found = postedClippings.find((c) => String(c.id) === String(targetClipId));
+      const targetClip = urlParams.get('clipId') || urlParams.get('id') || searchParams.get('clipId') || searchParams.get('id');
+      if (targetClip) {
+        const found = postedClippings.find((c) => String(c.id) === String(targetClip));
         if (found) {
-          postedClippings = [found, ...postedClippings.filter((c) => String(c.id) !== String(targetClipId))];
+          postedClippings = [found, ...postedClippings.filter((c) => String(c.id) !== String(targetClip))];
+          setActiveDetailIndex(0);
+          setIsFullScreenFeed(true);
         } else {
           try {
             const { data: directClip } = await supabase
               .from('clippings')
               .select('*')
-              .eq('id', targetClipId)
+              .eq('id', targetClip)
               .maybeSingle();
             if (directClip) {
               postedClippings = [directClip, ...postedClippings];
+              setActiveDetailIndex(0);
+              setIsFullScreenFeed(true);
             }
           } catch (e) {
             console.warn('Could not fetch deep-linked clipping', e);
@@ -268,6 +272,35 @@ export const FeedScreen: React.FC = () => {
     };
     loadAds();
   }, [district, userState, targetClipId]);
+
+  useEffect(() => {
+    if (!targetClipId) return;
+    const loadTargetClip = async () => {
+      const existingIndex = clippings.findIndex((c) => String(c.id) === String(targetClipId));
+      if (existingIndex !== -1) {
+        setActiveDetailIndex(existingIndex);
+        setIsFullScreenFeed(true);
+        return;
+      }
+
+      try {
+        const { data: directClip } = await supabase
+          .from('clippings')
+          .select('*')
+          .eq('id', targetClipId)
+          .maybeSingle();
+
+        if (directClip) {
+          setClippings((prev) => [directClip, ...prev.filter((c) => String(c.id) !== String(targetClipId))]);
+          setActiveDetailIndex(0);
+          setIsFullScreenFeed(true);
+        }
+      } catch (err) {
+        console.warn('Failed to load target clipping on deep link:', err);
+      }
+    };
+    loadTargetClip();
+  }, [targetClipId]);
 
   return (
     <div className={`flex flex-col h-[100dvh] bg-black ${!isFullScreenFeed ? 'pb-[60px]' : ''}`}>

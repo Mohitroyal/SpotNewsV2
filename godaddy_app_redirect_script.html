@@ -198,26 +198,27 @@
       <img id="spotnews-preview-img" src="" alt="News Clipping Preview" />
     </div>
 
-    <div class="spotnews-countdown-strip" id="spotnews-countdown-strip">
-      ⏳ 3 సెకన్లలో గూగుల్ ప్లే స్టోర్‌కి రిడైరెక్ట్ అవుతోంది...
+    <div class="spotnews-countdown-strip" id="spotnews-countdown-strip" style="background: rgba(1, 91, 179, 0.2); border-color: rgba(1, 91, 179, 0.4); color: #60a5fa;">
+      📱 పూర్తి వార్త & వీడియో యాప్‌లో అందుబాటులో ఉంది
     </div>
 
     <div class="spotnews-actions">
-      <!-- 1. Google Play Store Download Button -->
+      <!-- 1. Open directly in installed app -->
+      <a href="spotnews://feed" id="spotnews-openapp-btn" class="spotnews-btn-app" style="order: 1; background: linear-gradient(135deg, #015BB3 0%, #0284c7 100%); font-weight: 800; font-size: 16px; padding: 14px 18px; box-shadow: 0 4px 16px rgba(1, 91, 179, 0.4);">
+        🚀 యాప్‌లో తెరవండి (Open in App)
+      </a>
+
+      <!-- 2. Google Play Store Download Button -->
       <a href="https://play.google.com/store/apps/details?id=com.newscraft.mobile" 
          id="spotnews-playstore-btn" 
          class="spotnews-btn-playstore"
+         style="order: 2;"
          target="_blank" 
          rel="noopener">
         <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor">
           <path d="M3.609 1.814L13.792 12 3.61 22.186a1.986 1.986 0 0 1-.22-.924V2.738c0-.34.08-.655.22-.924zm11.236 11.236l2.383-2.383-12.01-6.934 9.627 9.317zm0 1.898L5.218 24.265l12.01-6.934-2.383-2.383zm1.053-1.052l3.24-1.871c1.149-.664 1.149-1.748 0-2.412l-3.24-1.871-2.122 2.122 2.122 2.122z"/>
         </svg>
         Google Play నుండి డౌన్‌లోడ్ చేసుకోండి
-      </a>
-
-      <!-- 2. Open directly in installed app -->
-      <a href="spotnews://feed" id="spotnews-openapp-btn" class="spotnews-btn-app">
-        🚀 యాప్‌లో తెరవండి (Open in App)
       </a>
     </div>
 
@@ -261,22 +262,25 @@
   var titleEl = document.getElementById("spotnews-title");
   var previewBox = document.getElementById("spotnews-preview-box");
   var previewImg = document.getElementById("spotnews-preview-img");
-  var countdownEl = document.getElementById("spotnews-countdown-strip");
 
   // Build intent and scheme URLs
   var schemeUrl = "spotnews://feed?clipId=" + encodeURIComponent(clipId);
   var intentUrl = "intent://feed?clipId=" + encodeURIComponent(clipId) + 
-                  "#Intent;scheme=spotnews;package=" + PACKAGE_NAME + 
-                  ";S.browser_fallback_url=" + encodeURIComponent(PLAY_STORE_URL) + ";end";
+                  "#Intent;scheme=spotnews;package=" + PACKAGE_NAME + ";end";
 
-  function redirectIntent() {
+  function openApp() {
     try {
-      if (window.top && window.top !== window) {
-        window.top.location.href = intentUrl;
-        return;
-      }
+      window.location.href = schemeUrl;
     } catch(e) {}
-    window.location.href = intentUrl;
+    setTimeout(function() {
+      try {
+        if (window.top && window.top !== window) {
+          window.top.location.href = intentUrl;
+          return;
+        }
+      } catch(e) {}
+      window.location.href = intentUrl;
+    }, 250);
   }
 
   if (openAppBtn) openAppBtn.href = schemeUrl;
@@ -288,13 +292,10 @@
   // Check if mobile device
   var ua = navigator.userAgent || navigator.vendor || window.opera || "";
   var isAndroid = /Android/i.test(ua);
-  var isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(ua);
 
-  // Auto launch app on Android via Intent
+  // Try opening app immediately on mobile
   if (isAndroid) {
-    try {
-      redirectIntent();
-    } catch(e) {}
+    openApp();
   }
 
   // Fetch headline and image preview from Supabase
@@ -324,39 +325,17 @@
     .catch(function(err) {});
   } catch(e) {}
 
-  // 3-second countdown to Google Play Store redirect
-  var secondsLeft = 3;
-  var countdownTimer = setInterval(function() {
-    secondsLeft--;
-    if (countdownEl) {
-      countdownEl.textContent = "⏳ " + secondsLeft + " సెకన్లలో గూగుల్ ప్లే స్టోర్‌కి రిడైరెక్ట్ అవుతోంది...";
-    }
-    if (secondsLeft <= 0) {
-      clearInterval(countdownTimer);
-      if (countdownEl) countdownEl.style.display = "none";
-      // Redirect to Play Store
-      if (isMobile) {
-        window.location.href = PLAY_STORE_URL;
-      }
-    }
-  }, 1000);
-
   // User click on open app
   if (openAppBtn) {
     openAppBtn.addEventListener("click", function(e) {
-      clearInterval(countdownTimer);
-      if (countdownEl) countdownEl.style.display = "none";
-      if (isAndroid) {
-        e.preventDefault();
-        redirectIntent();
-      }
+      e.preventDefault();
+      openApp();
     });
   }
 
   // Close overlay button
   if (closeBtn) {
     closeBtn.addEventListener("click", function() {
-      clearInterval(countdownTimer);
       if (overlay) overlay.style.display = "none";
     });
   }

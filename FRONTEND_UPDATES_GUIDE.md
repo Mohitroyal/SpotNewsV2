@@ -193,19 +193,41 @@ const clipping = post.clippingUrl || "";
 
 - **Files**:
   - `src/lib/deepLinks.ts`
+  - `src/screens/FeedScreen.tsx`
+  - `godaddy_app_redirect_script.html`
   - `android/app/src/main/AndroidManifest.xml`
-- **Configuration**:
-  - Handles `https://rtiexpress.in/n/:id` (news article deep link) and `https://rtiexpress.in/r/:slug` (reporter profile).
-  - Intent filter in `AndroidManifest.xml`:
+- **Configuration & Enhancements**:
+  - Handles `https://rtiexpressnews.godaddysites.com/?clipId=<id>` (news clipping link), `spotnews://feed?clipId=<id>`, and `newscraft://feed?clipId=<id>`.
+  - Intent filters in `AndroidManifest.xml`:
     ```xml
     <intent-filter android:autoVerify="true">
         <action android:name="android.intent.action.VIEW" />
         <category android:name="android.intent.category.DEFAULT" />
         <category android:name="android.intent.category.BROWSABLE" />
-        <data android:scheme="https" android:host="rtiexpress.in" android:pathPrefix="/n/" />
-        <data android:scheme="https" android:host="rtiexpress.in" android:pathPrefix="/r/" />
+        <data android:scheme="https" android:host="rtiexpressnews.godaddysites.com" />
+        <data android:scheme="http" android:host="rtiexpressnews.godaddysites.com" />
+    </intent-filter>
+
+    <intent-filter>
+        <action android:name="android.intent.action.VIEW" />
+        <category android:name="android.intent.category.DEFAULT" />
+        <category android:name="android.intent.category.BROWSABLE" />
+        <data android:scheme="spotnews" android:host="feed" />
+        <data android:scheme="spotnews" android:host="*" />
+        <data android:scheme="spotnews" />
+    </intent-filter>
+
+    <intent-filter>
+        <action android:name="android.intent.action.VIEW" />
+        <category android:name="android.intent.category.DEFAULT" />
+        <category android:name="android.intent.category.BROWSABLE" />
+        <data android:scheme="newscraft" android:host="feed" />
+        <data android:scheme="newscraft" android:host="*" />
+        <data android:scheme="newscraft" />
     </intent-filter>
     ```
+  - **FeedScreen Auto-Open**: When `?clipId=` is received, `FeedScreen` queries Supabase directly for that specific clipping (ignoring state/district/date constraints), prepends it to the feed list, and immediately activates full-screen reader view (`setActiveDetailIndex(0)` and `setIsFullScreenFeed(true)`).
+  - **GoDaddy Web Script Fix**: Removed the forced 3-second auto-redirect countdown to Play Store. The "🚀 యాప్‌లో తెరవండి" button directly launches `spotnews://feed?clipId=...` and native Android intent.
 
 ---
 
