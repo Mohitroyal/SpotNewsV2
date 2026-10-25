@@ -183,13 +183,14 @@ def send_user_notification(
     channel_id: str = "reporter",
     extra_data: Optional[Dict[str, str]] = None,
     email: Optional[str] = None,
+    phone: Optional[str] = None,
 ) -> Dict[str, Any]:
     """
-    Send a push notification to all devices registered for a specific user or email.
+    Send a push notification to all devices registered for a specific user, email, or phone.
     """
-    tokens = _get_tokens_for_user(user_id=user_id, email=email)
+    tokens = _get_tokens_for_user(user_id=user_id, email=email, phone=phone)
     if not tokens:
-        return {"success": False, "error": f"No active device tokens found for user={user_id} email={email}"}
+        return {"success": False, "error": f"No active device tokens found for user={user_id} email={email} phone={phone}"}
 
     success_count = 0
     failures = []
@@ -216,9 +217,9 @@ def send_user_notification(
     }
 
 
-def _get_tokens_for_user(user_id: Optional[str] = None, email: Optional[str] = None) -> List[str]:
+def _get_tokens_for_user(user_id: Optional[str] = None, email: Optional[str] = None, phone: Optional[str] = None) -> List[str]:
     """
-    Fetch device tokens from PostgreSQL public.device_tokens by user_id or email
+    Fetch device tokens from PostgreSQL public.device_tokens by user_id, email, or phone
     """
     tokens = []
     if user_id:
@@ -272,7 +273,22 @@ def _get_tokens_for_user(user_id: Optional[str] = None, email: Optional[str] = N
                     conn.close()
                     tokens = [r[0] for r in rows if r[0]]
                 except Exception as e:
-                    logger.error("Error fetching tokens for email %s: %s", clean_email, str(e))
+    if not tokens and phone:
+        clean_phone = "".join(filter(str.isdigit, str(phone)))[-10:]
+        if clean_phone:
+            try:
+                from django.db import connection
+                with connection.cursor() as cur:
+                    cur.execute("""
+                        SELECT dt.token 
+                        FROM public.device_tokens dt
+                        JOIN public.profiles p ON dt.user_id = p.id
+                        WHERE p.phone LIKE %s;
+                    """, (f"%{clean_phone}%",))
+                    rows = cur.fetchall()
+                    tokens = [r[0] for r in rows if r[0]]
+            except Exception as ph_err:
+                logger.warning("Error fetching tokens for phone %s: %s", clean_phone, ph_err)
 
     return tokens
 
