@@ -15,7 +15,7 @@ import mastheadLogo from '../../assets/rti_express_logo.png';
 interface AdminShellProps {
   adminEmail?: string;
   isSuperAdmin?: boolean;
-  activeTab: 'overview' | 'clippings' | 'users' | 'daily_editions' | 'logos' | 'applications' | 'notifications' | 'local_ads';
+  activeTab: 'overview' | 'clippings' | 'users' | 'daily_editions' | 'logos' | 'applications' | 'notifications' | 'local_ads' | 'redemptions';
   pendingClippingsCount: number;
   pendingApplicationsCount?: number;
   totalUsersCount: number;
@@ -226,6 +226,15 @@ export const AdminShell: React.FC<AdminShellProps> = ({
                 }`}
             >
               Local Ads
+            </button>
+            <button
+              onClick={() => onSelectTab('redemptions')}
+              className={`px-3 py-1 rounded-lg text-[11px] font-bold shrink-0 transition flex items-center gap-1 ${activeTab === 'redemptions'
+                ? 'bg-emerald-600 text-white shadow-xs'
+                : 'bg-[var(--adm-chip-bg)] text-[var(--adm-text-secondary)] hover:bg-[#d5e4f5]'
+                }`}
+            >
+              <span>💰 Redemptions</span>
             </button>
           </div>
         )}

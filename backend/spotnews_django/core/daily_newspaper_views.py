@@ -160,8 +160,7 @@ def get_eligible_clippings(request):
                     c.user_id, p.full_name as reporter_name, c.state, c.district, """ + cap_col + """ AS image_captions
                 FROM clippings c
                 LEFT JOIN profiles p ON c.user_id = p.id
-                WHERE (c.is_posted = true OR c.is_posted IS NULL OR c.status IN ('completed', 'published', 'posted'))
-                  AND (c.status IS NULL OR c.status NOT IN ('draft', 'rejected', 'deleted'))
+                WHERE c.is_posted = true AND c.status = 'approved'
                   AND (
                     DATE(c.created_at AT TIME ZONE 'Asia/Kolkata') = %s
                     OR DATE(c.created_at) = %s
@@ -181,8 +180,7 @@ def get_eligible_clippings(request):
                         c.user_id, p.full_name as reporter_name, c.state, c.district, """ + cap_col + """ AS image_captions
                     FROM clippings c
                     LEFT JOIN profiles p ON c.user_id = p.id
-                    WHERE (c.is_posted = true OR c.is_posted IS NULL OR c.status IN ('completed', 'published', 'posted'))
-                      AND (c.status IS NULL OR c.status NOT IN ('draft', 'rejected', 'deleted'))
+                    WHERE c.is_posted = true AND c.status = 'approved'
                     ORDER BY c.created_at DESC
                     LIMIT 200
                 """

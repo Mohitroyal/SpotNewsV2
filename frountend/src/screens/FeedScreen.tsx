@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { useSearchParams } from 'react-router-dom';
-import { Newspaper, MapPin, RefreshCw, X, Send, Share2 } from 'lucide-react';
+import { Newspaper, RefreshCw, X, Send, Share2, ChevronDown, ChevronRight } from 'lucide-react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
+import locationMapPinIcon from '@/assets/location_map_pin.png';
 import { useAuthStore, useUIStore } from '@/store';
 import { supabase } from '@/lib/supabase';
 import { NewsDetailCardStack } from '@/components/NewsDetailCardStack';
@@ -8,8 +9,9 @@ import { admobService } from '@/services/admob.service';
 import { localAdsService } from '@/services/localAds.service';
 import { LocalAdFeedCard } from '@/components/LocalAdFeedCard';
 import type { LocalAd } from '@/types/localAds';
-import { AdvisoryCard, AdvisoryStrip } from '@/features/weather/AdvisoryCard';
+import { AdvisoryCard } from '@/features/weather/AdvisoryCard';
 import { useAdvisory } from '@/features/weather/useAdvisory';
+import { useWeather, getWeatherInfo } from '@/services/weatherService';
 import { ShareAfterClipping } from '@/features/share/ShareAfterClipping';
 
 interface Comment {
@@ -22,6 +24,7 @@ interface Comment {
 }
 
 export const FeedScreen: React.FC = () => {
+  const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const targetClipId = searchParams.get('clipId') || searchParams.get('id');
   const { user } = useAuthStore();
@@ -58,6 +61,17 @@ export const FeedScreen: React.FC = () => {
   const { advisory } = useAdvisory(district);
   const [showWeatherModal, setShowWeatherModal] = useState(false);
 
+  // Live Weather from Open-Meteo
+  const { data: liveWeather } = useWeather({
+    state: userState,
+    district,
+  });
+  const weatherInfo = getWeatherInfo(
+    liveWeather?.weatherCode ?? -1,
+    liveWeather?.isDay ?? 1
+  );
+  const WeatherIcon = weatherInfo.Icon;
+
   // Comments drawer state
   const [commentOpen, setCommentOpen] = useState<string | null>(null); // clipping id
   const [comments, setComments] = useState<Comment[]>([]);
@@ -81,19 +95,63 @@ export const FeedScreen: React.FC = () => {
       let query = supabase
         .from('clippings')
         .select('*')
+        .eq('is_posted', true)
+        .eq('status', 'approved')
         .gte('created_at', todayISO)
         .order('created_at', { ascending: false });
 
-      if (userState) query = query.eq('state', userState);
-      if (district) query = query.eq('district', district);
+      if (userState && userState !== 'All' && userState !== 'Both states') {
+        query = query.eq('state', userState);
+      }
+      if (district && district !== 'All districts' && district !== 'All' && district !== 'All Regions') {
+        query = query.eq('district', district);
+      }
 
       const { data, error } = await query;
       if (error) throw error;
 
-      // Only display clippings that are posted and explicitly approved (not pending or rejected)
+      // Only display clippings that are posted AND explicitly approved by admin
       let postedClippings = (data || []).filter(
-        (c) => c.is_posted === true && c.status !== 'pending_approval' && c.status !== 'rejected'
+        (c) => c.is_posted === true && c.status === 'approved'
       );
+
+      // If no clippings posted today specifically, fall back to recent published news
+      if (postedClippings.length === 0) {
+        let fallbackQuery = supabase
+          .from('clippings')
+          .select('*')
+          .eq('is_posted', true)
+          .eq('status', 'approved')
+          .order('created_at', { ascending: false })
+          .limit(30);
+
+        if (userState && userState !== 'All' && userState !== 'Both states') {
+          fallbackQuery = fallbackQuery.eq('state', userState);
+        }
+        if (district && district !== 'All districts' && district !== 'All' && district !== 'All Regions') {
+          fallbackQuery = fallbackQuery.eq('district', district);
+        }
+
+        const { data: fallbackData } = await fallbackQuery;
+        postedClippings = (fallbackData || []).filter(
+          (c) => c.is_posted === true && c.status === 'approved'
+        );
+
+        // If district-filtered query has no clippings, fetch latest across all regions
+        if (postedClippings.length === 0) {
+          const { data: allData } = await supabase
+            .from('clippings')
+            .select('*')
+            .eq('is_posted', true)
+            .eq('status', 'approved')
+            .order('created_at', { ascending: false })
+            .limit(30);
+
+          postedClippings = (allData || []).filter(
+            (c) => c.is_posted === true && c.status === 'approved'
+          );
+        }
+      }
 
       // Deep link support: If clipId query param is present, prioritize or fetch that clipping
       const urlParams = new URLSearchParams(window.location.search);
@@ -110,6 +168,8 @@ export const FeedScreen: React.FC = () => {
               .from('clippings')
               .select('*')
               .eq('id', targetClip)
+              .eq('is_posted', true)
+              .eq('status', 'approved')
               .maybeSingle();
             if (directClip) {
               postedClippings = [directClip, ...postedClippings];
@@ -273,6 +333,7 @@ export const FeedScreen: React.FC = () => {
     loadAds();
   }, [district, userState, targetClipId]);
 
+  // Deep-link handler: automatically open clipping detail if clipId is in URL
   useEffect(() => {
     if (!targetClipId) return;
     const loadTargetClip = async () => {
@@ -288,6 +349,8 @@ export const FeedScreen: React.FC = () => {
           .from('clippings')
           .select('*')
           .eq('id', targetClipId)
+          .eq('is_posted', true)
+          .eq('status', 'approved')
           .maybeSingle();
 
         if (directClip) {
@@ -305,43 +368,92 @@ export const FeedScreen: React.FC = () => {
   return (
     <div className={`flex flex-col h-[100dvh] bg-black ${!isFullScreenFeed ? 'pb-[60px]' : ''}`}>
       {!isFullScreenFeed && (
-        <div className="flex-shrink-0 bg-white" style={{ paddingTop: '16px', paddingBottom: '14px' }}>
-          <div className="flex items-center justify-between px-4">
-            <div className="flex items-center gap-2">
-              <Newspaper style={{ width: '22px', height: '22px', color: '#123A66' }} />
-              <h1 style={{ color: '#123A66', fontSize: '20px', fontWeight: 700, fontFamily: "'Georgia', serif", margin: 0, letterSpacing: '0.3px' }}>
-                Today's News Feed
-              </h1>
+        <div className="flex-shrink-0 bg-[#F4F8FC] border-b border-[#D8E4F2] px-3.5 pt-3 pb-3 space-y-2.5">
+          {/* ── Top Card: Showing news for + Weather ── */}
+          <div className="bg-white border border-[#D9E5F2] rounded-[20px] p-3 px-3.5 shadow-sm flex items-center justify-between">
+            {/* Left: Region / District Selector */}
+            <div
+              onClick={() => navigate('/location')}
+              className="flex items-center gap-3 flex-1 min-w-0 cursor-pointer active:opacity-80"
+              title="Change location"
+            >
+              <div className="w-10 h-10 rounded-xl overflow-hidden shrink-0 shadow-2xs flex items-center justify-center">
+                <img
+                  src={locationMapPinIcon}
+                  alt="Location map pin"
+                  className="w-full h-full object-cover"
+                />
+              </div>
+              <div className="flex flex-col min-w-0">
+                <span className="text-[11px] text-[#64748B] font-medium leading-tight">
+                  Showing news for
+                </span>
+                <div className="flex items-center gap-1 text-[15px] font-bold text-[#0F172A] leading-snug mt-0.5 truncate">
+                  <span className="truncate">{userState && userState !== 'All' ? userState : 'Both states'}</span>
+                  <ChevronDown className="w-4 h-4 text-[#64748B] shrink-0" strokeWidth={2.2} />
+                </div>
+                <span className="text-[11.5px] text-[#64748B] font-medium leading-tight mt-0.5 truncate">
+                  {district && district !== 'All' && district !== 'All districts' ? district : 'All districts'}
+                </span>
+              </div>
             </div>
+
+            {/* Vertical Divider */}
+            <div className="h-10 w-[1px] bg-[#E2E8F0] mx-3 shrink-0" />
+
+            {/* Right: Weather Icon + Temperature */}
+            <div
+              onClick={() => setShowWeatherModal(true)}
+              className="flex flex-col items-center justify-center shrink-0 min-w-[54px] cursor-pointer active:scale-95 transition-transform"
+              title={liveWeather ? `${weatherInfo.label} · ${Math.round(liveWeather.temperature)}°C (Click for Advisory)` : 'View Weather & Health Advisory'}
+            >
+              {weatherInfo.iconUrl ? (
+                <img
+                  src={weatherInfo.iconUrl}
+                  alt={weatherInfo.label}
+                  className="w-5 h-5 object-contain select-none"
+                  draggable={false}
+                />
+              ) : (
+                <WeatherIcon className={`w-5 h-5 ${weatherInfo.colorClass}`} strokeWidth={2.2} />
+              )}
+              <span className="text-[15px] font-bold text-[#0F172A] leading-tight mt-0.5">
+                {liveWeather !== null ? `${Math.round(liveWeather.temperature)}°C` : '--°C'}
+              </span>
+            </div>
+          </div>
+
+          {/* ── Blue Button [LATEST Line]: Opens Third Page Modal ── */}
+          <button
+            type="button"
+            onClick={() => setShowWeatherModal(true)}
+            className="w-full bg-[#0B56A6] hover:bg-[#094688] active:scale-[0.99] text-white rounded-[14px] px-3.5 py-2.5 flex items-center justify-between shadow-xs transition-all cursor-pointer border-0 text-left"
+          >
+            <div className="flex items-center gap-2 flex-1 min-w-0 mr-2">
+              <span className="bg-[#CC1E1E] text-white text-[9.5px] font-black px-1.5 py-0.5 rounded uppercase tracking-wider shrink-0 shadow-2xs">
+                LATEST
+              </span>
+              <span className="text-white text-xs sm:text-[13px] font-semibold truncate leading-tight">
+                {advisory?.headline_te || (district ? `${district} - సాధారణ వాతావరణం, ఆరోగ్య సూచనలు` : 'సాధారణ వాతావరణం, ఆరోగ్య సూచనలు')}
+              </span>
+            </div>
+            <ChevronRight className="w-4 h-4 text-white/90 shrink-0 ml-1" strokeWidth={2.5} />
+          </button>
+
+          {/* ── Today's News Feed + Refresh Button ── */}
+          <div className="flex items-center justify-between px-0.5 pt-0.5">
+            <h1 className="text-[#0F172A] text-[18px] sm:text-[19px] font-bold font-serif tracking-tight m-0">
+              Today's News Feed
+            </h1>
             <button
               onClick={fetchFeed}
-              style={{ background: '#145AB1', color: '#ffffff', border: 'none', borderRadius: '20px', padding: '6px 16px', fontWeight: 700, fontSize: '12px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}
+              type="button"
+              className="bg-white border border-[#D0E2F7] hover:bg-[#EBF3FC] active:scale-95 text-[#0B56A6] rounded-full px-3 py-1.5 text-xs font-bold flex items-center gap-1.5 transition-all shadow-2xs cursor-pointer"
             >
-              <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
+              <RefreshCw className={`w-3.5 h-3.5 text-[#0B56A6] ${loading ? 'animate-spin' : ''}`} strokeWidth={2.2} />
               <span>Refresh</span>
             </button>
           </div>
-          <div className="px-4 mt-3 flex items-center justify-between gap-2">
-            <div className="inline-flex items-center gap-1.5 bg-[#015BB3] text-white px-3 py-1.5 rounded-full text-xs font-bold shadow-sm">
-              <MapPin className="w-3.5 h-3.5" />
-              Showing news for: {district || 'All Regions'}{userState ? `, ${userState}` : ''}
-            </div>
-            {advisory && (
-              <button
-                onClick={() => setShowWeatherModal(true)}
-                className={`inline-flex items-center gap-1.5 text-white px-3 py-1.5 rounded-full text-xs font-bold shadow-sm cursor-pointer border-0 adv-strip lvl-${advisory.max_level || 'info'}`}
-                style={{ position: 'static', height: 'auto', display: 'inline-flex' }}
-              >
-                <span>{advisory.report?.advisories?.[0]?.icon || '☀️'}</span>
-                <span>{advisory.report?.now?.temp !== null ? `${Math.round(advisory.report?.now?.temp)}°C` : 'వాతావరణం'}</span>
-              </button>
-            )}
-          </div>
-          {advisory && (
-            <div className="px-4 mt-2">
-              <AdvisoryStrip row={advisory} onOpen={() => setShowWeatherModal(true)} />
-            </div>
-          )}
         </div>
       )}
 
@@ -377,7 +489,7 @@ export const FeedScreen: React.FC = () => {
                   {advisory && (idx === 1 || (idx > 1 && (idx - 1) % 6 === 0)) && (
                     <div className="w-full h-full snap-start snap-always flex flex-col bg-black border-b border-gray-800 relative p-3 box-border">
                       <div className="flex-1 w-full bg-white rounded-2xl overflow-hidden shadow-2xl flex flex-col">
-                        <AdvisoryCard row={advisory} />
+                        <AdvisoryCard row={advisory} liveWeather={liveWeather} />
                       </div>
                     </div>
                   )}
@@ -407,13 +519,13 @@ export const FeedScreen: React.FC = () => {
                         loop
                         muted
                         playsInline
-                        className="w-full h-full object-contain relative z-10"
+                        className="w-full h-full object-fill relative z-10"
                       />
                     ) : clip.png_url ? (
                       <img
                         src={clip.png_url}
                         alt="News clipping"
-                        className="w-full h-full object-contain relative z-10"
+                        className="w-full h-full object-fill relative z-10"
                       />
                     ) : (
                       <div className="flex flex-col items-center text-[#6B7A90] relative z-10">
@@ -510,10 +622,62 @@ export const FeedScreen: React.FC = () => {
         />
       )}
 
-      {/* ── Comments Bottom Sheet ─────────────────────────────────────────── */}
+      {/* ── RTI Share Sheet (Clipping, Reporter Card 1:1, Status 9:16) ─── */}
+      {shareSheetOpen && (
+        <ShareAfterClipping
+          post={{
+            id: shareSheetOpen.id,
+            headline: shareSheetOpen.headline || shareSheetOpen.title || 'News Update',
+            place: shareSheetOpen.district || district || 'హైదరాబాద్',
+            date: new Date(shareSheetOpen.created_at || Date.now()).toLocaleDateString('te-IN', {
+              day: 'numeric',
+              month: 'short',
+            }),
+            clippingUrl: shareSheetOpen.png_url,
+            thumbUrl:
+              shareSheetOpen.image_url ||
+              shareSheetOpen.imageUrl ||
+              shareSheetOpen.custom_layout?.image_url ||
+              shareSheetOpen.custom_layout?.imageUrls?.[0] ||
+              shareSheetOpen.custom_layout?.image_urls?.[0] ||
+              shareSheetOpen.image_urls?.[0] ||
+              shareSheetOpen.png_url,
+            videoUrl: shareSheetOpen.mp4_url || shareSheetOpen.video_url || shareSheetOpen.custom_layout?.mp4_url || undefined,
+          }}
+          reporter={{
+            id: shareSheetOpen.user_id || user?.id || 'reporter',
+            name:
+              shareSheetOpen.reporter_name ||
+              shareSheetOpen.custom_layout?.reporter_name ||
+              shareSheetOpen.custom_layout?.reporterName ||
+              shareSheetOpen.author_name ||
+              user?.full_name ||
+              'Spot News Reporter',
+            slug: (
+              shareSheetOpen.reporter_name ||
+              shareSheetOpen.custom_layout?.reporter_name ||
+              shareSheetOpen.custom_layout?.reporterName ||
+              shareSheetOpen.author_name ||
+              'reporter'
+            )
+              .toLowerCase()
+              .replace(/\s+/g, '-'),
+            verified: true,
+            avgStars: 4.8,
+            ratingsCount: 24,
+            stories: 15,
+            views: shareSheetOpen.views_count || 120,
+            experienceYears: 3,
+            photoUrl: user?.avatarUrl,
+          }}
+          onClose={() => setShareSheetOpen(null)}
+        />
+      )}
+
+      {/* ── Comments Bottom Sheet (Drawer) ─────────────────────────────────── */}
       {commentOpen && (
         <div
-          className="fixed inset-0 z-[99999] flex flex-col justify-end"
+          className="fixed inset-0 z-[100005] flex flex-col justify-end"
           style={{ background: 'rgba(0,0,0,0.55)' }}
           onClick={() => setCommentOpen(null)}
         >
@@ -527,7 +691,7 @@ export const FeedScreen: React.FC = () => {
               <span className="text-sm font-bold text-[#0A2540]">
                 Comments ({comments.length})
               </span>
-              <button onClick={() => setCommentOpen(null)} className="p-1 rounded-full hover:bg-gray-100">
+              <button onClick={() => setCommentOpen(null)} className="p-1 rounded-full hover:bg-gray-100 cursor-pointer">
                 <X className="w-4 h-4 text-gray-500" />
               </button>
             </div>
@@ -571,7 +735,7 @@ export const FeedScreen: React.FC = () => {
               <button
                 onClick={submitComment}
                 disabled={!commentText.trim() || submitting}
-                className="w-9 h-9 rounded-full bg-[#015BB3] flex items-center justify-center disabled:opacity-40 active:scale-95 transition-transform"
+                className="w-9 h-9 rounded-full bg-[#015BB3] flex items-center justify-center disabled:opacity-40 active:scale-95 transition-transform cursor-pointer"
               >
                 <Send className="w-4 h-4 text-white" />
               </button>
@@ -579,52 +743,20 @@ export const FeedScreen: React.FC = () => {
           </div>
         </div>
       )}
+
       {/* ── Weather Advisory Modal Sheet ──────────────────────────────── */}
       {showWeatherModal && advisory && (
         <div
-          className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[99999] flex items-end justify-center p-0 sm:p-4"
+          className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[100005] flex items-end justify-center p-0 sm:p-4"
           onClick={() => setShowWeatherModal(false)}
         >
           <div
             className="w-full max-w-lg h-[88dvh] bg-white rounded-t-3xl overflow-hidden shadow-2xl flex flex-col"
             onClick={(e) => e.stopPropagation()}
           >
-            <AdvisoryCard row={advisory} onClose={() => setShowWeatherModal(false)} />
+            <AdvisoryCard row={advisory} onClose={() => setShowWeatherModal(false)} liveWeather={liveWeather} />
           </div>
         </div>
-      )}
-
-      {/* ── RTI Share Sheet (Clipping, Reporter Card 1:1, Status 9:16) ─── */}
-      {shareSheetOpen && (
-        <ShareAfterClipping
-          post={{
-            id: shareSheetOpen.id,
-            headline: shareSheetOpen.headline || shareSheetOpen.title || 'News Update',
-            place: shareSheetOpen.district || district || 'హైదరాబాద్',
-            date: new Date(shareSheetOpen.created_at || Date.now()).toLocaleDateString('te-IN', {
-              day: 'numeric',
-              month: 'short',
-            }),
-            clippingUrl: shareSheetOpen.png_url,
-            thumbUrl: shareSheetOpen.png_url,
-            videoUrl: shareSheetOpen.mp4_url || shareSheetOpen.video_url || shareSheetOpen.custom_layout?.mp4_url || undefined,
-          }}
-          reporter={{
-            id: shareSheetOpen.user_id || user?.id || 'reporter',
-            name: shareSheetOpen.reporter_name || shareSheetOpen.author_name || user?.full_name || 'Spot News Reporter',
-            slug: (shareSheetOpen.reporter_name || shareSheetOpen.author_name || 'reporter')
-              .toLowerCase()
-              .replace(/\s+/g, '-'),
-            verified: true,
-            avgStars: 4.8,
-            ratingsCount: 24,
-            stories: 15,
-            views: shareSheetOpen.views_count || 120,
-            experienceYears: 3,
-            photoUrl: user?.avatarUrl,
-          }}
-          onClose={() => setShareSheetOpen(null)}
-        />
       )}
     </div>
   );

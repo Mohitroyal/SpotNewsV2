@@ -47,6 +47,7 @@ import { AdminShell } from './admin/AdminShell';
 import { AdminOverviewTab } from './admin/AdminOverviewTab';
 import { AdminClippingsTab } from './admin/AdminClippingsTab';
 import { AdminUsersTab } from './admin/AdminUsersTab';
+import { AdminRedemptionsTab } from './admin/AdminRedemptionsTab';
 
 function formatDateTime(dateStr?: string) {
   if (!dateStr) return '—';
@@ -203,7 +204,7 @@ export const AdminScreen = () => {
 
   // ── State ─────────────────────────────────────────────────────────────────
   const isSuperAdmin = isSuperAdminUser(user);
-  const [activeTab, setActiveTab] = useState<'overview' | 'clippings' | 'users' | 'logos' | 'applications' | 'daily_editions' | 'notifications' | 'local_ads'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'clippings' | 'users' | 'logos' | 'applications' | 'daily_editions' | 'notifications' | 'local_ads' | 'redemptions'>('overview');
   const [isPdfGeneratorOpen, setIsPdfGeneratorOpen] = useState(false);
   const [dailyEditions, setDailyEditions] = useState<DailyEditionRecord[]>([]);
   const [dailyEditionsLoading, setDailyEditionsLoading] = useState(false);
@@ -1577,6 +1578,11 @@ export const AdminScreen = () => {
       {/* ── Superadmin: Local Ads ── */}
       {activeTab === 'local_ads' && (
         <LocalAdsAdminSection />
+      )}
+
+      {/* ── Superadmin: Coin Redemptions & Payouts ── */}
+      {activeTab === 'redemptions' && (
+        <AdminRedemptionsTab showToast={showToast} />
       )}
 
       {/* ── Selected Clipping Detail Modal ── */}

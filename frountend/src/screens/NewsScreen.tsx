@@ -3,10 +3,11 @@ import { Newspaper, Calendar, ChevronRight, X, Plus, RefreshCw, Eye, FileText, P
 import { useGenerationStore, useAuthStore } from '@/store';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/lib/supabase';
+import api from '@/lib/axios';
 
 export const NewsScreen: React.FC = () => {
   const generations = useGenerationStore((state) => state.generations);
-  const { userState, district } = useAuthStore();
+  const { user, userState, district } = useAuthStore();
   const navigate = useNavigate();
   const [selectedGen, setSelectedGen] = useState<any | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -17,22 +18,60 @@ export const NewsScreen: React.FC = () => {
     if (!selectedGen?.id) return;
     setIsPosting(true);
     try {
-      const { error } = await supabase
-        .from('clippings')
-        .update({ 
-          state: userState, 
-          district: district, 
-          is_posted: false,
-          status: 'pending_approval'
-        })
-        .eq('id', selectedGen.id);
-        
-      if (!error) {
-        setPostedMap(prev => ({ ...prev, [selectedGen.id]: true }));
-        alert(`✅ Clipping submitted to ${district || 'your'} District Admin for approval! Once approved, it will go live on the feed.`);
+      const isAdmin = user?.role === 'admin' || user?.role === 'superadmin';
+
+      if (isAdmin) {
+        const { error } = await supabase
+          .from('clippings')
+          .update({ state: userState, district: district, is_posted: true, status: 'approved' })
+          .eq('id', selectedGen.id);
+
+        if (!error) {
+          setPostedMap(prev => ({ ...prev, [selectedGen.id]: true }));
+
+          // Trigger Push Notification to all users for the new post!
+          try {
+            const headline = selectedGen.headline || 'Spot News 24x7 - తాజా వార్తలు';
+            const bodySnippet = (selectedGen.articleContent || 'కొత్త వార్తా కథనం పోస్ట్ చేయబడింది. ఇప్పుడే చదవండి!').substring(0, 110);
+            api.post('/api/v1/notifications/send', {
+              topic: 'all',
+              title: `🚨 ${headline.substring(0, 50)}`,
+              body: bodySnippet,
+              image_url: selectedGen.pngUrl || 'https://rffrqokpnqoycpozrjuc.supabase.co/storage/v1/object/public/newscraft-clippings/assets/app_logo.png',
+              url: `/feed`,
+              channel_id: 'news'
+            }).catch((err) => console.warn('[Push] Post notification dispatch warning:', err));
+          } catch (notifErr) {
+            console.warn('[Push] Post notification failed:', notifErr);
+          }
+          alert('🎉 Clipping approved and published to the live news feed!');
+        }
+      } else {
+        // Normal reporter / user must submit for admin approval
+        const { error } = await supabase
+          .from('clippings')
+          .update({ state: userState, district: district, is_posted: false, status: 'pending_approval' })
+          .eq('id', selectedGen.id);
+
+        if (!error) {
+          setPostedMap(prev => ({ ...prev, [selectedGen.id]: true }));
+          // Notify district admin
+          try {
+            const headline = selectedGen.headline || 'New news item';
+            api.post('/api/v1/notifications/send', {
+              topic: 'admins',
+              title: '📝 New Clipping Pending Approval',
+              body: `"${headline.substring(0, 50)}" from ${district || 'your district'} awaits review.`,
+              url: '/admin',
+              channel_id: 'admin'
+            }).catch(() => {});
+          } catch {}
+          alert('✅ News submitted for District Admin approval! Once approved, it will go live on the feed.');
+        }
       }
     } catch (err) {
-      console.error('Error submitting to feed for approval:', err);
+      console.error('Error posting to feed:', err);
+      alert('Failed to submit news. Please try again.');
     } finally {
       setIsPosting(false);
     }
@@ -287,13 +326,17 @@ export const NewsScreen: React.FC = () => {
                   {isPosting ? (
                     <Loader2 className="w-4 h-4 animate-spin" />
                   ) : postedMap[selectedGen.id] ? (
-                    <>
-                      <span>Posted to Feed!</span>
-                    </>
+                    <span>
+                      {user?.role === 'admin' || user?.role === 'superadmin' ? 'Posted to Feed!' : 'Submitted for Approval!'}
+                    </span>
                   ) : (
                     <>
                       <Send className="w-3.5 h-3.5" />
-                      <span>Post to {district} Feed</span>
+                      <span>
+                        {user?.role === 'admin' || user?.role === 'superadmin'
+                          ? `Post to ${district || 'Region'} Feed`
+                          : `Submit for Approval (${district || 'District'})`}
+                      </span>
                     </>
                   )}
                 </button>
