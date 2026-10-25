@@ -4,7 +4,6 @@ import {
   Check,
   AlertCircle,
   ShieldCheck,
-  CreditCard,
   Lock,
   ArrowRight,
   Loader2,
@@ -13,6 +12,7 @@ import {
 import { FigmaScreenHeader } from '@/components/FigmaScreenHeader';
 import { reporterApprovalService } from '@/services/reporterApproval.service';
 import { useAuthStore } from '@/store';
+import { supabase } from '@/lib/supabase';
 import type { ReporterApplicationDetails } from '@/types/reporterApproval';
 
 export const PaymentScreen: React.FC = () => {
@@ -32,22 +32,6 @@ export const PaymentScreen: React.FC = () => {
 
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
-  const [priceInr, setPriceInr] = useState<number>(() => {
-    const envPrice = Number(import.meta.env.VITE_REPORTER_PRICE_INR);
-    return !isNaN(envPrice) && envPrice > 0 ? envPrice : 999;
-  });
-
-  React.useEffect(() => {
-    const apiUrl = import.meta.env.VITE_DJANGO_API_URL || 'https://spotnewsv2.onrender.com';
-    fetch(`${apiUrl}/api/v1/reporter/payment/config`)
-      .then(res => res.json())
-      .then(data => {
-        if (data?.amount_inr) {
-          setPriceInr(data.amount_inr);
-        }
-      })
-      .catch(() => {});
-  }, []);
 
   const handleContinuePayment = async () => {
     if (loading) return;
@@ -55,32 +39,14 @@ export const PaymentScreen: React.FC = () => {
     setErrorMsg('');
 
     try {
-      // Step 1: Create backend order with server-configured fixed amount
-      const order = await reporterApprovalService.createPaymentOrder(appData.refNo, appData.email);
-
-      // Step 2: Launch payment checkout (Razorpay supporting UPI GPay/PhonePe/Paytm, Cards, NetBanking)
-      const payRes = await reporterApprovalService.startPayment(order);
-
-      if (payRes.cancelled) {
-        setLoading(false);
-        setErrorMsg(`Payment was cancelled. You can click Pay ₹${priceInr} whenever you are ready.`);
-        return;
-      }
-
-      if (!payRes.success || !payRes.paymentId) {
-        setLoading(false);
-        setErrorMsg(payRes.error || 'Payment was declined by bank or failed. Please try again.');
-        return;
-      }
-
-      // Step 3: Verify payment immediately with server / database
+      // 100% Free Accreditation: Instant activation without payment gateway
       let reporterId = '';
       let validUntil = '';
       try {
         const verRes = await reporterApprovalService.verifyPayment(
-          payRes.orderId || order.orderId,
-          payRes.paymentId,
-          payRes.signature || '',
+          'order_free',
+          'FREE_ACTIVATION',
+          'signature_free',
           appData.refNo
         );
         if (verRes.reporterId) reporterId = verRes.reporterId;
@@ -89,7 +55,7 @@ export const PaymentScreen: React.FC = () => {
         console.warn('Backend payment verification fallback:', verErr);
       }
 
-      // Fallback ID generation if backend was temporarily unreachable
+      // Generate reporter ID
       if (!reporterId) {
         const currentYear = new Date().getFullYear();
         reporterId = `SNP-TS-${currentYear}-${Math.floor(100000 + Math.random() * 900000)}`;
@@ -105,7 +71,19 @@ export const PaymentScreen: React.FC = () => {
         useAuthStore.getState().updateUser({ role: 'reporter', plan: 'reporter' });
       } catch {}
 
-      // Step 4: Seamlessly redirect back to the app, show success, and proceed
+      // Persist reporter role in Supabase profiles database
+      try {
+        if (appData.email) {
+          await supabase
+            .from('profiles')
+            .update({ role: 'reporter', plan: 'reporter' })
+            .ilike('email', appData.email.trim());
+        }
+      } catch (profErr) {
+        console.warn('Profile database update warning:', profErr);
+      }
+
+      // Seamlessly redirect to success screen & ID card display
       navigate('/reporter/payment-success', {
         replace: true,
         state: {
@@ -114,14 +92,14 @@ export const PaymentScreen: React.FC = () => {
             status: 'ACTIVE',
             reporterId,
             validUntil,
-            paymentId: payRes.paymentId,
+            paymentId: 'FREE_ACTIVATION',
           },
         },
       });
 
     } catch (err: any) {
-      console.error('Payment checkout error:', err);
-      setErrorMsg(err.message || 'Unable to open checkout. Please try again.');
+      console.error('Free activation error:', err);
+      setErrorMsg(err.message || 'Unable to activate credential. Please try again.');
       setLoading(false);
     }
   };
@@ -135,21 +113,21 @@ export const PaymentScreen: React.FC = () => {
           {/* Step Indicator */}
           <div className="flex items-center justify-between">
             <span className="inline-flex items-center px-3 py-1 rounded-full bg-[#EBF3FB] text-[#0B4EA2] text-[11px] font-black tracking-wider uppercase">
-              STEP 2 OF 3 • MEMBERSHIP ACTIVATION
+              FINAL STEP • SET UP PRESS ID CARD
             </span>
             <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#E8F8EE] text-[#128842] text-[11px] font-bold border border-[#C6EFD4]">
               <ShieldCheck className="w-3.5 h-3.5 text-[#128842]" />
-              <span>APPROVED</span>
+              <span>APPROVED BY ADMIN</span>
             </div>
           </div>
 
           {/* Heading */}
           <div>
             <h1 className="text-2xl font-black tracking-tight text-[#0A2540]">
-              Activate Reporter Credential
+              Set Up Your Press ID Card
             </h1>
             <p className="text-xs text-[#64748B] mt-1 leading-relaxed">
-              Your application has been verified. Complete the fixed membership payment to activate your official press accreditation.
+              Your reporter application is approved! Click below to set up your official Press ID Card for free (₹0) and activate your reporter account.
             </p>
           </div>
 
@@ -161,22 +139,22 @@ export const PaymentScreen: React.FC = () => {
           )}
 
           {/* Fixed Amount Membership Pricing Card */}
-          <div className="bg-white border-2 border-[#0B4EA2]/30 rounded-3xl p-5 shadow-sm space-y-4 relative overflow-hidden">
-            <div className="absolute top-0 right-0 bg-[#0B4EA2] text-white text-[10px] font-black uppercase px-3 py-1 rounded-bl-xl tracking-wider">
-              OFFICIAL ANNUAL PASS
+          <div className="bg-white border-2 border-emerald-500/40 rounded-3xl p-5 shadow-sm space-y-4 relative overflow-hidden">
+            <div className="absolute top-0 right-0 bg-emerald-600 text-white text-[10px] font-black uppercase px-3 py-1 rounded-bl-xl tracking-wider">
+              100% FREE OFFICIAL PASS
             </div>
 
             <div>
-              <span className="text-[10px] font-extrabold uppercase tracking-widest text-[#64748B] block">
+              <span className="text-[10px] font-extrabold uppercase tracking-widest text-emerald-700 block">
                 ANNUAL MEMBERSHIP FEE
               </span>
               <div className="flex items-baseline gap-2 mt-1">
-                <span className="text-4xl font-black text-[#0A2540] tracking-tight">₹{priceInr}</span>
-                <span className="text-xs text-[#64748B] font-semibold">/ year (Fixed)</span>
+                <span className="text-4xl font-black text-emerald-700 tracking-tight">₹0</span>
+                <span className="text-xs text-emerald-600 font-bold uppercase">/ 100% Free (No Fee)</span>
               </div>
               <p className="text-[11px] text-emerald-700 font-semibold mt-1 flex items-center gap-1">
                 <Sparkles className="w-3.5 h-3.5 text-emerald-600" />
-                No hidden costs • 100% all-inclusive pricing
+                Zero rupees for all verified reporters • Full official access
               </p>
             </div>
 
@@ -231,23 +209,20 @@ export const PaymentScreen: React.FC = () => {
             </div>
           </div>
 
-          {/* Accepted Payment Modes (Informational, No Manual Scanner / No Manual 12 Digits) */}
-          <div className="bg-white border border-[#E2E8F0] rounded-2xl p-3.5 space-y-2 shadow-xs">
-            <div className="flex items-center justify-between text-xs font-bold text-[#0A2540]">
+          {/* Free Activation Notice */}
+          <div className="bg-emerald-50 border border-emerald-200 rounded-2xl p-3.5 space-y-1.5 shadow-xs">
+            <div className="flex items-center justify-between text-xs font-bold text-emerald-900">
               <span className="flex items-center gap-1.5">
-                <CreditCard className="w-4 h-4 text-[#0B4EA2]" />
-                Accepted Payment Methods
+                <ShieldCheck className="w-4 h-4 text-emerald-600" />
+                Instant Free Activation
               </span>
-              <span className="text-[10px] text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full font-bold">
-                Instant Activation
+              <span className="text-[10px] text-emerald-800 bg-emerald-100 px-2 py-0.5 rounded-full font-bold">
+                ₹0 Cost
               </span>
             </div>
-            <div className="flex items-center gap-2 pt-1 text-[11px] text-[#64748B] font-medium">
-              <span className="px-2.5 py-1 bg-[#F1F5F9] rounded-lg text-[#0F172A] font-bold">Google Pay</span>
-              <span className="px-2.5 py-1 bg-[#F1F5F9] rounded-lg text-[#0F172A] font-bold">PhonePe</span>
-              <span className="px-2.5 py-1 bg-[#F1F5F9] rounded-lg text-[#0F172A] font-bold">Paytm / UPI</span>
-              <span className="px-2.5 py-1 bg-[#F1F5F9] rounded-lg text-[#0F172A] font-bold">Cards</span>
-            </div>
+            <p className="text-[11px] text-emerald-700 leading-relaxed">
+              No payment gateway or card required. Press ID and digital accreditation will be generated immediately.
+            </p>
           </div>
         </div>
 
@@ -257,17 +232,17 @@ export const PaymentScreen: React.FC = () => {
             type="button"
             onClick={handleContinuePayment}
             disabled={loading}
-            className="w-full py-4 px-5 bg-gradient-to-r from-[#0B4EA2] to-[#0284c7] hover:from-[#093F84] hover:to-[#015BB3] active:scale-[0.99] text-white font-black text-sm rounded-2xl transition-all shadow-lg flex items-center justify-center gap-2 cursor-pointer disabled:opacity-70 disabled:cursor-not-allowed"
+            className="w-full py-4 px-5 bg-gradient-to-r from-[#128842] to-[#0e6f36] hover:from-[#0e6f36] hover:to-[#094c25] active:scale-[0.99] text-white font-black text-sm rounded-2xl transition-all shadow-lg flex items-center justify-center gap-2 cursor-pointer disabled:opacity-70 disabled:cursor-not-allowed"
           >
             {loading ? (
               <>
                 <Loader2 className="w-4 h-4 animate-spin" />
-                <span>Processing Payment...</span>
+                <span>Setting Up Your Press ID Card...</span>
               </>
             ) : (
               <>
-                <Lock className="w-4 h-4" />
-                <span>Pay ₹{priceInr} & Activate ID</span>
+                <ShieldCheck className="w-4 h-4" />
+                <span>Set Up ID Card & Activate Login (Free ₹0)</span>
                 <ArrowRight className="w-4 h-4" />
               </>
             )}

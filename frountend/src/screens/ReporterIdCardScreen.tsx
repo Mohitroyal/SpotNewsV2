@@ -24,6 +24,7 @@ import { supabase } from '@/lib/supabase';
 import type { ReporterApplicationDetails } from '@/types/reporterApproval';
 import { RtiIdCard, type RtiCardData } from '@/components/RtiIdCard';
 import { exportIdCardPdf, exportIdCardPng, printIdCard, shareIdCard } from '@/utils/idCardExport';
+import rtiExpressLogo from '@/assets/rti_express_logo.png';
 
 export const ReporterIdCardScreen: React.FC = () => {
   const location = useLocation();
@@ -194,7 +195,7 @@ export const ReporterIdCardScreen: React.FC = () => {
     guardian: '',
     mediaType: 'PRINT MEDIA',
     actLine: 'RTI ACT-2005',
-    logoUrl: '/logo_spotnews.png',
+    logoUrl: rtiExpressLogo,
   };
 
   // Download PDF (front & back CR80 format)
@@ -202,8 +203,8 @@ export const ReporterIdCardScreen: React.FC = () => {
     setDownloading(true);
     setDownloadSuccessMsg('');
     try {
-      const frontEl = document.getElementById('rti-card-front');
-      const backEl = document.getElementById('rti-card-back');
+      const frontEl = document.getElementById('rti-card-front-visible') || document.getElementById('rti-card-front');
+      const backEl = document.getElementById('rti-card-back-visible') || document.getElementById('rti-card-back');
 
       if (!frontEl) {
         throw new Error('ID Card elements could not be located.');
@@ -228,8 +229,9 @@ export const ReporterIdCardScreen: React.FC = () => {
     setDownloadSuccessMsg('');
     try {
       setActiveSide(targetSide);
-      const elId = targetSide === 'front' ? 'rti-card-front' : 'rti-card-back';
-      const el = document.getElementById(elId);
+      const frontCandidate = document.getElementById('rti-card-front-visible') || document.getElementById('rti-card-front');
+      const backCandidate = document.getElementById('rti-card-back-visible') || document.getElementById('rti-card-back');
+      const el = targetSide === 'front' ? frontCandidate : backCandidate;
       if (!el) throw new Error(`${targetSide} card element not found`);
 
       const res = await exportIdCardPng(cardData.cardNo, el, targetSide === 'front' ? 'FRONT' : 'BACK', false);
@@ -255,7 +257,7 @@ export const ReporterIdCardScreen: React.FC = () => {
       `Verification Helpline: 7668886666`;
 
     try {
-      const frontEl = document.getElementById('rti-card-front');
+      const frontEl = document.getElementById('rti-card-front-visible') || document.getElementById('rti-card-front');
       const res = await shareIdCard(cardData.cardNo, shareText, frontEl);
       if (res.message) {
         setDownloadSuccessMsg(res.message);
@@ -270,8 +272,8 @@ export const ReporterIdCardScreen: React.FC = () => {
   const handlePrint = async () => {
     setDownloading(true);
     try {
-      const frontEl = document.getElementById('rti-card-front');
-      const backEl = document.getElementById('rti-card-back');
+      const frontEl = document.getElementById('rti-card-front-visible') || document.getElementById('rti-card-front');
+      const backEl = document.getElementById('rti-card-back-visible') || document.getElementById('rti-card-back');
       if (!frontEl) throw new Error('ID Card element not found');
 
       const res = await printIdCard(cardData.cardNo, frontEl, backEl);
@@ -398,7 +400,7 @@ export const ReporterIdCardScreen: React.FC = () => {
               </div>
 
               {/* Card Container with Realistic Drop Shadow */}
-              <div className="flex flex-col items-center justify-center py-2 bg-gradient-to-b from-slate-200/50 to-slate-200/20 rounded-3xl border border-slate-300/60 p-4 overflow-x-auto shadow-inner">
+              <div className="flex flex-col items-center justify-center py-3 bg-gradient-to-b from-slate-200/50 to-slate-200/20 rounded-3xl border border-slate-300/60 p-4 overflow-hidden shadow-inner select-none">
                 <RtiIdCard
                   data={cardData}
                   side={activeSide}

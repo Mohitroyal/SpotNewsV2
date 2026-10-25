@@ -8,6 +8,7 @@ export const newsLink = (postId: number | string, reporterSlug?: string) =>
 export const reporterLink = (slug: string) => `${SHARE_BASE}/?reporter=${encodeURIComponent(slug)}`;
 
 export const shareCaption = (headline: string, link: string) =>
-  `📰 ${headline}\n\nపూర్తి వార్త యాప్‌లో చదవండి 👉 ${link}\n\nRTI Express Spot News 24x7 — మీ ఊరి వార్తలు, మీ చేతుల్లో`;
+  `${headline}\n${link}\n\nShared via RTI Express Spot News 24x7`;
 
 export const shortLink = (link: string) => link.replace(/^https?:\/\//, "").replace(/\/$/, "");
+

@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
 
-export function StarRating({ postId, reporterName }: { postId: number; reporterName: string }) {
+export function StarRating({ postId, reporterName }: { postId: number | string; reporterName: string }) {
   const [mine, setMine] = useState(0);
   const [hover, setHover] = useState(0);
   const [msg, setMsg] = useState("");
@@ -12,7 +12,7 @@ export function StarRating({ postId, reporterName }: { postId: number; reporterN
     (async () => {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
-      const { data } = await supabase.from("story_ratings").select("stars").eq("post_id", postId).eq("user_id", user.id).maybeSingle();
+      const { data } = await supabase.from("story_ratings").select("stars").eq("post_id", String(postId)).eq("user_id", user.id).maybeSingle();
       if (data) setMine(data.stars);
     })();
   }, [postId]);

@@ -20,7 +20,7 @@ export const ApplicationRejectedScreen: React.FC = () => {
 
   const handleReapply = () => {
     // Navigate back to LoginScreen with active tab set to apply
-    navigate('/login', { state: { defaultTab: 'apply' } });
+    navigate('/apply');
   };
 
   return (

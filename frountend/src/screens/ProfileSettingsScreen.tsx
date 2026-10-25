@@ -14,13 +14,14 @@ export const ProfileSettingsScreen: React.FC = () => {
   const isIdPhotoLocked =
     localStorage.getItem(`spotnews_id_photo_confirmed_${currentEmail}`) === 'true' ||
     !!localStorage.getItem(`spotnews_id_card_photo_${currentEmail}`);
-  const initialName =
+  const rawInitialName =
     getReporterName(currentEmail) ||
     (user as any)?.user_metadata?.full_name ||
     (user as any)?.user_metadata?.name ||
     user?.full_name ||
     user?.firstName ||
-    'Reporter';
+    (currentEmail.includes('guest') ? 'Guest Reader' : 'Reporter');
+  const initialName = rawInitialName === 'వార్తా పాఠకులు' ? 'Guest Reader' : rawInitialName;
   const initialPhoto =
     (isIdPhotoLocked ? localStorage.getItem(`spotnews_id_card_photo_${currentEmail}`) : null) ||
     getReporterPhoto(currentEmail) ||

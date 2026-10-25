@@ -9,24 +9,42 @@ import { Media } from '@capacitor-community/media';
  * Capture an HTML element to high-res PNG canvas
  */
 export async function captureCardElement(el: HTMLElement, scale = 3.5): Promise<HTMLCanvasElement> {
+  // Wait for fonts to load properly so font metrics match exactly
+  if (document.fonts) {
+    try {
+      await document.fonts.ready;
+    } catch {
+      // ignore font error
+    }
+  }
+
+  // Ensure all images within the card element are completely loaded
+  const imgs = Array.from(el.querySelectorAll('img'));
+  await Promise.all(
+    imgs.map((img) => {
+      if (img.complete) return Promise.resolve();
+      return new Promise<void>((resolve) => {
+        img.onload = () => resolve();
+        img.onerror = () => resolve();
+      });
+    })
+  );
+
   return await html2canvas(el, {
     scale,
     useCORS: true,
     allowTaint: true,
     backgroundColor: '#ffffff',
     logging: false,
+    scrollX: 0,
+    scrollY: 0,
     onclone: (_clonedDoc, clonedEl) => {
       clonedEl.style.opacity = '1';
       clonedEl.style.visibility = 'visible';
-      clonedEl.style.display = 'block';
-      clonedEl.style.position = 'relative';
-      clonedEl.style.left = '0';
-      clonedEl.style.top = '0';
       clonedEl.style.transform = 'none';
-      if (clonedEl.parentElement) {
-        clonedEl.parentElement.style.opacity = '1';
-        clonedEl.parentElement.style.transform = 'none';
-      }
+      clonedEl.style.boxShadow = 'none';
+      clonedEl.style.animation = 'none';
+      clonedEl.style.transition = 'none';
     },
   });
 }
@@ -61,7 +79,7 @@ export async function exportIdCardPdf(
     }
 
     const cleanCardNo = cardNo.replace(/[^A-Za-z0-9_-]/g, '_');
-    const fileName = `RTI_EXPRESS_ID_${cleanCardNo}.pdf`;
+    const fileName = `RTI_EXPRESS_ID_${cleanCardNo}_${Date.now()}.pdf`;
 
     if (Capacitor.isNativePlatform()) {
       const pdfBase64Uri = pdf.output('datauristring');
@@ -131,7 +149,7 @@ export async function exportIdCardPng(
     const canvas = await captureCardElement(el, 4); // 300+ DPI
     const dataUrl = canvas.toDataURL('image/png');
     const cleanCardNo = cardNo.replace(/[^A-Za-z0-9_-]/g, '_');
-    const fileName = `RTI_EXPRESS_${cleanCardNo}_${sideName}.png`;
+    const fileName = `RTI_EXPRESS_${cleanCardNo}_${sideName}_${Date.now()}.png`;
 
     if (Capacitor.isNativePlatform()) {
       const base64Data = dataUrl.split(',')[1] || dataUrl;
@@ -229,7 +247,7 @@ export async function shareIdCard(
       const dataUrl = canvas.toDataURL('image/png');
       const base64Data = dataUrl.split(',')[1] || dataUrl;
       const cleanCardNo = cardNo.replace(/[^A-Za-z0-9_-]/g, '_');
-      const fileName = `RTI_EXPRESS_${cleanCardNo}_SHARE.png`;
+      const fileName = `RTI_EXPRESS_${cleanCardNo}_SHARE_${Date.now()}.png`;
 
       const cacheResult = await Filesystem.writeFile({
         path: fileName,
@@ -254,6 +272,26 @@ export async function shareIdCard(
       });
       return { success: true, message: 'Share sheet opened!' };
     } else if (navigator.share) {
+      if (frontEl && navigator.canShare) {
+        try {
+          const canvas = await captureCardElement(frontEl, 3.5);
+          const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, 'image/png'));
+          if (blob) {
+            const cleanCardNo = cardNo.replace(/[^A-Za-z0-9_-]/g, '_');
+            const file = new File([blob], `RTI_EXPRESS_${cleanCardNo}.png`, { type: 'image/png' });
+            if (navigator.canShare({ files: [file] })) {
+              await navigator.share({
+                title: 'RTI EXPRESS Spot News 24x7 Press ID Card',
+                text: shareText,
+                files: [file],
+              });
+              return { success: true, message: 'Card image shared successfully!' };
+            }
+          }
+        } catch (shareFileErr) {
+          console.warn('Web share file fallback:', shareFileErr);
+        }
+      }
       await navigator.share({
         title: 'RTI EXPRESS Spot News 24x7 Press ID Card',
         text: shareText,

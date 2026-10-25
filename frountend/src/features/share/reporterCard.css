@@ -1,5 +1,5 @@
-/* Reporter share card — rendered off-screen at full size, then turned into a PNG by shareImage.ts */
-.rc { position: absolute; left: -9999px; top: 0; width: 1080px; background: #faf6ec; color: #1a1a1a; font-family: "Noto Sans Telugu", sans-serif; box-sizing: border-box; overflow: hidden; z-index: -100; pointer-events: none; }
+/* Reporter share card — matches card style (cream paper, double rule, red tag, black link bar) */
+.rc { position: fixed; left: -99999px; top: 0; width: 1080px; background: #faf6ec; color: #1a1a1a; font-family: "Noto Sans Telugu", sans-serif; box-sizing: border-box; overflow: hidden; }
 .rc-square { height: 1080px; padding: 44px 52px; border: 6px solid #1f1f1f; border-radius: 40px; }
 .rc-story  { height: 1920px; padding: 70px 60px; }
 .rc-head { display: flex; align-items: center; gap: 22px; }

@@ -15,7 +15,7 @@
     "open:ios": "npx cap open ios"
   },
   "dependencies": {
-    "@capacitor-community/admob": "^6.2.0",
+    "@capacitor-community/admob": "^8.2.1",
     "@capacitor-community/fcm": "^6.0.1",
     "@capacitor-community/media": "^6.0.0",
     "@capacitor/android": "^6.2.1",
@@ -25,6 +25,7 @@
     "@capacitor/clipboard": "^6.0.3",
     "@capacitor/core": "^6.2.1",
     "@capacitor/filesystem": "^6.0.4",
+    "@capacitor/geolocation": "^6.1.1",
     "@capacitor/ios": "^6.2.2",
     "@capacitor/push-notifications": "^6.0.5",
     "@capacitor/share": "^6.0.4",
@@ -33,6 +34,7 @@
     "@supabase/supabase-js": "^2.106.2",
     "@tailwindcss/postcss": "^4.3.3",
     "@tailwindcss/vite": "^4.3.0",
+    "@types/qrcode": "^1.5.6",
     "axios": "^1.16.1",
     "clsx": "^2.1.1",
     "cordova-plugin-inappbrowser": "^6.0.0",
@@ -53,7 +55,6 @@
     "@capacitor/cli": "^6.2.1",
     "@eslint/js": "^10.0.1",
     "@types/node": "^24.12.3",
-    "@types/qrcode": "^1.5.6",
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^6.0.1",

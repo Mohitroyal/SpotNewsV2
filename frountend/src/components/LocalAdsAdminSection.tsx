@@ -31,7 +31,7 @@ export const LocalAdsAdminSection: React.FC = () => {
 
   // Accept Dialog state
   const [acceptingAd, setAcceptingAd] = useState<LocalAd | null>(null);
-  const [priceAmount, setPriceAmount] = useState('500');
+  const [priceAmount, setPriceAmount] = useState('0');
   const [actionLoading, setActionLoading] = useState(false);
 
   // Reject Dialog state

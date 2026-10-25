@@ -1,6 +1,6 @@
-import { BrowserRouter as Router, Routes, Route, Navigate, Link, useNavigate } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Navigate, Link, useNavigate, useLocation } from 'react-router-dom';
 import { useState, useEffect } from 'react';
-import { Settings, Plus, Newspaper, Globe, Shield } from 'lucide-react';
+import { Settings, Plus, Newspaper, Globe } from 'lucide-react';
 // import { useTranslation } from './lib/i18n';
 import mastheadLogo from './assets/rti_express_logo.png';
 import watermarkLogo from './assets/rti_express_watermark.png';
@@ -30,6 +30,9 @@ import { IdGeneratingScreen } from './screens/IdGeneratingScreen';
 import { ReporterIdCardScreen } from './screens/ReporterIdCardScreen';
 import { ApplicationRejectedScreen } from './screens/ApplicationRejectedScreen';
 import { ReporterAdRequestsScreen } from './screens/ReporterAdRequestsScreen';
+import { WelcomeScreen } from './screens/WelcomeScreen';
+import { UserNameScreen } from './screens/UserNameScreen';
+import { LocationSelectScreen } from './screens/LocationSelectScreen';
 import { useAuthStore, useUIStore, getReporterPhoto, getReporterName, isSuperAdminUser, isAdminUser } from './store';
 import { supabase } from './lib/supabase';
 import { App as CapacitorApp } from '@capacitor/app';
@@ -96,42 +99,53 @@ const MainLayout = ({ children }: { children: React.ReactNode }) => {
         }}
       >
         {/* ── Masthead (scrolls with page) ── */}
-        {!isFullScreenFeed && (<header className="w-full flex flex-col pt-safe" style={{ background: '#EAF2FB' }}>
-          <div style={{ background: headerBg, paddingBottom: '12px' }}>
+        {!isFullScreenFeed && (<header className="w-full flex flex-col pt-safe" style={{ background: headerBg }}>
+          <div style={{ background: headerBg, paddingBottom: '6px' }}>
             {/* ── Main Header Content ── */}
-            <div className="w-full flex items-start justify-between px-3.5 pt-3.5 pb-2 gap-2">
-              {/* Left Column: Logo + Title + Date below */}
-              <div className="flex flex-col gap-1 shrink-0">
-                <div className="flex items-center gap-2">
-                  {/* Logo box */}
-                  <div className="rounded-[8px] flex items-center justify-center h-[46px] overflow-hidden bg-white p-1 border border-[#0B56A6]/20 shrink-0">
-                    <img src={mastheadLogo} alt="Spot News Logo" className="h-full w-auto object-contain" style={{ maxWidth: '92px', borderRadius: '4px' }} />
-                  </div>
-                  <div className="flex flex-col justify-center">
-                    <span className="font-bold text-white text-[23px] leading-[1.15] tracking-wide" style={{ fontFamily: "'Georgia', serif" }}>
-                      Spot News<br/>24x7
-                    </span>
-                  </div>
+            <div className="w-full flex items-start justify-between px-3 sm:px-4 pt-3 pb-2 gap-2">
+              {/* Left Column: RTI Express Official Logo Emblem */}
+              <Link to="/" className="flex flex-col items-center justify-center shrink-0 no-underline" title="Spot News 24x7">
+                <div className="w-13 h-13 sm:w-15 sm:h-15 rounded-2xl bg-white p-1.5 shadow-md border border-white/40 flex items-center justify-center overflow-hidden transition-transform active:scale-95">
+                  <img
+                    src={mastheadLogo}
+                    alt="RTI Express Spot News 24x7"
+                    className="w-full h-full object-contain"
+                  />
                 </div>
+              </Link>
 
-                {/* Date text (italic serif font) */}
-                <span className="text-white/90 text-[11.5px] tracking-wide font-medium font-serif italic pt-1 whitespace-nowrap">
+              {/* Center Column: Brand Name, Date & Wanted Reporters Pill Button */}
+              <div className="flex-1 flex flex-col items-center text-center px-1 min-w-0">
+                <h1 className="text-white font-black text-[16.5px] sm:text-[19px] tracking-[0.14em] uppercase leading-tight font-sans">
+                  RTI EXPRESS
+                </h1>
+                <h2 className="text-white font-black text-[13.5px] sm:text-[15px] tracking-[0.1em] uppercase leading-tight font-sans mt-0.5">
+                  SPOT NEWS 24X7
+                </h2>
+                <span className="text-white/90 text-[11px] sm:text-xs tracking-wide font-serif italic pt-1 whitespace-nowrap">
                   {new Date().toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
                 </span>
+                <a
+                  href="tel:7668886666"
+                  className="mt-2 inline-flex items-center justify-center px-4 sm:px-5 py-1.5 rounded-full bg-[#E50914] hover:bg-[#d00812] active:scale-95 text-white font-bold text-[12px] sm:text-[13px] tracking-wide shadow-md transition-all select-none"
+                  style={{ textDecoration: 'none' }}
+                >
+                  Wanted reporters: 7668886666
+                </a>
               </div>
 
-              {/* Right Column: Profile Avatar -> Reporter Name UP */}
-              <div className="flex flex-col items-end text-right pt-0.5 shrink-0">
+              {/* Right Column: Profile Avatar -> Reporter Name */}
+              <div className="flex flex-col items-center text-center shrink-0">
                 <Link to="/settings" className="flex flex-col items-center gap-0.5 active:scale-95 transition-transform" title="Reporter Profile">
                   {userAvatar ? (
                     <img
                       src={userAvatar}
                       alt="Reporter Profile"
-                      className="w-11 h-11 rounded-full object-cover border-2 border-[#CC1E1E] shadow-sm bg-white"
+                      className="w-11 h-11 sm:w-12 sm:h-12 rounded-full object-cover border-2 border-white shadow-sm bg-white"
                     />
                   ) : (
-                    <div className="w-11 h-11 rounded-full bg-[#1e3a5f] border-2 border-[#CC1E1E] flex items-center justify-center text-white font-bold text-sm shadow-sm">
-                      {userInitials}
+                    <div className="w-11 h-11 sm:w-12 sm:h-12 rounded-full bg-[#1e3a5f] border-2 border-white flex items-center justify-center text-white font-bold text-xs sm:text-sm shadow-sm">
+                      {userInitials || 'Rep'}
                     </div>
                   )}
                   <div className="flex flex-col items-center leading-tight text-center mt-1">
@@ -145,50 +159,18 @@ const MainLayout = ({ children }: { children: React.ReactNode }) => {
             </div>
           </div>
 
-          {/* ── Smooth Wave Divider Transition ── */}
-          <div style={{ width: '100%', overflow: 'hidden', lineHeight: 0, background: '#EAF2FB', position: 'relative' }}>
+          {/* ── Seamless Smooth Wave Divider Transition ── */}
+          <div style={{ width: '100%', overflow: 'hidden', lineHeight: 0, position: 'relative', marginTop: '-1px' }}>
             <svg
-              viewBox="0 0 1440 240"
+              viewBox="0 0 1440 180"
               preserveAspectRatio="none"
-              style={{ position: 'relative', display: 'block', width: '100%', height: '52px' }}
+              style={{ position: 'relative', display: 'block', width: '100%', height: '42px' }}
             >
               <path
-                d="M0,0 L1440,0 L1440,100 C1100,240 500,10 0,170 Z"
-                fill={headerBg}
+                d="M0,150 C400,20 1080,180 1440,60 L1440,181 L0,181 Z"
+                fill="#EAF2FB"
               />
             </svg>
-
-            {/* Wanted reporters in the middle inside the wave in red */}
-            <div
-              style={{
-                position: 'absolute',
-                top: '2px',
-                left: 0,
-                width: '100%',
-                display: 'flex',
-                justifyContent: 'center',
-                alignItems: 'center',
-                zIndex: 2,
-                lineHeight: 1,
-                pointerEvents: 'auto'
-              }}
-            >
-              <a
-                href="tel:7668886666"
-                style={{
-                  color: '#FF3838',
-                  fontSize: '13px',
-                  fontWeight: 900,
-                  letterSpacing: '0.1px',
-                  fontFamily: "'Inter', sans-serif",
-                  textDecoration: 'none',
-                  display: 'inline-block',
-                  textShadow: '0 1px 2px rgba(0,0,0,0.5)'
-                }}
-              >
-                Wanted reporters:-7668886666
-              </a>
-            </div>
           </div>
         </header>)}
 
@@ -245,13 +227,6 @@ const MainLayout = ({ children }: { children: React.ReactNode }) => {
               <span className="text-[11px] font-bold mt-1" style={{ color: '#0C447C' }}>Stats</span>
             </Link>
 
-            {/* 5. Admin Tab (Only for Superadmin & Admin) */}
-            {(isSuperAdmin || isAdmin) && (
-              <Link to="/admin" className="flex flex-col items-center justify-center flex-1 h-full pt-1 active:scale-95 transition-transform">
-                <Shield className="w-6 h-6" style={{ color: '#CC1E1E' }} />
-                <span className="text-[11px] font-bold mt-1" style={{ color: '#CC1E1E' }}>Admin</span>
-              </Link>
-            )}
           </>
         ) : (
           /* 2. Center Raised Button (News for users) */
@@ -286,7 +261,6 @@ function AppUrlListener() {
   const user = useAuthStore((state) => state.user);
 
   useEffect(() => {
-    // 1. Initialize custom URL and intent deep linking
     const cleanupDeepLinks = initDeepLinks(navigate);
 
     const handleUrlOpen = (ev: Event) => {
@@ -322,6 +296,14 @@ function AppUrlListener() {
 
   return null;
 }
+
+const LoginRouteWrapper = ({ isAuthenticated }: { isAuthenticated: boolean }) => {
+  const location = useLocation();
+  if (!isAuthenticated || location.state?.defaultTab === 'apply') {
+    return <LoginScreen defaultTab={location.state?.defaultTab} />;
+  }
+  return <Navigate to="/" />;
+};
 
 function App() {
   const [isInitializing, setIsInitializing] = useState(true);
@@ -447,7 +429,15 @@ function App() {
       <Routes>
         <Route
           path="/login"
-          element={!isAuthenticated ? <LoginScreen /> : <Navigate to="/" />}
+          element={<LoginRouteWrapper isAuthenticated={isAuthenticated} />}
+        />
+        <Route
+          path="/apply"
+          element={<LoginScreen defaultTab="apply" />}
+        />
+        <Route
+          path="/reporter/apply"
+          element={<LoginScreen defaultTab="apply" />}
         />
         <Route
           path="/login/otp"
@@ -503,13 +493,29 @@ function App() {
         />
 
         <Route
+          path="/welcome"
+          element={<WelcomeScreen />}
+        />
+
+        <Route
+          path="/welcome/name"
+          element={<UserNameScreen />}
+        />
+
+        <Route
+          path="/location"
+          element={<LocationSelectScreen />}
+        />
+
+        <Route
           path="/*"
           element={
             isAuthenticated ? (
               <MainLayout>
                 <Routes>
                   <Route path="/" element={<FeedScreen />} />
-                  <Route path="/ad-requests" element={hasReporterAccess ? <ReporterAdRequestsScreen /> : <Navigate to="/" />} />
+                  <Route path="/location" element={<LocationSelectScreen />} />
+                  <Route path="/ad-requests" element={<ReporterAdRequestsScreen />} />
                   <Route path="/stats" element={hasReporterAccess ? <StatsScreen /> : <Navigate to="/" />} />
                   <Route path="/dashboard" element={<DashboardScreen />} />
                   <Route path="/generate" element={hasReporterAccess ? <GenerateScreen /> : <Navigate to="/" />} />
@@ -523,7 +529,7 @@ function App() {
                 </Routes>
               </MainLayout>
             ) : (
-              <Navigate to="/login" />
+              <WelcomeScreen />
             )
           }
         />

@@ -18,7 +18,7 @@ const PACKAGES: Record<Exclude<Channel, "other">, string> = {
 };
 
 interface TargetSharePlugin {
-  share(o: { package: string; fileUri: string; text: string; mime?: string }): Promise<{ ok: boolean }>;
+  share(o: { package: string; fileUri?: string; text: string; mime?: string }): Promise<{ ok: boolean }>;
 }
 
 const TargetShare = registerPlugin<TargetSharePlugin>("TargetShare");
@@ -83,7 +83,7 @@ async function saveToCache(dataUrl: string, name: string) {
 }
 
 export async function shareImage(o: {
-  dataUrl: string;
+  dataUrl?: string;
   caption: string;
   channel: Channel;
   kind: "clipping" | "reporter_card" | "story_card";
@@ -106,6 +106,14 @@ export async function shareImage(o: {
 
   // Web / PWA fallback
   if (!Capacitor.isNativePlatform()) {
+    if (!o.dataUrl) {
+      if (navigator.share) {
+        return await navigator.share({ text: o.caption });
+      }
+      await navigator.clipboard.writeText(o.caption);
+      alert("లింక్ కాపీ చేయబడింది!");
+      return;
+    }
     try {
       const blob = await (await fetch(o.dataUrl)).blob();
       const file = new File([blob], "rti-express.jpg", { type: "image/jpeg" });
@@ -122,7 +130,9 @@ export async function shareImage(o: {
     return;
   }
 
-  const uri = await saveToCache(o.dataUrl, `rti_${o.kind}_${Date.now()}.jpg`);
+  const uri = o.dataUrl
+    ? await saveToCache(o.dataUrl, `rti_${o.kind}_${Date.now()}.jpg`)
+    : undefined;
 
   // Instagram ignores captions → copy the caption + link so the reporter can paste it
   if (o.channel === "instagram") {
@@ -137,7 +147,7 @@ export async function shareImage(o: {
         package: PACKAGES[o.channel],
         fileUri: uri,
         text: o.caption,
-        mime: "image/jpeg",
+        mime: uri ? "image/jpeg" : "text/plain",
       });
       return;
     } catch {
@@ -147,7 +157,7 @@ export async function shareImage(o: {
 
   await Share.share({
     text: o.caption,
-    files: [uri],
+    files: uri ? [uri] : undefined,
     dialogTitle: "షేర్ చేయండి",
   });
 }
@@ -275,15 +285,7 @@ export async function shareVideo(o: {
       path: fileName,
       directory: Directory.Cache,
     });
-    try {
-      const uriResult = await Filesystem.getUri({
-        directory: Directory.Cache,
-        path: fileName,
-      });
-      fileUri = uriResult.uri;
-    } catch {
-      fileUri = dlResult.path || "";
-    }
+    fileUri = dlResult.path || "";
   } catch (dlErr) {
     console.warn("Filesystem.downloadFile failed, fallback to fetch blob:", dlErr);
     const res = await fetch(o.videoUrl);
@@ -304,10 +306,6 @@ export async function shareVideo(o: {
       directory: Directory.Cache,
     });
     fileUri = writeRes.uri;
-  }
-
-  if (fileUri && !fileUri.startsWith("file://")) {
-    fileUri = `file://${fileUri}`;
   }
 
   if (!fileUri) {

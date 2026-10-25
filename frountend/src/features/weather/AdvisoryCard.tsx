@@ -1,25 +1,90 @@
 import { useState } from "react";
 import type { AdvisoryRow } from "./types";
 import "./weather.css";
+import type { WeatherData } from "@/services/weatherService";
+import { getLastGoodCachedWeather, getWeatherInfo } from "@/services/weatherService";
 
 const LEVEL_TE = { info: "సమాచారం", caution: "జాగ్రత్త", warning: "హెచ్చరిక", danger: "తీవ్ర హెచ్చరిక" } as const;
 const LEVEL_EN = { info: "Info", caution: "Caution", warning: "Warning", danger: "Danger" } as const;
 const CAT_TE = { health: "ఆరోగ్యం", safety: "భద్రత", surroundings: "మన పరిసరాలు" } as const;
 
+const COND_TE: Record<string, string> = {
+  "Clear sky": "స్పష్టమైన ఆకాశం",
+  "Mainly clear": "తేలికపాటి మేఘాలు",
+  "Partly cloudy": "పాక్షికంగా మేఘావృతం",
+  "Cloudy / Overcast": "మేఘావృతం",
+  "Cloud": "మేఘావృతం",
+  "Fog": "పొగమంచు",
+  "Drizzle": "చిరుజల్లులు",
+  "Cloud with drizzle": "చిరుజల్లులు",
+  "Rain": "వర్షం",
+  "Snow": "మంచు",
+  "Rain showers": "వర్షపు జల్లులు",
+  "Sun with rain showers": "ఎండతో కూడిన వర్షం",
+  "Moon with rain showers": "రాత్రి వర్షపు జల్లులు",
+  "Thunderstorm": "ఉరుములతో కూడిన వర్షం",
+  "Thunderstorm with hail": "వడగండ్ల వాన",
+  "Hail with lightning": "వడగండ్లతో కూడిన ఉరుములు",
+  "Cloud with sun": "తేలికపాటి ఎండ, మేఘాలు",
+  "Cloud with moon": "రాత్రి పాక్షిక మేఘావృతం",
+  "Cloudy": "మేఘావృతం",
+  "Sun": "ఎండ",
+  "Moon": "రాత్రి స్పష్టమైన ఆకాశం",
+};
+
 export function AdvisoryStrip({ row, onOpen }: { row: AdvisoryRow; onOpen: () => void }) {
   const top = row.report?.advisories?.[0] || { icon: "☀️" };
+  const cached = getLastGoodCachedWeather();
+  const info = cached ? getWeatherInfo(cached.weatherCode, cached.isDay) : null;
   return (
     <button className={`adv-strip lvl-${row.max_level || "info"}`} onClick={onOpen}>
-      <span className="adv-strip-icon">{top.icon}</span>
+      {info?.iconUrl ? (
+        <img src={info.iconUrl} alt="" className="w-5 h-5 object-contain shrink-0" />
+      ) : (
+        <span className="adv-strip-icon">{top.icon}</span>
+      )}
       <span className="adv-strip-text">{row.headline_te}</span>
       <span className="adv-strip-go">›</span>
     </button>
   );
 }
 
-export function AdvisoryCard({ row, onClose }: { row: AdvisoryRow; onClose?: () => void }) {
+export function AdvisoryCard({
+  row,
+  onClose,
+  liveWeather,
+}: {
+  row: AdvisoryRow;
+  onClose?: () => void;
+  liveWeather?: WeatherData | null;
+}) {
   const [en, setEn] = useState(false);
   const r = row.report;
+
+  // Use live weather if available, or fall back to cached live weather reading, or DB report
+  const activeWeather: WeatherData | null =
+    liveWeather !== undefined ? liveWeather : getLastGoodCachedWeather();
+
+  const tempVal = activeWeather
+    ? Math.round(activeWeather.temperature)
+    : r.now.temp !== null && r.now.temp !== undefined
+    ? Math.round(r.now.temp)
+    : null;
+
+  const feelsLikeVal = activeWeather
+    ? Math.round(activeWeather.apparentTemperature)
+    : r.now.feelsLike !== null && r.now.feelsLike !== undefined
+    ? Math.round(r.now.feelsLike)
+    : null;
+
+  const humidityVal = activeWeather ? activeWeather.humidity : r.now.humidity ?? null;
+
+  const info = activeWeather ? getWeatherInfo(activeWeather.weatherCode, activeWeather.isDay) : null;
+  const conditionDisplay = info
+    ? en
+      ? info.label
+      : COND_TE[info.label] || r.now.condition
+    : r.now.condition;
 
   const share = async () => {
     const lines = (r.advisories || [])
@@ -74,13 +139,23 @@ export function AdvisoryCard({ row, onClose }: { row: AdvisoryRow; onClose?: () 
       </header>
 
       <section className="adv-now">
-        <div className="adv-temp">{r.now.temp !== null ? Math.round(r.now.temp) : "–"}°</div>
+        <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+          {info?.iconUrl && (
+            <img
+              src={info.iconUrl}
+              alt={info.label}
+              style={{ width: "46px", height: "46px", objectFit: "contain", flexShrink: 0 }}
+              draggable={false}
+            />
+          )}
+          <div className="adv-temp">{tempVal !== null ? `${tempVal}°` : "–°"}</div>
+        </div>
         <div className="adv-meta">
           <div>
-            {en ? "Feels like" : "అనుభూతి"} {r.now.feelsLike !== null ? Math.round(r.now.feelsLike) : "–"}°
+            {en ? "Feels like" : "అనుభూతి"} {feelsLikeVal !== null ? `${feelsLikeVal}°` : "–°"}
           </div>
-          <div>💧 {r.now.humidity ?? "–"}% · UV {r.now.uv ?? "–"}</div>
-          <div className="adv-cond">{r.now.condition}</div>
+          <div>💧 {humidityVal !== null ? `${humidityVal}%` : "–%"} · UV {r.now.uv ?? "–"}</div>
+          <div className="adv-cond">{conditionDisplay}</div>
         </div>
       </section>
 

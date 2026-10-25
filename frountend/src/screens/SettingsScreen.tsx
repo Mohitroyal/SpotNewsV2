@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useAuthStore, useUIStore, useGenerationStore, getReporterPhoto, saveReporterPhoto, getReporterName, isAdminUser, isSuperAdminUser, getEffectiveReporterPhoto } from '@/store';
 import { useNavigate } from 'react-router-dom';
-import { Bell, Moon, Trash2, Shield, Check, QrCode, LogOut, AlertTriangle, User as UserIcon, UserCircle, ChevronRight, FileText, History, Crown, Loader2, MapPin, Megaphone, Download, Share2, Printer, FileImage, ExternalLink, RotateCw, Mail } from 'lucide-react';
+import { Bell, Moon, Trash2, Shield, Check, QrCode, LogOut, AlertTriangle, User as UserIcon, UserCircle, ChevronRight, ChevronDown, FileText, History, Crown, Loader2, MapPin, Megaphone, Download, Share2, Printer, FileImage, ExternalLink, RotateCw, Mail } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { supabase } from '@/lib/supabase';
 import { GoogleAuth } from '@codetrix-studio/capacitor-google-auth';
@@ -11,6 +11,7 @@ import { INDIA_STATES } from '@/utils/indiaStates';
 import { initPush, disablePush, requestPushPermission, checkPushPermission, isPushSupported } from '@/lib/push';
 import { RtiIdCard, type RtiCardData } from '@/components/RtiIdCard';
 import { exportIdCardPdf, exportIdCardPng, printIdCard, shareIdCard } from '@/utils/idCardExport';
+import rtiExpressLogo from '@/assets/rti_express_logo.png';
 import { reporterApprovalService } from '@/services/reporterApproval.service';
 import { notificationService, type NotificationType } from '@/services/notification.service';
 
@@ -79,13 +80,34 @@ export const SettingsScreen = () => {
   const resetGenerations = useGenerationStore((state) => state.resetConfig);
   const navigate = useNavigate();
 
-  // ── Admin check (checks super admin, user metadata, Supabase profiles table & backend API) ──
+  // Normalize userState and districts for Content Location selector
+  const effectiveState = (() => {
+    if (!userState || userState === 'All' || userState === 'Both states' || userState === 'All States') {
+      return 'All';
+    }
+    if (userState === 'AP') return 'Andhra Pradesh';
+    if (userState === 'TG') return 'Telangana';
+    return userState;
+  })();
+
+  const availableDistricts = (() => {
+    if (effectiveState === 'All') {
+      const tgDists = INDIA_STATES['Telangana'] || [];
+      const apDists = INDIA_STATES['Andhra Pradesh'] || [];
+      return Array.from(new Set([...tgDists, ...apDists]));
+    }
+    return INDIA_STATES[effectiveState] || [];
+  })();
+
+  // ── Admin & Reporter verification check ──
   const [isAdminAccess, setIsAdminAccess] = useState(
     isAdminUser(user) ||
     (user as any)?.role === 'admin' ||
     (user as any)?.app_metadata?.role === 'admin' ||
     (user as any)?.user_metadata?.role === 'admin'
   );
+  const [dbRole, setDbRole] = useState<string | null>(user?.role || null);
+
   useEffect(() => {
     if (
       isAdminUser(user) ||
@@ -105,9 +127,11 @@ export const SettingsScreen = () => {
           .select('role')
           .eq('id', user.id)
           .single();
-        if (prof?.role === 'admin') {
-          setIsAdminAccess(true);
-          return;
+        if (prof?.role) {
+          setDbRole(prof.role);
+          if (prof.role === 'admin' || prof.role === 'superadmin') {
+            setIsAdminAccess(true);
+          }
         }
       } catch { /* silent */ }
     })();
@@ -115,6 +139,22 @@ export const SettingsScreen = () => {
 
   // ── Reporter ID Card State inside Settings ──
   const [reporterAppData, setReporterAppData] = useState<any>(null);
+
+  const isSuperAdmin = isSuperAdminUser(user);
+  const isAdmin = isAdminUser(user) || isAdminAccess || dbRole === 'admin' || dbRole === 'superadmin';
+  const isApprovedReporter =
+    !isSuperAdmin &&
+    !isAdmin &&
+    (
+      dbRole === 'reporter' ||
+      user?.role === 'reporter' ||
+      (user as any)?.app_metadata?.role === 'reporter' ||
+      (user as any)?.user_metadata?.role === 'reporter' ||
+      reporterAppData?.status === 'ACTIVE' ||
+      reporterAppData?.status === 'APPROVED' ||
+      reporterAppData?.app_status === 'active' ||
+      reporterAppData?.app_status === 'approved'
+    );
   const [idCardSide, setIdCardSide] = useState<'front' | 'back'>('front');
   const [isExportingCard, setIsExportingCard] = useState(false);
   const [idCardMessage, setIdCardMessage] = useState('');
@@ -185,10 +225,15 @@ export const SettingsScreen = () => {
     getReporterName(reporterAppData?.email) ||
     localStorage.getItem('spotnews_active_reporter_name');
 
-  const settingsReporterName =
+  const rawSettingsName =
     storedReporterName ||
+    user?.full_name ||
+    user?.firstName ||
     reporterAppData?.name ||
-    'POKKALA MOHITH ROYAL';
+    (user?.role === 'reader' || user?.email === 'guest@spotnews.local' ? 'Guest Reader' : 'POKKALA MOHITH ROYAL');
+
+  const settingsReporterName =
+    rawSettingsName === 'వార్తా పాఠకులు' ? 'Guest Reader' : rawSettingsName;
 
   const effectivePhoto = getEffectiveReporterPhoto(
     user?.email || reporterAppData?.email,
@@ -217,15 +262,15 @@ export const SettingsScreen = () => {
     guardian: '',
     mediaType: 'PRINT MEDIA',
     actLine: 'RTI ACT-2005',
-    logoUrl: '/logo_spotnews.png',
+    logoUrl: rtiExpressLogo,
   };
 
   const handleExportPdfFromSettings = async () => {
     setIsExportingCard(true);
     setIdCardMessage('');
     try {
-      const frontEl = document.getElementById('rti-card-front');
-      const backEl = document.getElementById('rti-card-back');
+      const frontEl = document.getElementById('rti-card-front-visible') || document.getElementById('rti-card-front');
+      const backEl = document.getElementById('rti-card-back-visible') || document.getElementById('rti-card-back');
       if (!frontEl) throw new Error('ID card element not found');
       const res = await exportIdCardPdf(settingsCardData.cardNo, frontEl, backEl);
       if (res.message) {
@@ -245,8 +290,9 @@ export const SettingsScreen = () => {
     setIdCardMessage('');
     try {
       setIdCardSide(targetSide);
-      const elId = targetSide === 'front' ? 'rti-card-front' : 'rti-card-back';
-      const el = document.getElementById(elId);
+      const frontCandidate = document.getElementById('rti-card-front-visible') || document.getElementById('rti-card-front');
+      const backCandidate = document.getElementById('rti-card-back-visible') || document.getElementById('rti-card-back');
+      const el = targetSide === 'front' ? frontCandidate : backCandidate;
       if (!el) throw new Error('Card element not found');
       const res = await exportIdCardPng(settingsCardData.cardNo, el, targetSide === 'front' ? 'FRONT' : 'BACK', false);
       if (res.message) {
@@ -270,7 +316,7 @@ export const SettingsScreen = () => {
       `Verification Helpline: 7668886666`;
 
     try {
-      const frontEl = document.getElementById('rti-card-front');
+      const frontEl = document.getElementById('rti-card-front-visible') || document.getElementById('rti-card-front');
       const res = await shareIdCard(settingsCardData.cardNo, shareText, frontEl);
       if (res.message) {
         setIdCardMessage(res.message);
@@ -284,8 +330,8 @@ export const SettingsScreen = () => {
   const handlePrintCardFromSettings = async () => {
     setIsExportingCard(true);
     try {
-      const frontEl = document.getElementById('rti-card-front');
-      const backEl = document.getElementById('rti-card-back');
+      const frontEl = document.getElementById('rti-card-front-visible') || document.getElementById('rti-card-front');
+      const backEl = document.getElementById('rti-card-back-visible') || document.getElementById('rti-card-back');
       if (!frontEl) throw new Error('ID card element not found');
       const res = await printIdCard(settingsCardData.cardNo, frontEl, backEl);
       if (res.message) {
@@ -316,6 +362,20 @@ export const SettingsScreen = () => {
   const [sendingNotificationType, setSendingNotificationType] = useState<string | null>(null);
 
   useEffect(() => {
+    // 0. Auto-normalize Telugu default guest reader name to English
+    if (
+      user?.full_name === 'వార్తా పాఠకులు' ||
+      localStorage.getItem('spotnews_active_reporter_name') === 'వార్తా పాఠకులు' ||
+      localStorage.getItem('spotnews_reader_name') === 'వార్తా పాఠకులు'
+    ) {
+      localStorage.setItem('spotnews_active_reporter_name', 'Guest Reader');
+      localStorage.setItem('spotnews_reader_name', 'Guest Reader');
+      if (user?.email) {
+        localStorage.setItem(`spotnews_reporter_name_${user.email.toLowerCase().trim()}`, 'Guest Reader');
+      }
+      useAuthStore.getState().updateUser({ full_name: 'Guest Reader', firstName: 'Guest Reader' });
+    }
+
     // 1. Fetch preferences from Supabase service
     notificationService.getPreferences(user?.id, user?.email).then((prefs) => {
       setNotifications(prefs);
@@ -325,7 +385,7 @@ export const SettingsScreen = () => {
     checkPushPermission().then((granted) => {
       setNotifications((prev) => ({ ...prev, browserPush: granted }));
     });
-  }, [user?.id, user?.email]);
+  }, [user?.id, user?.email, user?.full_name]);
 
   const toggle = async (key: keyof typeof notifications) => {
     if (key === 'browserPush') {
@@ -468,7 +528,7 @@ export const SettingsScreen = () => {
 
       // Small delay so toast is visible before navigation
       setTimeout(() => {
-        navigate('/login', { replace: true });
+        navigate('/welcome', { replace: true });
       }, 800);
     } catch (err) {
       console.error('[Logout] Error during logout:', err);
@@ -554,7 +614,7 @@ export const SettingsScreen = () => {
       setDeleteConfirmationText("");
       logout();
       showToast("Account and all generated content deleted permanently.", "success");
-      navigate('/login');
+      navigate('/welcome');
     } catch (err: any) {
       console.error("Delete account error:", err);
       const msg = err.response?.data?.detail || err.message || "Failed to delete account";
@@ -597,17 +657,25 @@ export const SettingsScreen = () => {
                 <h3 className="font-bold text-[#0A2540] text-base">
                   {settingsReporterName}
                 </h3>
-                {isAdminAccess ? (
+                {isSuperAdmin ? (
                   <span className="bg-amber-500/15 text-amber-700 text-[10px] font-bold px-2 py-0.5 rounded-full uppercase flex items-center gap-1 border border-amber-400/30">
-                    <Crown className="w-2.5 h-2.5 text-amber-600" /> Admin
+                    <Crown className="w-2.5 h-2.5 text-amber-600" /> Superadmin
                   </span>
-                ) : (
+                ) : isAdmin ? (
+                  <span className="bg-blue-500/15 text-blue-700 text-[10px] font-bold px-2 py-0.5 rounded-full uppercase flex items-center gap-1 border border-blue-400/30">
+                    <Shield className="w-2.5 h-2.5 text-blue-600" /> Admin
+                  </span>
+                ) : isApprovedReporter ? (
                   <span className="bg-[#CC1E1E]/10 text-[#CC1E1E] text-[10px] font-bold px-2 py-0.5 rounded-full uppercase">
                     Reporter
                   </span>
+                ) : (
+                  <span className="bg-slate-500/10 text-slate-600 text-[10px] font-bold px-2 py-0.5 rounded-full uppercase border border-slate-300/40">
+                    User
+                  </span>
                 )}
               </div>
-              <p className="text-xs text-[#6B7A90] mt-0.5">{user?.email || 'reporter@rtiexpress.com'}</p>
+              <p className="text-xs text-[#6B7A90] mt-0.5">{user?.email || (isApprovedReporter ? 'reporter@rtiexpress.com' : 'user@spotnews.local')}</p>
             </div>
           </div>
         </div>
@@ -629,8 +697,9 @@ export const SettingsScreen = () => {
           <ChevronRight className="w-5 h-5 text-[#6B7A90] shrink-0" />
         </div>
 
-        {/* Official Press ID Card Section inside Settings */}
-        <div className="bg-[#E8F2FC] border border-[#D0E2F7] rounded-3xl overflow-hidden shadow-sm transition-all duration-300">
+        {/* Official Press ID Card Section inside Settings — Only for approved reporters and admins */}
+        {(isSuperAdmin || isAdmin || isApprovedReporter) ? (
+          <div className="bg-[#E8F2FC] border border-[#D0E2F7] rounded-3xl overflow-hidden shadow-sm transition-all duration-300">
           <div className="px-5 py-4 border-b border-[#D0E2F7] flex items-center justify-between bg-[#E8F2FC]">
             <div className="flex items-center gap-3">
               <div className="w-8 h-8 rounded-full bg-[#0B4EA2] text-white flex items-center justify-center shrink-0 shadow-xs">
@@ -697,7 +766,7 @@ export const SettingsScreen = () => {
               </div>
 
               {/* Centered Realistic 3D Flipping ID Card Preview */}
-              <div className="flex flex-col items-center justify-center py-2 bg-gradient-to-b from-slate-200/50 to-slate-200/20 rounded-2xl border border-slate-300/60 p-3 overflow-x-auto shadow-inner">
+              <div className="flex flex-col items-center justify-center py-3 bg-gradient-to-b from-slate-200/50 to-slate-200/20 rounded-2xl border border-slate-300/60 p-3 overflow-hidden shadow-inner select-none">
                 <RtiIdCard
                   data={settingsCardData}
                   side={idCardSide}
@@ -840,6 +909,26 @@ export const SettingsScreen = () => {
             </div>
           )}
         </div>
+        ) : (
+          <div className="bg-[#E8F2FC] border border-[#D0E2F7] rounded-3xl p-5 shadow-sm flex items-center justify-between gap-4">
+            <div className="flex items-center gap-3.5">
+              <div className="w-10 h-10 rounded-full bg-[#D6E9FF] flex items-center justify-center shrink-0">
+                <QrCode className="w-5 h-5 text-[#015BB3]" />
+              </div>
+              <div>
+                <h3 className="text-sm font-bold text-[#0A2540]">Official Press ID Card</h3>
+                <p className="text-xs text-[#6B7A90] mt-0.5">Available for accredited reporters approved by Admin</p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => navigate('/apply')}
+              className="bg-[#015BB3] hover:bg-[#0C447C] active:scale-95 text-white text-xs font-bold py-2 px-3.5 rounded-xl transition-all shadow-xs shrink-0 cursor-pointer"
+            >
+              Apply as Reporter
+            </button>
+          </div>
+        )}
 
         {/* Templates Card */}
         <div
@@ -875,24 +964,22 @@ export const SettingsScreen = () => {
           <ChevronRight className="w-5 h-5 text-[#6B7A90] shrink-0" />
         </div>
 
-        {/* Local Ads & Sponsorships Card */}
-        {(isAdminAccess || user?.role === 'reporter') && (
-          <div
-            onClick={() => navigate('/ad-requests')}
-            className="bg-[#E8F2FC] border border-[#D0E2F7] rounded-[12px] p-4 shadow-sm flex items-center justify-between gap-4 cursor-pointer active:scale-[0.99] transition-all"
-          >
-            <div className="flex items-center gap-3.5">
-              <div className="w-10 h-10 rounded-full bg-[#D6E9FF] flex items-center justify-center shrink-0">
-                <Megaphone className="w-5 h-5 text-[#015BB3]" />
-              </div>
-              <div>
-                <h3 className="text-sm font-bold text-[#0A2540]">Local Ads & Sponsorships</h3>
-                <p className="text-xs text-[#6B7A90] mt-0.5">Submit & manage feed advertisements</p>
-              </div>
+        {/* Local Ads & Sponsorships Card — visible to everyone */}
+        <div
+          onClick={() => navigate('/ad-requests')}
+          className="bg-[#E8F2FC] border border-[#D0E2F7] rounded-[12px] p-4 shadow-sm flex items-center justify-between gap-4 cursor-pointer active:scale-[0.99] transition-all"
+        >
+          <div className="flex items-center gap-3.5">
+            <div className="w-10 h-10 rounded-full bg-[#D6E9FF] flex items-center justify-center shrink-0">
+              <Megaphone className="w-5 h-5 text-[#015BB3]" />
             </div>
-            <ChevronRight className="w-5 h-5 text-[#6B7A90] shrink-0" />
+            <div>
+              <h3 className="text-sm font-bold text-[#0A2540]">Local Ads & Sponsorships</h3>
+              <p className="text-xs text-[#6B7A90] mt-0.5">Submit & manage feed advertisements</p>
+            </div>
           </div>
-        )}
+          <ChevronRight className="w-5 h-5 text-[#6B7A90] shrink-0" />
+        </div>
 
         {/* Admin Panel Card — only visible to approved admins (DB-checked) */}
         {isAdminAccess && (
@@ -930,39 +1017,69 @@ export const SettingsScreen = () => {
             <div className="flex flex-col gap-1.5">
               <label className="text-sm font-bold text-[#0A2540]">Select State</label>
               <div className="relative">
-                <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#0F487F]" />
+                <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#0F487F] pointer-events-none" />
                 <select
-                  value={userState || ''}
+                  value={effectiveState}
                   onChange={(e) => {
-                    setUserState(e.target.value);
-                    setDistrict('');
+                    const val = e.target.value;
+                    setUserState(val);
+                    setDistrict('All districts');
+                    try {
+                      localStorage.setItem('spotnews_selected_state', val);
+                      localStorage.setItem('spotnews_selected_district', 'All districts');
+                    } catch {}
                   }}
-                  className="w-full bg-[#F3F6FB] border border-[#DCE6F0] rounded-[10px] py-[9px] pl-[34px] pr-3 text-[#0A2540] text-sm focus:outline-none focus:border-[#015BB3] appearance-none font-medium"
+                  className="w-full bg-[#F3F6FB] border border-[#DCE6F0] rounded-[10px] py-[9px] pl-[34px] pr-9 text-[#0A2540] text-sm focus:outline-none focus:border-[#015BB3] appearance-none font-medium cursor-pointer"
                 >
-                  <option value="" disabled>Select State</option>
-                  {Object.keys(INDIA_STATES).map((st) => (
-                    <option key={st} value={st}>{st}</option>
-                  ))}
+                  <option value="All">All Regions (Both states - AP & TG)</option>
+                  <option value="Telangana">Telangana</option>
+                  <option value="Andhra Pradesh">Andhra Pradesh</option>
+                  <optgroup label="Other Indian States">
+                    {Object.keys(INDIA_STATES)
+                      .filter((st) => st !== 'Telangana' && st !== 'Andhra Pradesh')
+                      .map((st) => (
+                        <option key={st} value={st}>{st}</option>
+                      ))}
+                  </optgroup>
                 </select>
+                <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500 pointer-events-none" />
               </div>
             </div>
 
             <div className="flex flex-col gap-1.5">
               <label className="text-sm font-bold text-[#0A2540]">Select District</label>
               <div className="relative">
-                <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#0F487F]" />
+                <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#0F487F] pointer-events-none" />
                 <select
-                  value={district || ''}
-                  onChange={(e) => setDistrict(e.target.value)}
-                  disabled={!userState}
-                  className="w-full bg-[#F3F6FB] border border-[#DCE6F0] rounded-[10px] py-[9px] pl-[34px] pr-3 text-[#0A2540] text-sm focus:outline-none focus:border-[#015BB3] appearance-none font-medium disabled:opacity-50"
+                  value={district || 'All districts'}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setDistrict(val);
+                    try {
+                      localStorage.setItem('spotnews_selected_district', val);
+                    } catch {}
+                  }}
+                  className="w-full bg-[#F3F6FB] border border-[#DCE6F0] rounded-[10px] py-[9px] pl-[34px] pr-9 text-[#0A2540] text-sm focus:outline-none focus:border-[#015BB3] appearance-none font-medium cursor-pointer"
                 >
-                  <option value="" disabled>Select District</option>
-                  {userState && INDIA_STATES[userState]?.map((dist) => (
+                  <option value="All districts">All districts</option>
+                  {availableDistricts.map((dist) => (
                     <option key={dist} value={dist}>{dist}</option>
                   ))}
                 </select>
+                <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500 pointer-events-none" />
               </div>
+            </div>
+
+            <div className="pt-1 flex items-center justify-between border-t border-[#DCE6F0]/60">
+              <p className="text-xs text-[#6B7A90]">Filter news down to specific mandals?</p>
+              <button
+                type="button"
+                onClick={() => navigate('/location')}
+                className="text-xs font-bold text-[#015BB3] hover:underline flex items-center gap-1 cursor-pointer bg-transparent border-0 p-0"
+              >
+                <span>Full Location Page</span>
+                <ChevronRight className="w-3.5 h-3.5" />
+              </button>
             </div>
           </div>
         </SettingsSection>

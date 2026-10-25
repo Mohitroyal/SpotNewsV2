@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import QRCode from 'qrcode';
+import rtiExpressLogo from '../assets/rti_express_logo.png';
 
 export interface RtiCardData {
   cardNo: string;
@@ -38,6 +39,126 @@ interface RtiIdCardProps {
   onCardFlip?: () => void;
 }
 
+// Generate pixel-perfect Verification Seal as PNG data URL (100% html2canvas reliable)
+function generateSealDataUrl(cardNo: string): string {
+  if (typeof document === 'undefined') return '';
+  try {
+    const canvas = document.createElement('canvas');
+    canvas.width = 400;
+    canvas.height = 400;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return '';
+
+    const cx = 200;
+    const cy = 200;
+    const color = '#251a82';
+
+    ctx.clearRect(0, 0, 400, 400);
+
+    // Outer circle
+    ctx.beginPath();
+    ctx.arc(cx, cy, 185, 0, Math.PI * 2);
+    ctx.lineWidth = 11;
+    ctx.strokeStyle = color;
+    ctx.stroke();
+
+    // Inner circle
+    ctx.beginPath();
+    ctx.arc(cx, cy, 118, 0, Math.PI * 2);
+    ctx.lineWidth = 8;
+    ctx.strokeStyle = color;
+    ctx.stroke();
+
+    // Curved text helper
+    const drawCurvedText = (text: string, radius: number, startAngle: number, endAngle: number, inward = true) => {
+      const chars = text.split('');
+      const totalAngle = endAngle - startAngle;
+      const angleStep = totalAngle / (chars.length - 1 || 1);
+      ctx.font = '900 27px Arial, sans-serif';
+      ctx.fillStyle = color;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+
+      for (let i = 0; i < chars.length; i++) {
+        const angle = startAngle + i * angleStep;
+        ctx.save();
+        ctx.translate(cx + radius * Math.cos(angle), cy + radius * Math.sin(angle));
+        ctx.rotate(angle + (inward ? Math.PI / 2 : -Math.PI / 2));
+        ctx.fillText(chars[i], 0, 0);
+        ctx.restore();
+      }
+    };
+
+    // Top curve: ★ RTI EXPRESS ★
+    drawCurvedText('★ RTI EXPRESS ★', 151, -2.45, -0.69, true);
+
+    // Bottom curve: SPOT NEWS 24×7
+    drawCurvedText('SPOT NEWS 24×7', 151, 2.45, 0.69, false);
+
+    // Center text
+    ctx.fillStyle = color;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+
+    // VERIFIED
+    ctx.font = '900 34px Arial, sans-serif';
+    ctx.fillText('VERIFIED', cx, cy - 28);
+
+    // REPORTER
+    ctx.font = '800 29px Arial, sans-serif';
+    ctx.fillText('REPORTER', cx, cy + 9);
+
+    // Card number
+    const cleanNo = cardNo.length > 18 ? cardNo.slice(-16) : cardNo;
+    ctx.font = '700 23px Arial, sans-serif';
+    ctx.fillText(cleanNo, cx, cy + 44);
+
+    return canvas.toDataURL('image/png');
+  } catch (e) {
+    console.warn('Seal generation error:', e);
+    return '';
+  }
+}
+
+// Generate pixel-perfect PRESS bottom banner as high-res PNG data URL (100% html2canvas reliable)
+function generatePressBannerDataUrl(): string {
+  if (typeof document === 'undefined') return '';
+  try {
+    const canvas = document.createElement('canvas');
+    canvas.width = 1080;
+    canvas.height = 180;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return '';
+
+    // 1. Accent top blue stripe (0.7mm)
+    ctx.fillStyle = '#06317a';
+    ctx.fillRect(0, 0, 1080, 14);
+
+    // 2. Red banner background (8.3mm)
+    ctx.fillStyle = '#d71920';
+    ctx.fillRect(0, 14, 1080, 166);
+
+    // 3. Centered PRESS letters
+    ctx.fillStyle = '#ffffff';
+    ctx.font = '900 96px Arial, Helvetica, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+
+    const letters = ['P', 'R', 'E', 'S', 'S'];
+    const xPositions = [308, 424, 540, 656, 772];
+    const yCenter = 97;
+
+    for (let i = 0; i < letters.length; i++) {
+      ctx.fillText(letters[i], xPositions[i], yCenter);
+    }
+
+    return canvas.toDataURL('image/png');
+  } catch (e) {
+    console.warn('Press banner generation error:', e);
+    return '';
+  }
+}
+
 export const RtiIdCard: React.FC<RtiIdCardProps> = ({
   data,
   frontRef,
@@ -47,8 +168,6 @@ export const RtiIdCard: React.FC<RtiIdCardProps> = ({
   onPhotoClick,
   onCardFlip,
 }) => {
-  const [qrSvg, setQrSvg] = useState<string>('');
-
   const cardNo = (data.cardNo || 'RTI 1147').toUpperCase().trim();
   const name = (data.name || 'POKKALA MOHITH ROYAL').toUpperCase().trim();
   const designation = (data.designation || 'PRESS REPORTER').toUpperCase().trim();
@@ -57,7 +176,7 @@ export const RtiIdCard: React.FC<RtiIdCardProps> = ({
   const mediaType = (data.mediaType || 'PRINT MEDIA').toUpperCase().trim();
   const actLine = (data.actLine || 'RTI ACT-2005').trim();
   const photoUrl = data.photoUrl || '';
-  const logoUrl = data.logoUrl || '/logo_spotnews.png';
+  const logoUrl = data.logoUrl || rtiExpressLogo;
 
   const address = (data.address || '# 7-2-28, VD Road, Hindupur, Sri Sathya Sai Dist, Andhra Pradesh').toUpperCase().trim();
   const pin = (data.pin || '515201').trim();
@@ -76,47 +195,62 @@ export const RtiIdCard: React.FC<RtiIdCardProps> = ({
   const orgLabour = data.orgLabour || 'AP-25-18-006-03671823';
   const orgPostal = data.orgPostal || 'HDP/010/2024-2026';
 
-  // Dynamic font scaling to guarantee long names like "POKKALA MOHITH ROYAL" fit cleanly without ellipsis
-  const nameLen = name.length;
-  const nameFontSize =
-    nameLen >= 26
-      ? '1.9mm'
-      : nameLen >= 19
-      ? '2.15mm'
-      : nameLen >= 15
-      ? '2.4mm'
-      : nameLen >= 12
-      ? '2.65mm'
-      : '2.95mm';
+  // Seal PNG data URL
+  const [sealPng, setSealPng] = useState<string>(() => generateSealDataUrl(cardNo));
+  useEffect(() => {
+    const png = generateSealDataUrl(cardNo);
+    if (png) setSealPng(png);
+  }, [cardNo]);
 
-  const desigFontSize =
-    designation.length > 22
-      ? '2.3mm'
-      : designation.length > 17
-      ? '2.6mm'
-      : '2.95mm';
+  // PRESS Banner PNG data URL
+  const [pressBannerPng, setPressBannerPng] = useState<string>(() => generatePressBannerDataUrl());
+  useEffect(() => {
+    const png = generatePressBannerDataUrl();
+    if (png) setPressBannerPng(png);
+  }, []);
 
-  const centerFontSize =
-    center.length > 20
-      ? '2.35mm'
-      : center.length > 15
-      ? '2.65mm'
-      : '2.95mm';
-
-  // Generate QR code SVG payload
+  // QR Code PNG data URL
+  const [qrPng, setQrPng] = useState<string>('');
   useEffect(() => {
     const payload = `RTI EXPRESS Spot News 24x7\nID: ${cardNo}\n${name}\n${designation}\nValid upto: ${validUpto}\nVerify: ${orgPhone}`;
-    QRCode.toString(payload, {
-      type: 'svg',
+    QRCode.toDataURL(payload, {
       margin: 1,
       color: {
         dark: '#06317a',
         light: '#ffffff',
       },
+      width: 250,
     })
-      .then((svgString) => setQrSvg(svgString))
+      .then((url) => setQrPng(url))
       .catch((err) => console.warn('QR code generation error:', err));
   }, [cardNo, name, designation, validUpto, orgPhone]);
+
+  // Dynamic font scaling to guarantee long names fit cleanly without clipping
+  const nameLen = name.length;
+  const nameFontSize =
+    nameLen >= 26
+      ? '1.95mm'
+      : nameLen >= 22
+      ? '2.1mm'
+      : nameLen >= 18
+      ? '2.25mm'
+      : nameLen >= 14
+      ? '2.45mm'
+      : '2.75mm';
+
+  const desigFontSize =
+    designation.length > 22
+      ? '2.15mm'
+      : designation.length > 16
+      ? '2.35mm'
+      : '2.65mm';
+
+  const centerFontSize =
+    center.length > 20
+      ? '2.2mm'
+      : center.length > 15
+      ? '2.45mm'
+      : '2.7mm';
 
   const pinSuffix = pin && !address.includes(pin) ? `, PIN: ${pin}` : '';
 
@@ -125,7 +259,7 @@ export const RtiIdCard: React.FC<RtiIdCardProps> = ({
     <div
       ref={refObj || (isOffscreen ? undefined : (frontRef as any))}
       id={elementId}
-      className="rti-card relative bg-white select-none overflow-hidden shadow-2xl rounded-[3mm]"
+      className={`rti-card relative bg-white select-none overflow-hidden rounded-[3mm] ${isOffscreen ? '' : 'shadow-2xl'}`}
       style={{
         width: '53.98mm',
         height: '85.6mm',
@@ -134,12 +268,12 @@ export const RtiIdCard: React.FC<RtiIdCardProps> = ({
         boxSizing: 'border-box',
         fontFamily: 'Inter, Heros, Arial, sans-serif',
         color: '#1b1f2a',
-        border: '0.2mm solid #c9d3e4',
-        position: isOffscreen ? 'absolute' : 'relative',
-        left: isOffscreen ? 0 : undefined,
-        top: isOffscreen ? 0 : undefined,
-        zIndex: isOffscreen ? -9999 : undefined,
-        opacity: isOffscreen ? 0 : undefined,
+        border: '0.25mm solid #c9d3e4',
+        boxShadow: isOffscreen ? 'none' : undefined,
+        position: 'relative',
+        left: 0,
+        top: 0,
+        opacity: 1,
         pointerEvents: isOffscreen ? 'none' : undefined,
       }}
     >
@@ -147,7 +281,7 @@ export const RtiIdCard: React.FC<RtiIdCardProps> = ({
       <div
         className="absolute left-0 right-0 top-0 overflow-hidden"
         style={{
-          height: '20.5mm',
+          height: '19.8mm',
           background: 'linear-gradient(180deg, #ffffff 0%, #ffffff 70%, #e8f0fc 100%)',
         }}
       >
@@ -155,7 +289,7 @@ export const RtiIdCard: React.FC<RtiIdCardProps> = ({
         <div
           className="absolute left-0 right-0 bottom-0"
           style={{
-            height: '0.9mm',
+            height: '0.8mm',
             background: 'linear-gradient(90deg, #06317a, #0b4fb3 60%, #d71920 60%, #d71920)',
           }}
         />
@@ -172,12 +306,15 @@ export const RtiIdCard: React.FC<RtiIdCardProps> = ({
           }}
         >
           <img
-            src={logoUrl}
+            src={logoUrl || rtiExpressLogo}
             alt="Spot News Logo"
-            className="w-full h-full object-contain"
+            className="w-full h-full object-contain pointer-events-none"
             crossOrigin="anonymous"
             onError={(e) => {
-              (e.target as HTMLImageElement).src = '/logo_spotnews.png';
+              const target = e.target as HTMLImageElement;
+              if (target.src !== rtiExpressLogo) {
+                target.src = rtiExpressLogo;
+              }
             }}
           />
         </div>
@@ -227,12 +364,12 @@ export const RtiIdCard: React.FC<RtiIdCardProps> = ({
       <div
         className="absolute left-0 right-0 text-center pointer-events-none"
         style={{
-          top: '21.4mm',
-          height: '3.4mm',
-          lineHeight: '3.4mm',
+          top: '20.8mm',
+          height: '3.0mm',
+          lineHeight: '3.0mm',
           fontFamily: 'Heros, sans-serif',
           fontWeight: 700,
-          fontSize: '3.1mm',
+          fontSize: '2.8mm',
           color: '#d71920',
           letterSpacing: '0.15mm',
           whiteSpace: 'nowrap',
@@ -241,7 +378,7 @@ export const RtiIdCard: React.FC<RtiIdCardProps> = ({
         <span
           style={{
             display: 'inline-block',
-            width: '6mm',
+            width: '5.5mm',
             height: '0.35mm',
             background: '#d71920',
             verticalAlign: 'middle',
@@ -252,7 +389,7 @@ export const RtiIdCard: React.FC<RtiIdCardProps> = ({
         <span
           style={{
             display: 'inline-block',
-            width: '6mm',
+            width: '5.5mm',
             height: '0.35mm',
             background: '#d71920',
             verticalAlign: 'middle',
@@ -265,9 +402,9 @@ export const RtiIdCard: React.FC<RtiIdCardProps> = ({
       <div
         className="absolute flex items-center justify-center pointer-events-none"
         style={{
-          left: '9mm',
-          top: '25.6mm',
-          height: '28.6mm',
+          left: '8.8mm',
+          top: '25.2mm',
+          height: '27.2mm',
           width: '5mm',
         }}
       >
@@ -278,7 +415,7 @@ export const RtiIdCard: React.FC<RtiIdCardProps> = ({
             whiteSpace: 'nowrap',
             fontFamily: 'Heros, sans-serif',
             fontWeight: 700,
-            fontSize: '3.05mm',
+            fontSize: '2.95mm',
             lineHeight: 1,
             color: '#d71920',
             letterSpacing: '0.25mm',
@@ -294,9 +431,9 @@ export const RtiIdCard: React.FC<RtiIdCardProps> = ({
         className={`absolute overflow-hidden bg-[#eef2f8] ${onPhotoClick ? 'cursor-pointer hover:ring-2 hover:ring-blue-500 transition-all' : ''}`}
         style={{
           left: '15.2mm',
-          top: '25.6mm',
+          top: '25.2mm',
           width: '23.6mm',
-          height: '28.6mm',
+          height: '27.2mm',
           border: '0.55mm solid #0b4fb3',
           boxSizing: 'border-box',
         }}
@@ -338,122 +475,157 @@ export const RtiIdCard: React.FC<RtiIdCardProps> = ({
           left: '12mm',
           top: '52mm',
           width: '30mm',
-          height: '30mm',
-          opacity: 0.06,
-          borderRadius: '50%',
+          height: '24mm',
+          opacity: 0.08,
+          objectFit: 'contain',
         }}
       />
 
-      {/* Verification Seal SVG */}
-      <svg
+      {/* Verification Seal PNG Image (100% html2canvas reliable) */}
+      <div
         className="absolute pointer-events-none"
-        viewBox="0 0 100 100"
-        aria-hidden="true"
         style={{
-          left: '33.6mm',
-          top: '40.4mm',
-          width: '14.2mm',
-          height: '14.2mm',
+          left: '33.2mm',
+          top: '37.5mm',
+          width: '15.0mm',
+          height: '15.0mm',
           transform: 'rotate(-14deg)',
-          opacity: 0.9,
+          zIndex: 10,
         }}
       >
-        <defs>
-          <path id="sealArc" d="M50,50 m-37,0 a37,37 0 1,1 74,0 a37,37 0 1,1 -74,0" />
-        </defs>
-        <g fill="none" stroke="#3b2fa0" strokeWidth="2.6">
-          <circle cx="50" cy="50" r="47" />
-          <circle cx="50" cy="50" r="29" />
-        </g>
-        <text fontFamily="Inter" fontWeight="800" fontSize="11.2" fill="#3b2fa0" letterSpacing="1.1">
-          <textPath href="#sealArc" startOffset="0">
-            ★ RTI EXPRESS ★ SPOT NEWS 24×7
-          </textPath>
-        </text>
-        <text x="50" y="45" textAnchor="middle" fontFamily="Inter" fontWeight="800" fontSize="8.6" fill="#3b2fa0">
-          VERIFIED
-        </text>
-        <text x="50" y="56" textAnchor="middle" fontFamily="Inter" fontWeight="700" fontSize="7.4" fill="#3b2fa0">
-          REPORTER
-        </text>
-        <text x="50" y="66" textAnchor="middle" fontFamily="Inter" fontWeight="600" fontSize="6" fill="#3b2fa0">
-          {cardNo}
-        </text>
-      </svg>
+        {sealPng ? (
+          <img
+            src={sealPng}
+            alt="Official Verification Seal"
+            className="w-full h-full object-contain"
+            style={{ display: 'block' }}
+          />
+        ) : (
+          <div
+            style={{
+              width: '100%',
+              height: '100%',
+              borderRadius: '50%',
+              border: '0.6mm solid #251a82',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              color: '#251a82',
+              fontWeight: 900,
+              fontSize: '2mm',
+            }}
+          >
+            VERIFIED
+          </div>
+        )}
+      </div>
 
-      {/* Fields Box */}
+      {/* Fields Box: Clean grid with aligned colons and guaranteed non-overlapping bounds */}
       <div
         className="absolute flex flex-col justify-between"
         style={{
           left: '2.4mm',
-          right: '2mm',
-          top: '55.5mm',
-          bottom: '9.2mm',
+          right: '2.0mm',
+          top: '53.8mm',
+          height: '21.8mm',
         }}
       >
-        {/* Name - Rendered fully without ellipsis truncation */}
-        <div className="flex items-baseline" style={{ height: '3.95mm', whiteSpace: 'nowrap' }}>
-          <span style={{ width: '15.6mm', fontFamily: 'Inter, sans-serif', fontWeight: 700, fontSize: '2.55mm', color: '#2b2f38' }}>
+        {/* Name */}
+        <div style={{ display: 'flex', alignItems: 'baseline', height: '4.0mm', whiteSpace: 'nowrap' }}>
+          <span style={{ width: '18.5mm', flexShrink: 0, fontFamily: 'Inter, Arial, sans-serif', fontWeight: 700, fontSize: '2.5mm', color: '#2b2f38', letterSpacing: '0.01mm', lineHeight: '1.2' }}>
             Name
           </span>
-          <span style={{ width: '2.2mm', fontFamily: 'Inter, sans-serif', fontWeight: 700, fontSize: '2.55mm' }}>:</span>
+          <span style={{ width: '2.2mm', flexShrink: 0, textAlign: 'center', fontFamily: 'Inter, Arial, sans-serif', fontWeight: 700, fontSize: '2.5mm', color: '#2b2f38', lineHeight: '1.2' }}>
+            :
+          </span>
           <span
-            className="flex-1 min-w-0"
             style={{
-              fontFamily: 'Heros, sans-serif',
+              flex: 1,
+              minWidth: 0,
+              paddingLeft: '1.2mm',
+              fontFamily: 'Inter, Arial, sans-serif',
               fontWeight: 700,
               fontSize: nameFontSize,
               color: '#d71920',
               textTransform: 'uppercase',
-              letterSpacing: nameLen >= 18 ? '-0.06mm' : '0.01mm',
+              letterSpacing: nameLen >= 18 ? '-0.03mm' : '0.01mm',
               whiteSpace: 'nowrap',
               overflow: 'visible',
+              lineHeight: '1.2',
             }}
           >
-            {name}
+            <span
+              style={{
+                display: 'inline-block',
+                transformOrigin: 'left center',
+                transform: nameLen > 18 ? 'scaleX(0.90)' : undefined,
+                whiteSpace: 'nowrap',
+              }}
+            >
+              {name}
+            </span>
           </span>
         </div>
 
         {/* Designation */}
-        <div className="flex items-baseline" style={{ height: '3.95mm', whiteSpace: 'nowrap' }}>
-          <span style={{ width: '15.6mm', fontFamily: 'Inter, sans-serif', fontWeight: 700, fontSize: '2.55mm', color: '#2b2f38' }}>
+        <div style={{ display: 'flex', alignItems: 'baseline', height: '4.0mm', whiteSpace: 'nowrap' }}>
+          <span style={{ width: '15.2mm', flexShrink: 0, fontFamily: 'Inter, Arial, sans-serif', fontWeight: 700, fontSize: '2.4mm', color: '#2b2f38', letterSpacing: '0.01mm', lineHeight: '1.2' }}>
             Designation
           </span>
-          <span style={{ width: '2.2mm', fontFamily: 'Inter, sans-serif', fontWeight: 700, fontSize: '2.55mm' }}>:</span>
+          <span style={{ width: '1.8mm', flexShrink: 0, textAlign: 'center', fontFamily: 'Inter, Arial, sans-serif', fontWeight: 700, fontSize: '2.4mm', color: '#2b2f38', lineHeight: '1.2' }}>
+            :
+          </span>
           <span
-            className="flex-1 min-w-0"
             style={{
-              fontFamily: 'Heros, sans-serif',
+              flex: 1,
+              minWidth: 0,
+              paddingLeft: '0.8mm',
+              fontFamily: 'Inter, Arial, sans-serif',
               fontWeight: 700,
               fontSize: desigFontSize,
               color: '#111111',
               textTransform: 'uppercase',
-              letterSpacing: designation.length > 18 ? '-0.03mm' : '0.03mm',
+              letterSpacing: designation.length > 18 ? '-0.02mm' : '0.01mm',
               whiteSpace: 'nowrap',
               overflow: 'visible',
+              lineHeight: '1.2',
             }}
           >
-            {designation}
+            <span
+              style={{
+                display: 'inline-block',
+                transformOrigin: 'left center',
+                transform: designation.length > 18 ? 'scaleX(0.92)' : undefined,
+                whiteSpace: 'nowrap',
+              }}
+            >
+              {designation}
+            </span>
           </span>
         </div>
 
         {/* Center */}
-        <div className="flex items-baseline" style={{ height: '3.95mm', whiteSpace: 'nowrap' }}>
-          <span style={{ width: '15.6mm', fontFamily: 'Inter, sans-serif', fontWeight: 700, fontSize: '2.55mm', color: '#2b2f38' }}>
+        <div style={{ display: 'flex', alignItems: 'baseline', height: '4.0mm', whiteSpace: 'nowrap' }}>
+          <span style={{ width: '15.2mm', flexShrink: 0, fontFamily: 'Inter, Arial, sans-serif', fontWeight: 700, fontSize: '2.4mm', color: '#2b2f38', letterSpacing: '0.01mm', lineHeight: '1.2' }}>
             Center
           </span>
-          <span style={{ width: '2.2mm', fontFamily: 'Inter, sans-serif', fontWeight: 700, fontSize: '2.55mm' }}>:</span>
+          <span style={{ width: '1.8mm', flexShrink: 0, textAlign: 'center', fontFamily: 'Inter, Arial, sans-serif', fontWeight: 700, fontSize: '2.4mm', color: '#2b2f38', lineHeight: '1.2' }}>
+            :
+          </span>
           <span
-            className="flex-1 min-w-0"
             style={{
-              fontFamily: 'Heros, sans-serif',
+              flex: 1,
+              minWidth: 0,
+              paddingLeft: '0.8mm',
+              fontFamily: 'Inter, Arial, sans-serif',
               fontWeight: 700,
               fontSize: centerFontSize,
               color: '#111111',
               textTransform: 'uppercase',
-              letterSpacing: center.length > 16 ? '-0.03mm' : '0.03mm',
+              letterSpacing: center.length > 16 ? '-0.02mm' : '0.01mm',
               whiteSpace: 'nowrap',
               overflow: 'visible',
+              lineHeight: '1.2',
             }}
           >
             {center}
@@ -461,21 +633,27 @@ export const RtiIdCard: React.FC<RtiIdCardProps> = ({
         </div>
 
         {/* Valid Upto */}
-        <div className="flex items-baseline" style={{ height: '3.95mm', whiteSpace: 'nowrap' }}>
-          <span style={{ width: '15.6mm', fontFamily: 'Inter, sans-serif', fontWeight: 700, fontSize: '2.55mm', color: '#2b2f38' }}>
+        <div style={{ display: 'flex', alignItems: 'baseline', height: '4.0mm', whiteSpace: 'nowrap' }}>
+          <span style={{ width: '15.2mm', flexShrink: 0, fontFamily: 'Inter, Arial, sans-serif', fontWeight: 700, fontSize: '2.4mm', color: '#2b2f38', letterSpacing: '0.01mm', lineHeight: '1.2' }}>
             Valid Upto
           </span>
-          <span style={{ width: '2.2mm', fontFamily: 'Inter, sans-serif', fontWeight: 700, fontSize: '2.55mm' }}>:</span>
+          <span style={{ width: '1.8mm', flexShrink: 0, textAlign: 'center', fontFamily: 'Inter, Arial, sans-serif', fontWeight: 700, fontSize: '2.4mm', color: '#2b2f38', lineHeight: '1.2' }}>
+            :
+          </span>
           <span
-            className="flex-1 min-w-0"
             style={{
-              fontFamily: 'Heros, sans-serif',
+              flex: 1,
+              minWidth: 0,
+              paddingLeft: '0.8mm',
+              fontFamily: 'Inter, Arial, sans-serif',
               fontWeight: 700,
-              fontSize: '3.2mm',
+              fontSize: '2.8mm',
               color: '#111111',
               textTransform: 'uppercase',
-              letterSpacing: '0.03mm',
+              letterSpacing: '0.01mm',
               whiteSpace: 'nowrap',
+              overflow: 'visible',
+              lineHeight: '1.2',
             }}
           >
             {validUpto}
@@ -483,21 +661,27 @@ export const RtiIdCard: React.FC<RtiIdCardProps> = ({
         </div>
 
         {/* Card No. */}
-        <div className="flex items-baseline" style={{ height: '3.95mm', whiteSpace: 'nowrap' }}>
-          <span style={{ width: '15.6mm', fontFamily: 'Inter, sans-serif', fontWeight: 700, fontSize: '2.55mm', color: '#2b2f38' }}>
+        <div style={{ display: 'flex', alignItems: 'baseline', height: '4.0mm', whiteSpace: 'nowrap' }}>
+          <span style={{ width: '15.2mm', flexShrink: 0, fontFamily: 'Inter, Arial, sans-serif', fontWeight: 700, fontSize: '2.4mm', color: '#2b2f38', letterSpacing: '0.01mm', lineHeight: '1.2' }}>
             Card No.
           </span>
-          <span style={{ width: '2.2mm', fontFamily: 'Inter, sans-serif', fontWeight: 700, fontSize: '2.55mm' }}>:</span>
+          <span style={{ width: '1.8mm', flexShrink: 0, textAlign: 'center', fontFamily: 'Inter, Arial, sans-serif', fontWeight: 700, fontSize: '2.4mm', color: '#2b2f38', lineHeight: '1.2' }}>
+            :
+          </span>
           <span
-            className="flex-1 min-w-0 font-mono"
             style={{
-              fontFamily: 'Heros, monospace, sans-serif',
+              flex: 1,
+              minWidth: 0,
+              paddingLeft: '0.8mm',
+              fontFamily: 'Inter, Arial, sans-serif',
               fontWeight: 700,
-              fontSize: cardNo.length > 16 ? '2.7mm' : '3.1mm',
+              fontSize: cardNo.length > 16 ? '2.6mm' : '2.9mm',
               color: '#0b4fb3',
               textTransform: 'uppercase',
-              letterSpacing: '0.02mm',
+              letterSpacing: '0.01mm',
               whiteSpace: 'nowrap',
+              overflow: 'visible',
+              lineHeight: '1.2',
             }}
           >
             {cardNo}
@@ -505,36 +689,28 @@ export const RtiIdCard: React.FC<RtiIdCardProps> = ({
         </div>
       </div>
 
-      {/* Bottom PRESS Banner */}
+      {/* Bottom PRESS Banner: High-resolution PNG Image (100% html2canvas reliable) */}
       <div
-        className="absolute left-0 right-0 bottom-0 flex items-center justify-center"
+        className="absolute left-0 right-0 bottom-0 pointer-events-none overflow-hidden"
         style={{
-          height: '8.4mm',
-          background: '#d71920',
+          height: '9.0mm',
+          width: '100%',
         }}
       >
-        {/* Top border of press banner */}
-        <div
-          className="absolute left-0 right-0 top-0"
-          style={{
-            height: '0.7mm',
-            background: '#06317a',
-          }}
-        />
-        <span
-          style={{
-            fontFamily: 'Inter, sans-serif',
-            fontWeight: 800,
-            fontSize: '7.4mm',
-            lineHeight: 1,
-            color: '#ffffff',
-            letterSpacing: '2.6mm',
-            marginRight: '-2.6mm',
-            marginTop: '0.7mm',
-          }}
-        >
-          PRESS
-        </span>
+        {pressBannerPng ? (
+          <img
+            src={pressBannerPng}
+            alt="PRESS"
+            style={{
+              width: '100%',
+              height: '100%',
+              display: 'block',
+              objectFit: 'fill',
+            }}
+          />
+        ) : (
+          <div style={{ width: '100%', height: '100%', backgroundColor: '#d71920' }} />
+        )}
       </div>
     </div>
   );
@@ -544,7 +720,7 @@ export const RtiIdCard: React.FC<RtiIdCardProps> = ({
     <div
       ref={refObj || (isOffscreen ? undefined : (backRef as any))}
       id={elementId}
-      className="rti-card relative bg-white select-none overflow-hidden shadow-2xl rounded-[3mm]"
+      className={`rti-card relative bg-white select-none overflow-hidden rounded-[3mm] ${isOffscreen ? '' : 'shadow-2xl'}`}
       style={{
         width: '53.98mm',
         height: '85.6mm',
@@ -553,12 +729,12 @@ export const RtiIdCard: React.FC<RtiIdCardProps> = ({
         boxSizing: 'border-box',
         fontFamily: 'Inter, Heros, Arial, sans-serif',
         color: '#1b1f2a',
-        border: '0.2mm solid #c9d3e4',
-        position: isOffscreen ? 'absolute' : 'relative',
-        left: isOffscreen ? 0 : undefined,
-        top: isOffscreen ? 0 : undefined,
-        zIndex: isOffscreen ? -9999 : undefined,
-        opacity: isOffscreen ? 0 : undefined,
+        border: '0.25mm solid #c9d3e4',
+        boxShadow: isOffscreen ? 'none' : undefined,
+        position: 'relative',
+        left: 0,
+        top: 0,
+        opacity: 1,
         pointerEvents: isOffscreen ? 'none' : undefined,
       }}
     >
@@ -635,7 +811,7 @@ export const RtiIdCard: React.FC<RtiIdCardProps> = ({
           </div>
         </div>
 
-        {/* QR Code SVG */}
+        {/* QR Code PNG Image (100% html2canvas reliable) */}
         <div
           className="flex items-center justify-center"
           style={{
@@ -644,8 +820,17 @@ export const RtiIdCard: React.FC<RtiIdCardProps> = ({
             marginTop: '1.4mm',
             flex: 'none',
           }}
-          dangerouslySetInnerHTML={{ __html: qrSvg }}
-        />
+        >
+          {qrPng ? (
+            <img
+              src={qrPng}
+              alt="QR Code"
+              style={{ width: '100%', height: '100%', objectFit: 'contain', display: 'block' }}
+            />
+          ) : (
+            <div style={{ width: '100%', height: '100%', background: '#f1f5f9' }} />
+          )}
+        </div>
 
         {/* QR Caption */}
         <div
@@ -810,22 +995,25 @@ export const RtiIdCard: React.FC<RtiIdCardProps> = ({
 
   return (
     <div
-      className="rti-card-container inline-flex flex-col sm:flex-row items-center justify-center gap-6 relative"
+      className="rti-card-container inline-flex flex-col sm:flex-row items-center justify-center gap-6 relative select-none"
       style={{
         transform: scale !== 1 ? `scale(${scale})` : undefined,
-        transformOrigin: 'top center',
+        transformOrigin: 'center center',
       }}
     >
-      {/* Always present pristine flat export elements for html2canvas */}
+      {/* Pristine flat export elements positioned within viewport behind page */}
       <div
         className="rti-export-nodes pointer-events-none"
         style={{
-          position: 'absolute',
+          position: 'fixed',
           top: 0,
           left: 0,
-          opacity: 0,
+          opacity: 0.001,
           zIndex: -9999,
           pointerEvents: 'none',
+          width: '53.98mm',
+          height: '85.6mm',
+          overflow: 'hidden',
           transform: 'none',
         }}
       >

@@ -4,7 +4,7 @@ import { Loader2, KeyRound, ArrowLeft, RotateCw } from 'lucide-react';
 import { OTPWidget } from '@/services/otpService';
 import { LogoWatermark } from '@/components/LogoWatermark';
 import logoUrl from '@/assets/rti_express_logo.png';
-import { useAuthStore, isAdminUser } from '@/store';
+import { useAuthStore } from '@/store';
 
 export const VerifyOtpScreen = () => {
   const [otp, setOtp] = useState('');
@@ -50,8 +50,8 @@ export const VerifyOtpScreen = () => {
       if (res.success && res.token && res.user) {
         // Save authenticated session in Zustand store
         login(res.user, res.token);
-        // Direct navigation to admin or home dashboard
-        navigate(isAdminUser(res.user) ? '/admin' : '/');
+        // Direct navigation to home dashboard
+        navigate('/');
       } else {
         setError(res.message || 'Invalid OTP code');
       }

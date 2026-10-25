@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import {
   ArrowLeft, Plus, Image as ImageIcon, Video, CheckCircle2,
   Clock, AlertCircle, Phone, MessageSquare, Globe,
-  Loader2, X, RefreshCw, Sparkles, CreditCard
+  Loader2, X, RefreshCw, Sparkles, CreditCard, SlidersHorizontal
 } from 'lucide-react';
 import { useAuthStore } from '@/store';
 import { localAdsService } from '@/services/localAds.service';
@@ -48,6 +48,7 @@ export const ReporterAdRequestsScreen: React.FC = () => {
   const [targetDistrict, setTargetDistrict] = useState(TELANGANA_DISTRICTS[0]);
   const [ctaType, setCtaType] = useState<LocalAdCtaType>('call');
   const [ctaValue, setCtaValue] = useState('');
+  const [showAdvanced, setShowAdvanced] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [formError, setFormError] = useState('');
 
@@ -125,6 +126,7 @@ export const ReporterAdRequestsScreen: React.FC = () => {
     setDescription('');
     setSelectedFile(null);
     setPreviewUrl('');
+    setTargetDistrict(TELANGANA_DISTRICTS[0]);
     setCtaValue('');
     setFormError('');
   };
@@ -380,7 +382,7 @@ export const ReporterAdRequestsScreen: React.FC = () => {
                     {isAccepted && (
                       <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-800 bg-emerald-50 border border-emerald-300 px-2.5 py-1 rounded-full shrink-0">
                         <CheckCircle2 className="w-3 h-3 text-emerald-600" />
-                        <span>{(ad.amount_inr ?? 0) === 0 ? 'Accepted! Ready to Post' : 'Accepted! Pay to Post'}</span>
+                        <span>Accepted! Free to Post</span>
                       </span>
                     )}
 
@@ -432,32 +434,20 @@ export const ReporterAdRequestsScreen: React.FC = () => {
                     <div className="bg-[#EBF7F0] border border-[#BDE8CB] rounded-xl p-3 flex flex-col sm:flex-row items-center justify-between gap-3">
                       <div>
                         <p className="text-xs font-bold text-[#0D6832]">
-                          Approved by Superadmin! Placement Fee: <span className="text-sm font-extrabold text-[#0D6832]">{(ad.amount_inr ?? 0) === 0 ? 'Free (₹0)' : `₹${ad.amount_inr}`}</span>
+                          Approved by Superadmin! Placement Fee: <span className="text-sm font-extrabold text-[#0D6832]">Free (₹0)</span>
                         </p>
                         <p className="text-[11px] text-[#2D7A4D]">
-                          {(ad.amount_inr ?? 0) === 0 
-                            ? 'Approved for free placement. Tap below to publish this ad to the feed.' 
-                            : 'Pay now to publish this ad into the feed after every 15 clippings.'}
+                          Approved for 100% free placement. Tap below to publish this ad to the live news feed.
                         </p>
                       </div>
 
-                      {(ad.amount_inr ?? 0) === 0 ? (
-                        <button
-                          onClick={() => handlePublishFree(ad)}
-                          className="w-full sm:w-auto px-4 py-2 bg-gradient-to-r from-[#128842] to-[#0e6f36] hover:from-[#0e6f36] hover:to-[#094c25] text-white rounded-xl text-xs font-black shadow-md flex items-center justify-center gap-1.5 active:scale-95 transition-all cursor-pointer"
-                        >
-                          <CheckCircle2 className="w-4 h-4" />
-                          <span>Publish Free to Feed</span>
-                        </button>
-                      ) : (
-                        <button
-                          onClick={() => handlePayNow(ad)}
-                          className="w-full sm:w-auto px-4 py-2.5 bg-gradient-to-r from-[#0B4EA2] to-[#0284c7] hover:from-[#093F84] hover:to-[#015BB3] text-white rounded-xl text-xs font-black shadow-md flex items-center justify-center gap-1.5 active:scale-95 transition-all cursor-pointer"
-                        >
-                          <CreditCard className="w-4 h-4" />
-                          <span>Pay ₹{ad.amount_inr} with Razorpay & Post</span>
-                        </button>
-                      )}
+                      <button
+                        onClick={() => handlePublishFree(ad)}
+                        className="w-full sm:w-auto px-4 py-2.5 bg-gradient-to-r from-[#128842] to-[#0e6f36] hover:from-[#0e6f36] hover:to-[#094c25] text-white rounded-xl text-xs font-black shadow-md flex items-center justify-center gap-1.5 active:scale-95 transition-all cursor-pointer"
+                      >
+                        <CheckCircle2 className="w-4 h-4" />
+                        <span>Publish Free to Feed (₹0)</span>
+                      </button>
                     </div>
                   )}
 
@@ -493,12 +483,28 @@ export const ReporterAdRequestsScreen: React.FC = () => {
                 <h3 className="font-bold text-sm">Request Superadmin to Post Ad</h3>
                 <p className="text-[11px] text-white/80">స్థానిక ప్రకటన అభ్యర్థన ఫారమ్</p>
               </div>
-              <button
-                onClick={() => setIsModalOpen(false)}
-                className="p-1 rounded-full hover:bg-white/10 text-white"
-              >
-                <X className="w-5 h-5" />
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setShowAdvanced(!showAdvanced)}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold transition-all ${
+                    showAdvanced
+                      ? 'bg-amber-400 text-gray-900 shadow-md ring-2 ring-white/50'
+                      : 'bg-white/15 text-white hover:bg-white/25 border border-white/20'
+                  }`}
+                  title="Advanced Features / అధునాతన ఫీచర్లు"
+                >
+                  <SlidersHorizontal className="w-3.5 h-3.5" />
+                  <span className="text-[11px]">Advanced</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setIsModalOpen(false)}
+                  className="p-1 rounded-full hover:bg-white/10 text-white transition-colors"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
             </div>
 
             {/* Modal Form Content */}
@@ -520,18 +526,6 @@ export const ReporterAdRequestsScreen: React.FC = () => {
                   onChange={(e) => setTitle(e.target.value)}
                   className="w-full px-3.5 py-2.5 rounded-xl border border-gray-300 focus:outline-none focus:border-[#015BB3] text-xs"
                   required
-                />
-              </div>
-
-              {/* Description */}
-              <div className="space-y-1">
-                <label className="font-bold text-gray-700">Offer / Description (Optional)</label>
-                <textarea
-                  placeholder="Special 50% discount on all silk sarees this festive week..."
-                  value={description}
-                  onChange={(e) => setDescription(e.target.value)}
-                  rows={2}
-                  className="w-full px-3.5 py-2 rounded-xl border border-gray-300 focus:outline-none focus:border-[#015BB3] text-xs"
                 />
               </div>
 
@@ -595,49 +589,84 @@ export const ReporterAdRequestsScreen: React.FC = () => {
                 </label>
               </div>
 
-              {/* Target District */}
+              {/* Contact Information */}
               <div className="space-y-1">
-                <label className="font-bold text-gray-700">Target Region / District *</label>
-                <select
-                  value={targetDistrict}
-                  onChange={(e) => setTargetDistrict(e.target.value)}
-                  className="w-full px-3.5 py-2.5 rounded-xl border border-gray-300 focus:outline-none focus:border-[#015BB3] text-xs bg-white"
+                <label className="font-bold text-gray-700">
+                  {ctaType === 'call' ? 'Phone Number *' : ctaType === 'whatsapp' ? 'WhatsApp Number *' : 'URL Link *'}
+                </label>
+                <input
+                  type={ctaType === 'link' ? 'url' : 'tel'}
+                  placeholder={ctaType === 'link' ? 'https://example.com' : '9876543210'}
+                  value={ctaValue}
+                  onChange={(e) => setCtaValue(e.target.value)}
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-gray-300 focus:outline-none focus:border-[#015BB3] text-xs"
+                  required
+                />
+              </div>
+
+              {/* Advanced Features (Revealed when Advanced logo clicked beside top X) */}
+              {showAdvanced ? (
+                <div className="p-4 rounded-2xl bg-gradient-to-br from-amber-50/80 via-blue-50/40 to-indigo-50/50 border border-amber-200/80 space-y-3.5 animate-in fade-in slide-in-from-top-2 duration-200 shadow-inner">
+                  <div className="flex items-center justify-between pb-2 border-b border-amber-200/60">
+                    <div className="flex items-center gap-1.5 text-[#015BB3] font-bold text-xs">
+                      <SlidersHorizontal className="w-4 h-4 text-amber-500" />
+                      <span>Advanced Ad Features (అధునాతన ఫీచర్లు)</span>
+                    </div>
+                    <span className="text-[10px] text-amber-700 font-semibold bg-amber-100 px-2 py-0.5 rounded-full">
+                      Custom Options
+                    </span>
+                  </div>
+
+                  {/* Offer / Description */}
+                  <div className="space-y-1">
+                    <label className="font-bold text-gray-700">Offer / Description (Optional)</label>
+                    <textarea
+                      placeholder="Special 50% discount on all silk sarees this festive week..."
+                      value={description}
+                      onChange={(e) => setDescription(e.target.value)}
+                      rows={2}
+                      className="w-full px-3.5 py-2 rounded-xl border border-gray-300 focus:outline-none focus:border-[#015BB3] text-xs bg-white"
+                    />
+                  </div>
+
+                  {/* Target Region / District */}
+                  <div className="space-y-1">
+                    <label className="font-bold text-gray-700">Target Region / District *</label>
+                    <select
+                      value={targetDistrict}
+                      onChange={(e) => setTargetDistrict(e.target.value)}
+                      className="w-full px-3.5 py-2.5 rounded-xl border border-gray-300 focus:outline-none focus:border-[#015BB3] text-xs bg-white"
+                    >
+                      {TELANGANA_DISTRICTS.map((d) => (
+                        <option key={d} value={d}>{d}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* Call to Action Type */}
+                  <div className="space-y-1">
+                    <label className="font-bold text-gray-700">Call-to-Action Type</label>
+                    <select
+                      value={ctaType}
+                      onChange={(e) => setCtaType(e.target.value as LocalAdCtaType)}
+                      className="w-full px-3.5 py-2.5 rounded-xl border border-gray-300 focus:outline-none focus:border-[#015BB3] text-xs bg-white"
+                    >
+                      <option value="call">📞 Phone Call</option>
+                      <option value="whatsapp">💬 WhatsApp Message</option>
+                      <option value="link">🌐 Website / Maps Link</option>
+                    </select>
+                  </div>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setShowAdvanced(true)}
+                  className="w-full py-2.5 px-3 rounded-xl border border-dashed border-blue-200 bg-blue-50/50 hover:bg-blue-50 text-[#015BB3] text-[11px] font-bold flex items-center justify-center gap-1.5 transition-colors"
                 >
-                  {TELANGANA_DISTRICTS.map((d) => (
-                    <option key={d} value={d}>{d}</option>
-                  ))}
-                </select>
-              </div>
-
-              {/* Call to Action Type & Value */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div className="space-y-1">
-                  <label className="font-bold text-gray-700">Call-to-Action Type</label>
-                  <select
-                    value={ctaType}
-                    onChange={(e) => setCtaType(e.target.value as LocalAdCtaType)}
-                    className="w-full px-3.5 py-2.5 rounded-xl border border-gray-300 focus:outline-none focus:border-[#015BB3] text-xs bg-white"
-                  >
-                    <option value="call">📞 Phone Call</option>
-                    <option value="whatsapp">💬 WhatsApp Message</option>
-                    <option value="link">🌐 Website / Maps Link</option>
-                  </select>
-                </div>
-
-                <div className="space-y-1">
-                  <label className="font-bold text-gray-700">
-                    {ctaType === 'call' ? 'Phone Number *' : ctaType === 'whatsapp' ? 'WhatsApp Number *' : 'URL Link *'}
-                  </label>
-                  <input
-                    type={ctaType === 'link' ? 'url' : 'tel'}
-                    placeholder={ctaType === 'link' ? 'https://example.com' : '9876543210'}
-                    value={ctaValue}
-                    onChange={(e) => setCtaValue(e.target.value)}
-                    className="w-full px-3.5 py-2.5 rounded-xl border border-gray-300 focus:outline-none focus:border-[#015BB3] text-xs"
-                    required
-                  />
-                </div>
-              </div>
+                  <SlidersHorizontal className="w-3.5 h-3.5 text-amber-500" />
+                  <span>Need Offer Description, District or Action Link? Open Advanced</span>
+                </button>
+              )}
 
               {/* Submit Buttons */}
               <div className="pt-3 border-t border-gray-200 flex items-center justify-end gap-2.5">

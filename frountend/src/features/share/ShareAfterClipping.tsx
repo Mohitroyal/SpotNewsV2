@@ -145,7 +145,7 @@ export function ShareAfterClipping(props: {
   ];
 
   return (
-    <div className="ss-backdrop" onClick={props.onClose}>
+    <div className="ss-backdrop" style={{ zIndex: 100005 }} onClick={props.onClose}>
       <div className="ss" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between mb-2">
           <div className="ss-title" style={{ margin: 0 }}>
