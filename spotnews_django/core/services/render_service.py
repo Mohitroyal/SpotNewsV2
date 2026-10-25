@@ -648,10 +648,20 @@ class RenderService:
                 }
                 return new Promise((resolve) => {
                     const img = new Image();
-                    img.onload = () => resolve({ width: img.naturalWidth || 800, height: img.naturalHeight || 600 });
-                    img.onerror = () => resolve({ width: 800, height: 600 });
+                    const timer = setTimeout(() => {
+                        resolve({ width: img.naturalWidth || 800, height: img.naturalHeight || 600 });
+                    }, 4000);
+                    img.onload = () => {
+                        clearTimeout(timer);
+                        resolve({ width: img.naturalWidth || 800, height: img.naturalHeight || 600 });
+                    };
+                    img.onerror = () => {
+                        clearTimeout(timer);
+                        resolve({ width: 800, height: 600 });
+                    };
                     img.src = url;
                     if (img.complete && img.naturalWidth) {
+                        clearTimeout(timer);
                         resolve({ width: img.naturalWidth, height: img.naturalHeight });
                     }
                 });
@@ -865,59 +875,68 @@ class RenderService:
                         sharedH = Math.max(sharedH, 150);
                         
                         let cap0 = String(captions[0] || '').trim();
-                        let capAllowance0 = cap0 ? Math.ceil(cap0.length / Math.max(1, Math.floor(visW0 / 6.5))) * 15 + 8 : 0;
+                        let capAllowance0 = cap0 ? Math.ceil(cap0.length / Math.max(1, Math.floor(visW0 / 6.5))) * 14 + 4 : 0;
                         
-                        obstacles.push({ url: urls[0], caption: captions[0] || '', x: x0, y: 0, w: Math.round(visW0), h: Math.round(h0 + capAllowance0), imgH: Math.round(h0), isCentered: true, visW: Math.round(visW0), objectFit: 'cover', objectPosition: 'center center' });
+                        obstacles.push({ url: urls[0], caption: captions[0] || '', x: x0, y: 0, w: Math.round(visW0), h: Math.round(h0 + capAllowance0), imgH: Math.round(h0), isCentered: true, visW: Math.round(visW0), objectFit: 'contain', objectPosition: 'center center' });
                         
                         let yBottom = Math.round(h0 + capAllowance0 + gap);
-                        obstacles.push({ url: urls[1], caption: captions[1] || '', x: 0, y: yBottom, w: Math.round(w1), h: Math.round(sharedH), imgH: Math.round(sharedH), isCentered: false, visW: Math.round(w1), objectFit: 'cover', objectPosition: 'center center' });
-                        obstacles.push({ url: urls[2], caption: captions[2] || '', x: Math.round(w1 + gap), y: yBottom, w: Math.round(w2), h: Math.round(sharedH), imgH: Math.round(sharedH), isCentered: false, visW: Math.round(w2), objectFit: 'cover', objectPosition: 'center center' });
+                        obstacles.push({ url: urls[1], caption: captions[1] || '', x: 0, y: yBottom, w: Math.round(w1), h: Math.round(sharedH), imgH: Math.round(sharedH), isCentered: false, visW: Math.round(w1), objectFit: 'contain', objectPosition: 'center center' });
+                        obstacles.push({ url: urls[2], caption: captions[2] || '', x: Math.round(w1 + gap), y: yBottom, w: Math.round(w2), h: Math.round(sharedH), imgH: Math.round(sharedH), isCentered: false, visW: Math.round(w2), objectFit: 'contain', objectPosition: 'center center' });
                     } else if (isDoublePatternB) {
                         let a0 = aspect0 || 1.0;
                         let a1 = (aspectRatios && aspectRatios.length > 1 && aspectRatios[1]) ? aspectRatios[1] : 1.0;
                         let gap = 10;
                         let availW = W_canvas - gap;
                         
-                        // Exact uncropped height needed if both images scale by their natural aspect ratio
+                        // Exact height needed so both images fit side-by-side with 0 cropping, 0 widening, and 0 side gaps
                         let H_calc = Math.round(availW / (a0 + a1));
                         
-                        // In newspaper layout, top photos should be balanced with content (370px - 440px max)
-                        // Never allow images to balloon to 700-800px and crush article text down to 11px!
-                        let maxAllowedH = 430;
-                        if (totalChars > 1600) {
-                            maxAllowedH = 370;
-                        } else if (totalChars > 1000) {
-                            maxAllowedH = 410;
-                        } else if (totalChars > 600) {
-                            maxAllowedH = 440;
+                        // Generous maximum allowable height to preserve full uncropped photos while ensuring space for text
+                        let maxAllowedH = 540;
+                        if (totalChars > 2500) {
+                            maxAllowedH = 460;
+                        } else if (totalChars > 1800) {
+                            maxAllowedH = 520;
+                        } else if (totalChars > 1200) {
+                            maxAllowedH = 540;
                         } else {
-                            maxAllowedH = 490;
+                            maxAllowedH = 580;
                         }
                         
                         let sharedH = Math.min(H_calc, maxAllowedH);
                         sharedH = Math.max(sharedH, 180);
                         
-                        // Proportional widths ensuring full canvas coverage with 0 side gaps
-                        let ratio0 = a0 / (a0 + a1);
-                        let w_img0 = Math.round(availW * ratio0);
-                        let w_img1 = availW - w_img0;
-                        
-                        let startX0 = 0;
-                        let startX1 = w_img0 + gap;
+                        // Widths strictly follow natural aspect ratio: w = round(sharedH * a)
+                        // If H_calc <= maxAllowedH, both images span the canvas edge-to-edge (0 side gaps).
+                        // If H_calc > maxAllowedH, widths scale down proportionally (NEVER widened or stretched).
+                        let w_img0, w_img1, startX0, startX1;
+                        if (H_calc <= maxAllowedH) {
+                            w_img0 = Math.round(sharedH * a0);
+                            w_img1 = availW - w_img0;
+                            startX0 = 0;
+                            startX1 = w_img0 + gap;
+                        } else {
+                            w_img0 = Math.round(sharedH * a0);
+                            w_img1 = Math.round(sharedH * a1);
+                            let totalPairW = w_img0 + gap + w_img1;
+                            startX0 = Math.max(0, Math.round((W_canvas - totalPairW) / 2));
+                            startX1 = startX0 + w_img0 + gap;
+                        }
                         
                         let cap0 = String(captions[0] || '').trim();
-                        let capAllowance0 = cap0 ? Math.ceil(cap0.length / Math.max(1, Math.floor(w_img0 / 6.5))) * 15 + 8 : 0;
+                        let charsPerLine0 = Math.max(1, Math.floor(w_img0 / 6.5));
+                        let capLines0 = cap0 ? Math.ceil(cap0.length / charsPerLine0) : 0;
+                        let capAllowance0 = capLines0 > 0 ? (capLines0 * 14 + 4) : 0;
                         
                         let cap1 = String(captions[1] || '').trim();
-                        let capAllowance1 = cap1 ? Math.ceil(cap1.length / Math.max(1, Math.floor(w_img1 / 6.5))) * 15 + 8 : 0;
+                        let charsPerLine1 = Math.max(1, Math.floor(w_img1 / 6.5));
+                        let capLines1 = cap1 ? Math.ceil(cap1.length / charsPerLine1) : 0;
+                        let capAllowance1 = capLines1 > 0 ? (capLines1 * 14 + 4) : 0;
                         
                         let maxCapAllowance = Math.max(capAllowance0, capAllowance1);
                         let totalSharedH = Math.round(sharedH + maxCapAllowance);
                         
-                        // When natural height fits within maxAllowedH, contain keeps 100% natural aspect.
-                        // When images are tall/portrait (H_calc > maxAllowedH), cover ensures full box coverage with 0 white gaps.
-                        const fitMode = (H_calc <= maxAllowedH + 20) ? 'contain' : 'cover';
-                        
+                        // NEVER CROP! Always use 'contain' with exact aspect ratio container
                         obstacles.push({
                             url: urls[0],
                             caption: captions[0] || '',
@@ -928,7 +947,7 @@ class RenderService:
                             imgH: Math.round(sharedH),
                             isCentered: false,
                             visW: Math.round(w_img0),
-                            objectFit: fitMode,
+                            objectFit: 'contain',
                             objectPosition: 'center center'
                         });
                         
@@ -942,7 +961,7 @@ class RenderService:
                             imgH: Math.round(sharedH),
                             isCentered: false,
                             visW: Math.round(w_img1),
-                            objectFit: fitMode,
+                            objectFit: 'contain',
                             objectPosition: 'center center'
                         });
                     } else if (urls.length === 1 || rawLayout.includes('patternb') || rawLayout.includes('patternd') || rawLayout.includes('single') || rawLayout.includes('hero') || isSinglePatternC || rawLayout.includes('patternc')) {
@@ -960,7 +979,7 @@ class RenderService:
                         let isPatternB_centered = true;
                         
                         let cap0 = String(captions[0] || '').trim();
-                        let capAllowance0 = cap0 ? Math.ceil(cap0.length / Math.max(1, Math.floor((isPatternB_centered ? w0 : w0) / 6.5))) * 15 + 8 : 0;
+                        let capAllowance0 = cap0 ? Math.ceil(cap0.length / Math.max(1, Math.floor((isPatternB_centered ? w0 : w0) / 6.5))) * 14 + 4 : 0;
                         
                         obstacles.push({
                             url: urls[0],
@@ -992,7 +1011,7 @@ class RenderService:
                         let isPatternB_centered = false;
                         
                         let cap0 = String(captions[0] || '').trim();
-                        let capAllowance0 = cap0 ? Math.ceil(cap0.length / Math.max(1, Math.floor((isPatternB_centered ? imgVisW : w0) / 6.5))) * 15 + 8 : 0;
+                        let capAllowance0 = cap0 ? Math.ceil(cap0.length / Math.max(1, Math.floor((isPatternB_centered ? imgVisW : w0) / 6.5))) * 14 + 4 : 0;
                         
                         obstacles.push({
                             url: urls[0],
@@ -1025,7 +1044,7 @@ class RenderService:
                         let isPatternB_centered = false;
                         
                         let cap0 = String(captions[0] || '').trim();
-                        let capAllowance0 = cap0 ? Math.ceil(cap0.length / Math.max(1, Math.floor((isPatternB_centered ? imgVisW : w0) / 6.5))) * 15 + 8 : 0;
+                        let capAllowance0 = cap0 ? Math.ceil(cap0.length / Math.max(1, Math.floor((isPatternB_centered ? imgVisW : w0) / 6.5))) * 14 + 4 : 0;
                         
                         obstacles.push({
                             url: urls[0],
@@ -1193,10 +1212,10 @@ class RenderService:
                 
                 let inflatedObstacles = obstacles.map(obs => {
                     return {
-                        x: obs.x - 4,
-                        y: obs.y - 4,
-                        w: obs.w + 8,
-                        h: obs.h + 6
+                        x: obs.x - 2,
+                        y: obs.y - 2,
+                        w: obs.w + 4,
+                        h: obs.h + 2
                     };
                 });
                 
@@ -1210,10 +1229,10 @@ class RenderService:
                     });
                     if (maxH > 0) {
                         inflatedObstacles.push({
-                            x: -8,
-                            y: -8,
-                            w: W_canvas + 16,
-                            h: maxH + 8
+                            x: -4,
+                            y: -4,
+                            w: W_canvas + 8,
+                            h: maxH + 2
                         });
                     }
                 }
