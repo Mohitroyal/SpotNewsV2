@@ -1357,7 +1357,7 @@ class RenderService:
                         });
                         
                         intervals.forEach(int => {
-                            const h = int.yEnd - int.yStart;
+                            const h = Math.floor(int.yEnd - int.yStart);
                             if (h < 24 || int.w < 40) return;
                             
                             const rBox = document.createElement('div');
@@ -1441,7 +1441,7 @@ class RenderService:
                             pIdx++;
                             continue;
                         } else {
-                            if (activeRegion.rBox.scrollHeight > activeRegion.height) {
+                            if (activeRegion.rBox.scrollHeight > Math.round(activeRegion.height) + 2) {
                                 return false; // Overflowed the final column in search mode
                             }
                             pIdx++;
@@ -1449,7 +1449,7 @@ class RenderService:
                         }
                     }
                     
-                    if (activeRegion.rBox.scrollHeight > activeRegion.height) {
+                    if (activeRegion.rBox.scrollHeight > Math.round(activeRegion.height) + 2) {
                         activeRegion.rBox.removeChild(p);
                         const words = text.split(/\s+/);
                         const testP = p.cloneNode();
@@ -1461,7 +1461,7 @@ class RenderService:
                         while (lowW <= highW) {
                             let midW = Math.floor((lowW + highW) / 2);
                             testP.innerText = words.slice(0, midW).join(' ');
-                            if (activeRegion.rBox.scrollHeight <= activeRegion.height) {
+                            if (activeRegion.rBox.scrollHeight <= Math.round(activeRegion.height) + 2) {
                                 fitCount = midW;
                                 lowW = midW + 1;
                             } else {
@@ -1484,7 +1484,7 @@ class RenderService:
                             activeRegion.rBox.appendChild(testCharP);
                             for (; cIdx < chars.length; cIdx++) {
                                 testCharP.innerText = chars.slice(0, cIdx + 1).join('');
-                                if (activeRegion.rBox.scrollHeight > activeRegion.height) break;
+                                if (activeRegion.rBox.scrollHeight > Math.round(activeRegion.height) + 2) break;
                             }
                             activeRegion.rBox.removeChild(testCharP);
                             if (cIdx > 0) {
