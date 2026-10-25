@@ -26,3 +26,26 @@ echo.
 echo === BUILD COMPLETE ===
 echo Checking for APKs...
 dir /s /b app\build\outputs\apk\*.apk
+
+set "DEBUG_APK=app\build\outputs\apk\debug\app-debug.apk"
+set "RELEASE_APK=app\build\outputs\apk\release\app-release-unsigned.apk"
+if not exist "%RELEASE_APK%" set "RELEASE_APK=app\build\outputs\apk\release\app-release.apk"
+
+if exist "%DEBUG_APK%" (
+    copy /y "%DEBUG_APK%" "..\..\Spot-News-24x7.apk" >nul 2>&1
+    copy /y "%DEBUG_APK%" "..\..\SpotNews-Latest.apk" >nul 2>&1
+    copy /y "%DEBUG_APK%" "..\..\SpotNews-v2.09-Debug.apk" >nul 2>&1
+    copy /y "%DEBUG_APK%" "..\..\APK\Spotnews_Latest.apk" >nul 2>&1
+    copy /y "%DEBUG_APK%" "..\..\APK\SpotNews-Debug.apk" >nul 2>&1
+    copy /y "%DEBUG_APK%" "..\..\APK\SpotNews-v2.09-Debug.apk" >nul 2>&1
+    echo Debug APK successfully copied.
+)
+
+if exist "%RELEASE_APK%" (
+    copy /y "%RELEASE_APK%" "..\..\Spot-News-24x7-release.apk" >nul 2>&1
+    copy /y "%RELEASE_APK%" "..\..\SpotNews-Release-Latest.apk" >nul 2>&1
+    copy /y "%RELEASE_APK%" "..\..\SpotNews-v2.09-Release.apk" >nul 2>&1
+    copy /y "%RELEASE_APK%" "..\..\APK\Spotnews_Release.apk" >nul 2>&1
+    copy /y "%RELEASE_APK%" "..\..\APK\SpotNews-v2.09-Release.apk" >nul 2>&1
+    echo Release APK successfully copied.
+)

@@ -505,7 +505,7 @@ class RenderService:
                 text-align-last: left !important;
                 letter-spacing: -0.15px !important;
                 margin-bottom: 4px !important;
-                line-height: 1.22 !important;
+                line-height: 1.25 !important;
             }}
         </style>
         """
@@ -1732,8 +1732,8 @@ class RenderService:
                 });
                 
                 const estFontSize = Math.sqrt(Math.max(100000, N * W_col * H_avail - blockedArea) / (totalChars * 0.54));
-                const maxFontSize = (totalChars > 1400) ? 16.5 : (totalChars > 900 ? 17.5 : 19.0);
-                const conf = { fontSize: Math.min(maxFontSize, estFontSize), lineHeight: 1.22, paraMargin: 4, imgMaxPct: 0.58, padding: 32 };
+                const maxFontSize = (totalChars > 2200) ? 16.5 : (totalChars > 1300 ? 18.0 : (totalChars > 800 ? 19.0 : 20.5));
+                const conf = { fontSize: Math.min(maxFontSize, estFontSize), lineHeight: 1.25, paraMargin: 4, imgMaxPct: 0.58, padding: 32 };
 
                 // Step 1: Find best font size that fits 100% of text within H_avail
                 let targetFs = Math.min(maxFontSize, estFontSize);
