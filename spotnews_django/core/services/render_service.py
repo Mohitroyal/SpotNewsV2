@@ -886,30 +886,32 @@ class RenderService:
                         let gap = 16;
                         let availW = W_canvas - gap;
                         
-                        // Exact height and proportional widths so both images fill their boxes with 0% crop and 0% white gaps!
+                        // Exact uncropped height needed if both images scale by their natural aspect ratio
                         let H_calc = Math.round(availW / (a0 + a1));
-                        let maxAllowedH = Math.round(Math.max(H_canvas, 1400) * 0.60);
+                        
+                        // In newspaper layout, top photos should be balanced with content (370px - 440px max)
+                        // Never allow images to balloon to 700-800px and crush article text down to 11px!
+                        let maxAllowedH = 430;
+                        if (totalChars > 1600) {
+                            maxAllowedH = 370;
+                        } else if (totalChars > 1000) {
+                            maxAllowedH = 410;
+                        } else if (totalChars > 600) {
+                            maxAllowedH = 440;
+                        } else {
+                            maxAllowedH = 490;
+                        }
+                        
                         let sharedH = Math.min(H_calc, maxAllowedH);
                         sharedH = Math.max(sharedH, 180);
                         
-                        let w_img0 = Math.round(sharedH * a0);
-                        let w_img1 = Math.round(sharedH * a1);
-                        let totalGalW = w_img0 + gap + w_img1;
-                        
-                        if (totalGalW > W_canvas) {
-                            let scale = availW / (w_img0 + w_img1);
-                            w_img0 = Math.round(w_img0 * scale);
-                            w_img1 = availW - w_img0;
-                            sharedH = Math.round(w_img0 / a0);
-                            totalGalW = W_canvas;
-                        }
+                        // Proportional widths ensuring full canvas coverage with 0 side gaps
+                        let ratio0 = a0 / (a0 + a1);
+                        let w_img0 = Math.round(availW * ratio0);
+                        let w_img1 = availW - w_img0;
                         
                         let startX0 = 0;
                         let startX1 = w_img0 + gap;
-                        if (totalGalW < W_canvas) {
-                            startX0 = Math.round((W_canvas - totalGalW) / 2);
-                            startX1 = startX0 + w_img0 + gap;
-                        }
                         
                         let cap0 = String(captions[0] || '').trim();
                         let capAllowance0 = cap0 ? Math.ceil(cap0.length / Math.max(1, Math.floor(w_img0 / 6.5))) * 15 + 8 : 0;
@@ -919,6 +921,10 @@ class RenderService:
                         
                         let maxCapAllowance = Math.max(capAllowance0, capAllowance1);
                         let totalSharedH = Math.round(sharedH + maxCapAllowance);
+                        
+                        // When natural height fits within maxAllowedH, contain keeps 100% natural aspect.
+                        // When images are tall/portrait (H_calc > maxAllowedH), cover ensures full box coverage with 0 white gaps.
+                        const fitMode = (H_calc <= maxAllowedH + 20) ? 'contain' : 'cover';
                         
                         obstacles.push({
                             url: urls[0],
@@ -930,7 +936,7 @@ class RenderService:
                             imgH: Math.round(sharedH),
                             isCentered: false,
                             visW: Math.round(w_img0),
-                            objectFit: 'contain',
+                            objectFit: fitMode,
                             objectPosition: 'center center'
                         });
                         
@@ -944,12 +950,13 @@ class RenderService:
                             imgH: Math.round(sharedH),
                             isCentered: false,
                             visW: Math.round(w_img1),
-                            objectFit: 'contain',
+                            objectFit: fitMode,
                             objectPosition: 'center center'
                         });
                     } else if (urls.length === 1 || rawLayout.includes('patternb') || rawLayout.includes('patternd') || rawLayout.includes('single') || rawLayout.includes('hero') || isSinglePatternC || rawLayout.includes('patternc')) {
                         let dynamicH = Math.round(W_canvas / aspect0);
-                        let maxAllowedH = Math.round(Math.max(H_canvas, 1200) * 0.60);
+                        let maxHeroH = (totalChars > 1500) ? 420 : (totalChars > 1000 ? 460 : (totalChars > 600 ? 520 : 620));
+                        let maxAllowedH = Math.min(maxHeroH, Math.round(Math.max(H_canvas, 1200) * 0.50));
                         h0 = Math.min(dynamicH, maxAllowedH);
                         let w0 = Math.round(h0 * aspect0);
                         if (w0 > W_canvas) {
