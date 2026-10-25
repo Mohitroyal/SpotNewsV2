@@ -733,17 +733,7 @@ class RenderService:
                     if (isCustom || rawLayout === "default" || rawLayout === "" || rawLayout === "auto") {
                         isPatternB = true;
                     }
-                    const isDoublePatternB = (urls.length === 2) && (
-                        rawLayout.includes('patternc') ||
-                        rawLayout.includes('patternb') ||
-                        rawLayout.includes('patterna') ||
-                        rawLayout.includes('double') ||
-                        rawLayout.includes('two') ||
-                        rawLayout.includes('dual') ||
-                        rawLayout === "default" ||
-                        rawLayout === "" ||
-                        rawLayout === "auto"
-                    );
+                    const isDoublePatternB = (urls.length === 2) && !rawLayout.includes('patternd');
                     const isTriplePatternB = isPatternB && urls.length >= 3;
 
                     const isSingleLeft75 = (urls.length === 1) && (rawLayout.includes('patterng') || rawLayout.includes('left75') || rawLayout.includes('pattern75') || rawLayout.includes('75left') || rawLayout.includes('75'));
@@ -1209,7 +1199,7 @@ class RenderService:
                 });
                 
                 const rawLayoutStr = String(data.image_layout || "default").toLowerCase().replace(/[^a-z]/g, "");
-                if (urls.length === 2 && !rawLayoutStr.includes('patternd') && (rawLayoutStr.includes('patternc') || rawLayoutStr.includes('patterna') || rawLayoutStr.includes('patternb') || rawLayoutStr === 'default' || rawLayoutStr === '')) {
+                if (urls.length === 2 && !rawLayoutStr.includes('patternd')) {
                     let maxH = 0;
                     obstacles.forEach(o => {
                         if (o.y === 0 && o.h > maxH && o.type !== 'summary_bullets') {
