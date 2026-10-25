@@ -359,19 +359,19 @@ def run_clipping_generation_background(clipping_id, data, user_id):
         if temp_overlay and os.path.exists(temp_overlay):
             os.remove(temp_overlay)
         
-        # 6. Update Database Status to 'completed'
+        # 6. Update Database Status to 'pending_approval' (awaiting admin approval before downloads/sharing)
         with connection.cursor() as cursor:
             try:
                 cursor.execute(
-                    "UPDATE clippings SET status = %s, png_url = %s, pdf_url = %s, mp4_url = %s, template_id = %s, publication_name = %s, publication_date = %s, state = %s, district = %s WHERE id = %s",
-                    ['completed', png_url, pdf_url, mp4_url, template_id, render_data["publication_name"], render_data["publication_date"], render_data.get("state"), render_data.get("district"), clipping_id]
+                    "UPDATE clippings SET status = %s, png_url = %s, pdf_url = %s, mp4_url = %s, template_id = %s, publication_name = %s, publication_date = %s, state = %s, district = %s, is_posted = %s WHERE id = %s",
+                    ['pending_approval', png_url, pdf_url, mp4_url, template_id, render_data["publication_name"], render_data["publication_date"], render_data.get("state"), render_data.get("district"), False, clipping_id]
                 )
             except Exception as db_err:
                 print(f"[BACKGROUND ERROR] Failed to update mp4_url or extra columns: {db_err}")
                 connection.rollback()
                 cursor.execute(
-                    "UPDATE clippings SET status = %s, png_url = %s, pdf_url = %s WHERE id = %s",
-                    ['completed', png_url, pdf_url, clipping_id]
+                    "UPDATE clippings SET status = %s, png_url = %s, pdf_url = %s, is_posted = %s WHERE id = %s",
+                    ['pending_approval', png_url, pdf_url, False, clipping_id]
                 )
             if not connection.in_atomic_block:
                 connection.commit()
