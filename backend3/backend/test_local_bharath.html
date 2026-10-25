@@ -1,0 +1,1951 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Newspaper</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Merriweather:ital,wght@0,300;0,400;0,700;0,900;1,400&family=Playfair+Display:ital,wght@0,400;0,700;0,900;1,400;1,700&family=Inter:wght@300;400;700;900&family=Courier+Prime:ital,wght@0,400;0,700;1,400&family=Noto+Sans+Telugu:wght@400;700&family=Noto+Serif+Telugu:wght@400;700&display=swap" rel="stylesheet">
+    <style>
+        /* ── Telugu ────────────────────────────────────────────────────── */
+        @font-face {
+            font-family: 'Noto Sans Telugu';
+            font-style: normal; font-weight: 400;
+            src: url('http://localhost:8000/static/fonts/NotoSansTelugu-Regular.ttf') format('truetype');
+        }
+        @font-face {
+            font-family: 'Noto Sans Telugu';
+            font-style: normal; font-weight: 700;
+            src: url('http://localhost:8000/static/fonts/NotoSansTelugu-Bold.ttf') format('truetype');
+        }
+        @font-face {
+            font-family: 'Noto Serif Telugu';
+            font-style: normal; font-weight: 400;
+            src: url('http://localhost:8000/static/fonts/NotoSerifTelugu-Regular.ttf') format('truetype');
+        }
+        @font-face {
+            font-family: 'Noto Serif Telugu';
+            font-style: normal; font-weight: 700;
+            src: url('http://localhost:8000/static/fonts/NotoSerifTelugu-Bold.ttf') format('truetype');
+        }
+        /* ── Hindi / Devanagari (covers Marathi too) ───────────────────── */
+        @font-face {
+            font-family: 'Noto Sans Devanagari';
+            font-style: normal; font-weight: 400;
+            src: url('http://localhost:8000/static/fonts/NotoSansDevanagari-Regular.ttf') format('truetype');
+        }
+        @font-face {
+            font-family: 'Noto Sans Devanagari';
+            font-style: normal; font-weight: 700;
+            src: url('http://localhost:8000/static/fonts/NotoSansDevanagari-Bold.ttf') format('truetype');
+        }
+        @font-face {
+            font-family: 'Noto Serif Devanagari';
+            font-style: normal; font-weight: 400;
+            src: url('http://localhost:8000/static/fonts/NotoSerifDevanagari-Regular.ttf') format('truetype');
+        }
+        @font-face {
+            font-family: 'Noto Serif Devanagari';
+            font-style: normal; font-weight: 700;
+            src: url('http://localhost:8000/static/fonts/NotoSerifDevanagari-Bold.ttf') format('truetype');
+        }
+        /* ── Kannada ───────────────────────────────────────────────────── */
+        @font-face {
+            font-family: 'Noto Sans Kannada';
+            font-style: normal; font-weight: 400;
+            src: url('http://localhost:8000/static/fonts/NotoSansKannada-Regular.ttf') format('truetype');
+        }
+        @font-face {
+            font-family: 'Noto Sans Kannada';
+            font-style: normal; font-weight: 700;
+            src: url('http://localhost:8000/static/fonts/NotoSansKannada-Bold.ttf') format('truetype');
+        }
+        @font-face {
+            font-family: 'Noto Serif Kannada';
+            font-style: normal; font-weight: 400;
+            src: url('http://localhost:8000/static/fonts/NotoSerifKannada-Regular.ttf') format('truetype');
+        }
+        @font-face {
+            font-family: 'Noto Serif Kannada';
+            font-style: normal; font-weight: 700;
+            src: url('http://localhost:8000/static/fonts/NotoSerifKannada-Bold.ttf') format('truetype');
+        }
+        /* ── Malayalam ─────────────────────────────────────────────────── */
+        @font-face {
+            font-family: 'Noto Sans Malayalam';
+            font-style: normal; font-weight: 400;
+            src: url('http://localhost:8000/static/fonts/NotoSansMalayalam-Regular.ttf') format('truetype');
+        }
+        @font-face {
+            font-family: 'Noto Sans Malayalam';
+            font-style: normal; font-weight: 700;
+            src: url('http://localhost:8000/static/fonts/NotoSansMalayalam-Bold.ttf') format('truetype');
+        }
+        @font-face {
+            font-family: 'Noto Serif Malayalam';
+            font-style: normal; font-weight: 400;
+            src: url('http://localhost:8000/static/fonts/NotoSerifMalayalam-Regular.ttf') format('truetype');
+        }
+        @font-face {
+            font-family: 'Noto Serif Malayalam';
+            font-style: normal; font-weight: 700;
+            src: url('http://localhost:8000/static/fonts/NotoSerifMalayalam-Bold.ttf') format('truetype');
+        }
+        /* ── Tamil ─────────────────────────────────────────────────────── */
+        @font-face {
+            font-family: 'Noto Sans Tamil';
+            font-style: normal; font-weight: 400;
+            src: url('http://localhost:8000/static/fonts/NotoSansTamil-Regular.ttf') format('truetype');
+        }
+        @font-face {
+            font-family: 'Noto Sans Tamil';
+            font-style: normal; font-weight: 700;
+            src: url('http://localhost:8000/static/fonts/NotoSansTamil-Bold.ttf') format('truetype');
+        }
+        @font-face {
+            font-family: 'Noto Serif Tamil';
+            font-style: normal; font-weight: 400;
+            src: url('http://localhost:8000/static/fonts/NotoSerifTamil-Regular.ttf') format('truetype');
+        }
+        @font-face {
+            font-family: 'Noto Serif Tamil';
+            font-style: normal; font-weight: 700;
+            src: url('http://localhost:8000/static/fonts/NotoSerifTamil-Bold.ttf') format('truetype');
+        }
+        /* ── Bengali ───────────────────────────────────────────────────── */
+        @font-face {
+            font-family: 'Noto Sans Bengali';
+            font-style: normal; font-weight: 400;
+            src: url('http://localhost:8000/static/fonts/NotoSansBengali-Regular.ttf') format('truetype');
+        }
+        @font-face {
+            font-family: 'Noto Sans Bengali';
+            font-style: normal; font-weight: 700;
+            src: url('http://localhost:8000/static/fonts/NotoSansBengali-Bold.ttf') format('truetype');
+        }
+        @font-face {
+            font-family: 'Noto Serif Bengali';
+            font-style: normal; font-weight: 400;
+            src: url('http://localhost:8000/static/fonts/NotoSerifBengali-Regular.ttf') format('truetype');
+        }
+        @font-face {
+            font-family: 'Noto Serif Bengali';
+            font-style: normal; font-weight: 700;
+            src: url('http://localhost:8000/static/fonts/NotoSerifBengali-Bold.ttf') format('truetype');
+        }
+        /* ── Gujarati ──────────────────────────────────────────────────── */
+        @font-face {
+            font-family: 'Noto Sans Gujarati';
+            font-style: normal; font-weight: 400;
+            src: url('http://localhost:8000/static/fonts/NotoSansGujarati-Regular.ttf') format('truetype');
+        }
+        @font-face {
+            font-family: 'Noto Sans Gujarati';
+            font-style: normal; font-weight: 700;
+            src: url('http://localhost:8000/static/fonts/NotoSansGujarati-Bold.ttf') format('truetype');
+        }
+        @font-face {
+            font-family: 'Noto Serif Gujarati';
+            font-style: normal; font-weight: 400;
+            src: url('http://localhost:8000/static/fonts/NotoSerifGujarati-Regular.ttf') format('truetype');
+        }
+        @font-face {
+            font-family: 'Noto Serif Gujarati';
+            font-style: normal; font-weight: 700;
+            src: url('http://localhost:8000/static/fonts/NotoSerifGujarati-Bold.ttf') format('truetype');
+        }
+        /* ── Punjabi / Gurmukhi ────────────────────────────────────────── */
+        @font-face {
+            font-family: 'Noto Sans Gurmukhi';
+            font-style: normal; font-weight: 400;
+            src: url('http://localhost:8000/static/fonts/NotoSansGurmukhi-Regular.ttf') format('truetype');
+        }
+        @font-face {
+            font-family: 'Noto Sans Gurmukhi';
+            font-style: normal; font-weight: 700;
+            src: url('http://localhost:8000/static/fonts/NotoSansGurmukhi-Bold.ttf') format('truetype');
+        }
+        @font-face {
+            font-family: 'Noto Serif Gurmukhi';
+            font-style: normal; font-weight: 400;
+            src: url('http://localhost:8000/static/fonts/NotoSerifGurmukhi-Regular.ttf') format('truetype');
+        }
+        @font-face {
+            font-family: 'Noto Serif Gurmukhi';
+            font-style: normal; font-weight: 700;
+            src: url('http://localhost:8000/static/fonts/NotoSerifGurmukhi-Bold.ttf') format('truetype');
+        }
+        /* ── Odia ──────────────────────────────────────────────────────── */
+        @font-face {
+            font-family: 'Noto Sans Oriya';
+            font-style: normal; font-weight: 400;
+            src: url('http://localhost:8000/static/fonts/NotoSansOriya-Regular.ttf') format('truetype');
+        }
+        @font-face {
+            font-family: 'Noto Sans Oriya';
+            font-style: normal; font-weight: 700;
+            src: url('http://localhost:8000/static/fonts/NotoSansOriya-Bold.ttf') format('truetype');
+        }
+        @font-face {
+            font-family: 'Noto Serif Oriya';
+            font-style: normal; font-weight: 400;
+            src: url('http://localhost:8000/static/fonts/NotoSerifOriya-Regular.ttf') format('truetype');
+        }
+        @font-face {
+            font-family: 'Noto Serif Oriya';
+            font-style: normal; font-weight: 700;
+            src: url('http://localhost:8000/static/fonts/NotoSerifOriya-Bold.ttf') format('truetype');
+        }
+
+        :root {
+            --primary-color: #15a850;
+            --accent-color: #f28e1c;
+            --bg-color: #FFFFFF;
+            --paper-color: #FFFFFF;
+            --text-color: #000000;
+            --border-color: #333333;
+            
+            
+                --font-family-chosen: 'Merriweather', serif;
+            
+        }
+
+        /* ── Complete Unicode Indic script fallback stack ─────────────────
+           The font-family chosen by the user (Playfair, Merriweather, etc.)
+           is used for Latin characters. For each Indic script the matching
+           Noto font is prepended via a per-language body class below so that
+           Chromium always has the correct glyph table and never shows bars. */
+        --noto-indic-fallbacks:
+            'Noto Serif Telugu',  'Noto Sans Telugu',
+            'Noto Serif Devanagari', 'Noto Sans Devanagari',
+            'Noto Serif Kannada',  'Noto Sans Kannada',
+            'Noto Serif Malayalam','Noto Sans Malayalam',
+            'Noto Serif Tamil',   'Noto Sans Tamil',
+            'Noto Serif Bengali', 'Noto Sans Bengali',
+            'Noto Serif Gujarati','Noto Sans Gujarati',
+            'Noto Serif Gurmukhi','Noto Sans Gurmukhi',
+            'Noto Serif Oriya',   'Noto Sans Oriya';
+
+        body {
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            /* Latin chosen font + ALL Indic Noto fallbacks so every script renders */
+            font-family: var(--font-family-chosen),
+                         'Noto Serif Telugu',  'Noto Sans Telugu',
+                         'Noto Serif Devanagari', 'Noto Sans Devanagari',
+                         'Noto Serif Kannada',  'Noto Sans Kannada',
+                         'Noto Serif Malayalam','Noto Sans Malayalam',
+                         'Noto Serif Tamil',   'Noto Sans Tamil',
+                         'Noto Serif Bengali', 'Noto Sans Bengali',
+                         'Noto Serif Gujarati','Noto Sans Gujarati',
+                         'Noto Serif Gurmukhi','Noto Sans Gurmukhi',
+                         'Noto Serif Oriya',   'Noto Sans Oriya',
+                         serif;
+            margin: 0;
+            padding: 40px;
+            width: 1120px; /* Broadsheet width */
+            box-sizing: border-box;
+        }
+
+        /* ── Per-language body font injection ────────────────────────────
+           Each language class puts the primary script font FIRST in the
+           family list so Chromium uses it for all glyphs in that script
+           instead of falling back to a tofu/bar glyph. */
+        body[lang="te"] { font-family: 'Noto Serif Telugu', 'Noto Sans Telugu', var(--font-family-chosen), serif; }
+        body[lang="hi"] { font-family: 'Noto Serif Devanagari', 'Noto Sans Devanagari', var(--font-family-chosen), serif; }
+        body[lang="mr"] { font-family: 'Noto Serif Devanagari', 'Noto Sans Devanagari', var(--font-family-chosen), serif; }
+        body[lang="kn"] { font-family: 'Noto Serif Kannada',   'Noto Sans Kannada',   var(--font-family-chosen), serif; }
+        body[lang="ml"] { font-family: 'Noto Serif Malayalam', 'Noto Sans Malayalam', var(--font-family-chosen), serif; }
+        body[lang="ta"] { font-family: 'Noto Serif Tamil',     'Noto Sans Tamil',     var(--font-family-chosen), serif; }
+        body[lang="bn"] { font-family: 'Noto Serif Bengali',   'Noto Sans Bengali',   var(--font-family-chosen), serif; }
+        body[lang="gu"] { font-family: 'Noto Serif Gujarati',  'Noto Sans Gujarati',  var(--font-family-chosen), serif; }
+        body[lang="pa"] { font-family: 'Noto Serif Gurmukhi',  'Noto Sans Gurmukhi',  var(--font-family-chosen), serif; }
+        body[lang="or"] { font-family: 'Noto Serif Oriya',     'Noto Sans Oriya',     var(--font-family-chosen), serif; }
+
+        .newspaper-container {
+            border: 1px solid var(--border-color);
+            padding: 2px;
+            background-color: var(--bg-color);
+            box-shadow: 0 0 20px rgba(0,0,0,0.05);
+            display: flex;
+            flex-direction: column;
+            height: auto;
+            min-height: 600px;
+        }
+
+        .inner-border {
+            border: 2px solid var(--border-color);
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            flex: 1;
+        }
+
+        /* Masthead Section */
+        .masthead {
+            text-align: center;
+            border-bottom: 4px solid var(--border-color);
+            padding-bottom: 15px;
+            margin-bottom: 5px;
+        }
+
+        .logo-img {
+            max-width: 800px;
+            max-height: 120px;
+            object-fit: contain;
+        }
+
+        .fallback-masthead {
+            font-family: 'Playfair Display', serif;
+            font-size: 80px;
+            font-weight: 900;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            margin: 0;
+            line-height: 1;
+            color: var(--primary-color);
+        }
+
+        /* Metadata Bar */
+        .metadata-bar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-top: 1px solid var(--border-color);
+            border-bottom: 2px solid var(--border-color);
+            padding: 5px 0;
+            margin-bottom: 30px;
+            font-family: 'Playfair Display', sans-serif;
+            font-size: 14px;
+            font-weight: 700;
+            text-transform: uppercase;
+        }
+
+        /* Main Content */
+        .headline {
+            /* Headline: Latin display font + every Indic script Noto as fallback */
+            font-family: 'Playfair Display',
+                         'Noto Serif Telugu',  'Noto Sans Telugu',
+                         'Noto Serif Devanagari', 'Noto Sans Devanagari',
+                         'Noto Serif Kannada',  'Noto Sans Kannada',
+                         'Noto Serif Malayalam','Noto Sans Malayalam',
+                         'Noto Serif Tamil',   'Noto Sans Tamil',
+                         'Noto Serif Bengali', 'Noto Sans Bengali',
+                         'Noto Serif Gujarati','Noto Sans Gujarati',
+                         'Noto Serif Gurmukhi','Noto Sans Gurmukhi',
+                         'Noto Serif Oriya',   'Noto Sans Oriya',
+                         serif;
+            font-size: 56px;
+            font-weight: 900;
+            line-height: 1.1;
+            text-align: center;
+            margin: 0 0 15px 0;
+            color: var(--primary-color, #111111);
+        }
+
+        .subtitle {
+            /* Subtitle: same complete fallback stack */
+            font-family: 'Merriweather',
+                         'Noto Serif Telugu',  'Noto Sans Telugu',
+                         'Noto Serif Devanagari', 'Noto Sans Devanagari',
+                         'Noto Serif Kannada',  'Noto Sans Kannada',
+                         'Noto Serif Malayalam','Noto Sans Malayalam',
+                         'Noto Serif Tamil',   'Noto Sans Tamil',
+                         'Noto Serif Bengali', 'Noto Sans Bengali',
+                         'Noto Serif Gujarati','Noto Sans Gujarati',
+                         'Noto Serif Gurmukhi','Noto Sans Gurmukhi',
+                         'Noto Serif Oriya',   'Noto Sans Oriya',
+                         serif;
+            font-size: 24px;
+            font-style: italic;
+            text-align: center;
+            margin: 0 0 30px 0;
+            color: #444;
+        }
+
+        .article-meta {
+            text-align: center;
+            margin-bottom: 30px;
+            font-size: 14px;
+            font-weight: bold;
+            text-transform: uppercase;
+        }
+        
+        .article-meta span {
+            color: var(--primary-color);
+        }
+
+        .content-wrapper {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 25px;
+        }
+
+        .featured-image-container {
+            grid-column: 1 / -1; /* Span all columns */
+            margin-bottom: 12px;
+            display: grid;
+            gap: 15px;
+            width: 100%;
+        }
+
+        .featured-image-container.images-1 {
+            grid-template-columns: 1fr;
+        }
+
+        .featured-image-container.images-2 {
+            grid-template-columns: 1fr 1fr;
+        }
+
+        .featured-image-container.images-3 {
+            grid-template-columns: 1.5fr 1fr;
+        }
+
+        .featured-image-container.images-3-grid {
+            display: grid;
+            grid-template-columns: 2fr 1fr;
+            grid-gap: 15px;
+        }
+        
+        .images-3-side {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+            width: 100%;
+            height: 100%;
+        }
+
+        .images-3-side .featured-image {
+            width: 100%;
+            height: calc(50% - 7.5px);
+            object-fit: contain;
+            object-position: center top;
+        }
+
+        .featured-image {
+            display: block;
+            max-width: 100%;
+            max-height: 900px;
+            height: auto;
+            width: auto;
+            margin: 0 auto;
+            object-fit: contain;
+            object-position: center top;
+            border: 1px solid var(--border-color);
+            filter: none !important;
+            image-rendering: auto !important;
+            image-rendering: smooth !important;
+        }
+
+        .featured-image-container.images-1 .featured-image {
+            max-height: 900px;
+            height: auto;
+            width: auto;
+            object-fit: contain;
+        }
+
+        /* Column Content */
+        .article-body {
+            grid-column: 1 / -1;
+            columns: 3;
+            column-gap: 20px;
+            column-rule: 1px solid #ccc;
+        }
+
+        .article-body p {
+            font-size: 16px;
+            line-height: 1.45;
+            margin-top: 0;
+            margin-bottom: 8px;
+            text-align: justify;
+        }
+
+        .article-body p:first-of-type::first-letter {
+            font-family: 'Playfair Display', serif;
+            font-size: 60px;
+            float: left;
+            line-height: 0.8;
+            padding-right: 8px;
+            color: var(--primary-color);
+        }
+
+        /* Footer */
+        .footer {
+            border-top: 2px solid var(--border-color);
+            margin-top: auto;
+            padding-top: 15px;
+            display: flex;
+            justify-content: space-between;
+            font-family: 'Playfair Display', sans-serif;
+            font-size: 12px;
+            font-weight: bold;
+            color: #666;
+        }
+
+        /* ─── Extra News Specific Styles ──────────────────────────────── */
+        body.extra_news .masthead {
+            background-color: transparent;
+            border-bottom: none;
+            padding: 0;
+            margin-bottom: 5px;
+            text-align: center;
+        }
+
+        body.extra_news .logo-img {
+            max-width: 100%;
+            max-height: 160px;
+            display: inline-block;
+        }
+
+        body.extra_news .metadata-bar {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            border-top: none;
+            border-bottom: 1px solid var(--border-color);
+            font-family: 'Inter', sans-serif;
+            font-size: 14px;
+            font-weight: normal;
+            color: #000;
+            padding: 10px 0;
+            margin-bottom: 15px;
+        }
+
+        body.extra_news .headline {
+            background-color: transparent;
+            color: var(--primary-color, #000000);
+            font-family: 'Inter', sans-serif;
+            font-weight: 900;
+            text-align: center;
+            padding: 5px 0;
+            margin-top: 10px;
+            margin-bottom: 15px;
+            font-size: 38px;
+            line-height: 1.2;
+        }
+
+        body.extra_news .subtitle {
+            font-family: 'Inter', sans-serif;
+            font-weight: bold;
+            font-size: 18px;
+            text-align: center;
+            color: #333;
+            margin-bottom: 20px;
+            border-bottom: none;
+            padding-bottom: 0;
+        }
+
+        /* Extra News Layout */
+        .extra-news-layout {
+            display: block;
+            width: 100%;
+        }
+
+        .extra-image-wrapper {
+            float: left;
+            width: 45%;
+            margin-right: 25px;
+            margin-bottom: 15px;
+            margin-top: 5px;
+            text-align: center;
+        }
+
+        .extra-img {
+            display: inline-block;
+            max-width: 100%;
+            max-height: 350px;
+            width: auto;
+            height: auto;
+            object-fit: contain;
+            border: 1px solid #ccc;
+            padding: 4px;
+            box-sizing: border-box;
+            margin-bottom: 10px;
+        }
+
+        .extra-image-wrapper.multi-img {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 8px;
+        }
+
+        .extra-image-wrapper.multi-img .extra-img {
+            margin-bottom: 0;
+            max-height: 160px;
+        }
+
+        .extra-image-wrapper.multi-img .extra-img.featured-top {
+            grid-column: span 2;
+            max-height: 200px;
+        }
+
+        .extra-paragraph {
+            text-align: justify;
+            margin-bottom: 8px;
+            line-height: 1.45;
+            font-size: 16px;
+        }
+    </style>
+</head>
+<body class="bharath_reporter">
+    <div class="newspaper-container">
+        <!-- Reporter Info Badge (Top Left Corner) -->
+        
+
+        <div class="inner-border" style="border: 2px solid var(--border-color); padding: 20px; display: flex; flex-direction: column; flex: 1; box-sizing: border-box;">
+            
+            <!-- Fixed Header Section: 140px -->
+            <div class="header-block" style="height: 140px; overflow: hidden; margin-bottom: 10px; box-sizing: border-box;">
+                <div class="masthead" style="margin: 0; padding-bottom: 5px; border-bottom: none; text-align: center;">
+                    
+                        <img src="http://localhost:8000/static/logos/bharath_reporter.svg" class="logo-img" alt="Bharath Reporter" onerror="this.style.display='none'; document.getElementById('fallback-masthead').style.display='block';" style="max-height: 90px; margin: 0 auto; display: block;">
+                        <h1 id="fallback-masthead" class="fallback-masthead" style="display: none; font-size: 60px; margin: 0;">Bharath Reporter</h1>
+                    
+                </div>
+                <div class="metadata-bar" style="margin: 0; padding: 3px 0; border-top: 1px solid var(--border-color); border-bottom: 2px solid var(--border-color); height: 35px; box-sizing: border-box; display: flex; justify-content: space-between; font-size: 13px;">
+                    <div>Vol. CXIV No. 27</div>
+                    <div>Thursday, Oct 1, 2026</div>
+                    <div>Global Edition</div>
+                    <div>Printed in English</div>
+                </div>
+            </div>
+
+            <!-- Fixed Headline Section: 120px -->
+            <div class="headline-block" style="height: 120px; overflow: hidden; margin-bottom: 10px; box-sizing: border-box; text-align: center;">
+                <h2 class="headline" style="font-size: 40px; margin: 0 0 5px 0; line-height: 1.1;">Test Bharath Reporter</h2>
+                <h3 class="subtitle" style="font-size: 18px; margin: 0 0 5px 0; font-style: italic;">Subheadline test</h3>
+                <div class="article-meta" style="margin: 0; font-size: 13px;">
+                    
+                </div>
+            </div>
+
+            <div id="compositor-canvas"></div>
+
+            <!-- Footer -->
+            <div class="footer" style="white-space: normal; word-wrap: break-word; text-align: center; border-top: 2px solid var(--border-color); margin-top: auto; padding-top: 15px; display: flex; justify-content: space-between; font-family: 'Playfair Display', sans-serif; font-size: 12px; font-weight: bold; color: #666;">
+                <div>Page 1</div>
+                <div>Bharath Reporter</div>
+            </div>
+
+        </div>
+    </div>
+
+        <style id="dynamic-theme-override">
+            :root {
+                --primary-color: #15a850;
+                --border-color: #111111;
+            }
+            .headline-section, .headline-block {
+                
+            }
+            .headline {
+                color: #111111 !important;
+                text-shadow: 0 1px 0 rgba(0,0,0,0.08);
+            }
+            
+            .article-content, .paragraph {
+                text-align: left !important;
+            }
+        </style>
+        
+<script type="application/json" id="newspaper-data">
+{"headline": "Test Bharath Reporter", "subheadline": "Subheadline test", "publication_name": "Bharath Reporter", "publication_date": "Thursday, Oct 1, 2026", "volume": "CXIV", "edition": "27", "location": "Global Edition", "language": "en", "language_name": "English", "byline": "", "dateline": "", "template_id": "bharath_reporter", "logo_url": "http://localhost:8000/static/logos/bharath_reporter.svg", "primary_color": "#15a850", "accent_color": "#f28e1c", "border_color": "#15a850", "layout_columns": 3, "sections": ["Test body text paragraph 1.", "Test body text paragraph 2."], "image_urls": ["data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI4MDAiIGhlaWdodD0iNDAwIiB2aWV3Qm94PSIwIDAgODAwIDQwMCI+PHJlY3Qgd2lkdGg9IjgwMCIgaGVpZ2h0PSI0MDAiIGZpbGw9IiNmOGZhZmMiLz48cmVjdCB4PSIyMCIgeT0iMjAiIHdpZHRoPSI3NjAiIGhlaWdodD0iMzYwIiBmaWxsPSJub25lIiBzdHJva2U9IiMxNWE4NTAiIHN0cm9rZS13aWR0aD0iNCIgc3Ryb2tlLWRhc2hhcnJheT0iOCw4Ii8+PHRleHQgeD0iNDAwIiB5PSIxOTAiIGZvbnQtZmFtaWx5PSJzYW5zLXNlcmlmIiBmb250LXNpemU9IjI4IiBmb250LXdlaWdodD0iYm9sZCIgZmlsbD0iIzE1YTg1MCIgdGV4dC1hbmNob3I9Im1pZGRsZSI+QmhhcmF0aCBSZXBvcnRlcjwvdGV4dD48dGV4dCB4PSI0MDAiIHk9IjIzMCIgZm9udC1mYW1pbHk9InNhbnMtc2VyaWYiIGZvbnQtc2l6ZT0iMTgiIGZpbGw9IiM2NDc0OGIiIHRleHQtYW5jaG9yPSJtaWRkbGUiPlNQRUNJQUwgUkVQT1JUPC90ZXh0Pjwvc3ZnPg=="], "image_captions": [], "image_layout": "default", "heading_bg": "", "summary": "Test body text paragraph 1. Test body text paragraph 2.", "bullet_points": ["Test body text paragraph 1.", "Test body text paragraph 2."], "summary_bg": "", "bullet_bg": ""}
+</script>
+
+        <script>
+        // ── window.onerror: Report JS errors with exact file/line/column ────
+        window.onerror = function(msg, src, line, col, err) {
+            console.error(
+                'JS ERROR:', msg,
+                'FILE:', src,
+                'LINE:', line,
+                'COLUMN:', col
+            );
+            if (!window.__LAYOUT_DONE__) {
+                window.__LAYOUT_DONE__ = true;
+            }
+            return false;
+        };
+        
+        async function startCompositorLayout() {
+            try {
+                const dataEl = document.getElementById('newspaper-data');
+                if (dataEl) {
+                    window.NEWSPAPER_DATA = JSON.parse(dataEl.textContent);
+                }
+            } catch (e) {
+                console.error('[LAYOUT] JSON Parse Error:', e);
+            }
+            const data = window.NEWSPAPER_DATA;
+            if (!data) {
+                console.error('[LAYOUT] No data found.');
+                window.__LAYOUT_DONE__ = true;
+                return;
+            }
+
+            const container = document.querySelector('.newspaper-container');
+            if (!container) return;
+
+            const totalChars = (data.sections || []).reduce((s, p) => s + p.length, 0);
+            console.log('[LAYOUT] Article length:', totalChars, 'chars,', (data.sections||[]).length, 'sections');
+
+            // waitReady utility with timeout
+            async function waitReady() {
+                const WAIT_TIMEOUT = 800;
+                try {
+                    await Promise.race([
+                        document.fonts ? document.fonts.ready : Promise.resolve(),
+                        new Promise(r => setTimeout(r, WAIT_TIMEOUT))
+                    ]);
+                } catch(e) {}
+
+                const imgPromises = Array.from(document.images).map(img => {
+                    if (img.complete || !img.src || !img.src.startsWith('http')) return Promise.resolve();
+                    return Promise.race([
+                        new Promise(r => {
+                            img.onload = r;
+                            img.onerror = r;
+                        }),
+                        new Promise(r => setTimeout(r, WAIT_TIMEOUT))
+                    ]);
+                });
+                await Promise.all(imgPromises);
+            }
+
+            const TARGET_MAX_HEIGHT = 1600;
+            const urls = data.image_urls || [];
+            const captions = data.image_captions || [];
+            const imgCount = urls.length;
+            
+            let aspectRatios = [];
+            let orientations = [];
+
+            // getImageDimensions utility
+            async function getImageDimensions(url) {
+                if (!url) return { width: 800, height: 600 };
+                const existingImg = Array.from(document.images).find(img => img.src === url || img.getAttribute('src') === url);
+                if (existingImg && existingImg.naturalWidth && existingImg.naturalHeight) {
+                    return { width: existingImg.naturalWidth, height: existingImg.naturalHeight };
+                }
+                return new Promise((resolve) => {
+                    const img = new Image();
+                    img.onload = () => resolve({ width: img.naturalWidth || 800, height: img.naturalHeight || 600 });
+                    img.onerror = () => resolve({ width: 800, height: 600 });
+                    img.src = url;
+                    if (img.complete && img.naturalWidth) {
+                        resolve({ width: img.naturalWidth, height: img.naturalHeight });
+                    }
+                });
+            }
+
+            // Ensure we have a compositor-canvas element
+            let canvas = document.getElementById('compositor-canvas');
+            if (!canvas) {
+                canvas = document.createElement('div');
+                canvas.id = 'compositor-canvas';
+                container.appendChild(canvas);
+            }
+            canvas.style.position = 'relative';
+            canvas.style.width = '100%';
+            canvas.style.boxSizing = 'border-box';
+
+            let langStr = (data.language || data.language_name || 'en').toLowerCase();
+            let langKey = 'en';
+            if (langStr.includes('telugu') || langStr === 'te') langKey = 'te';
+            else if (langStr.includes('hindi') || langStr === 'hi') langKey = 'hi';
+            else if (langStr.includes('kannada') || langStr === 'kn') langKey = 'kn';
+            else if (langStr.includes('tamil') || langStr === 'ta') langKey = 'ta';
+            else if (langStr.includes('malayalam') || langStr === 'ml') langKey = 'ml';
+
+            let sumLabels = { 'te': 'సారాంశం', 'hi': 'सारांश', 'kn': 'ಸಾರಾಂಶ', 'ta': 'சுருக்கம்', 'ml': 'സംഗ్రహం', 'en': 'SUMMARY' };
+            let bulLabels = { 'te': 'ముఖ్య అంశాలు', 'hi': 'मुख्य बिंदु', 'kn': 'ಪ್ರಮುಖ ಮುಖ್ಯಾంశాలు', 'ta': 'முக்கிய அம்சங்கள்', 'ml': 'ప్రధాన వివరాలు', 'en': 'KEY TAKEAWAYS' };
+
+            let sumTitle = sumLabels[langKey] || 'SUMMARY';
+            let bulTitle = bulLabels[langKey] || 'KEY TAKEAWAYS';
+
+            function resolveColumns(colVal, charLen) {
+                const s = String(colVal === undefined || colVal === null ? "auto" : colVal).toLowerCase().trim();
+                const p = parseInt(s);
+                if (!isNaN(p) && p >= 1 && p <= 4 && s !== "0" && s !== "auto") {
+                    return p;
+                }
+                const rawLayout = String(data.image_layout || "default").toLowerCase().replace(/[^a-z]/g, "");
+                if (rawLayout.includes('patternd')) {
+                    return 3;
+                }
+                const isSingleSideLayout = (urls.length === 1) && (rawLayout.includes('patterna') || (!rawLayout.includes('patternb') && !rawLayout.includes('patternd') && !rawLayout.includes('single') && !rawLayout.includes('hero') && !rawLayout.includes('patternc') && !rawLayout.includes('patterng')));
+                if (isSingleSideLayout) {
+                    return 2;
+                }
+                if (charLen < 800) {
+                    return 2;
+                }
+                return 3;
+            }
+
+            function getObstacles(W_canvas, S_img, imgHeightPx, H_canvas) {
+                H_canvas = H_canvas || 1200;
+                const TARGET_MAX_HEIGHT = H_canvas;
+                const obstacles = [];
+                const templateIdStr = String(data.template_id || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+                const logoIdStr = String(data.logo_id || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+                const rawLayout = String(data.image_layout || "default").toLowerCase().replace(/[^a-z]/g, "");
+                const showSummaryFlag = data.show_summary === true || String(data.show_summary).toLowerCase() === "true";
+                const isCustom = (templateIdStr.includes("custom") || logoIdStr.includes("custom")) && showSummaryFlag;
+                const showSummary = isCustom && data.show_summary !== false && String(data.show_summary).toLowerCase() !== "false";
+
+                if (urls.length > 0) {
+                    const aspect0 = (aspectRatios && aspectRatios.length > 0 && aspectRatios[0]) ? aspectRatios[0] : 1.33;
+                    let S_scale = S_img;
+                    let gap = 60;
+                    // Dynamically rescale images based on text content size to prevent overflowing short articles
+                    if (totalChars > 0 && totalChars < 3000) {
+                        const scaleFactor = Math.max(0.5, 1.0 - (3000 - totalChars) / 3500);
+                        S_scale = S_img * scaleFactor;
+                        gap = 30;
+                    }
+                    // Bulletproof pattern matching: handles "Pattern B", "pattern_b", "patternB", etc.
+                    const isArticleStyle = rawLayout.includes('articlestyle');
+                    let isPatternB = rawLayout.includes('patternb') || rawLayout.includes('patterna') || rawLayout.includes('patternd') || rawLayout.includes('patternc') || rawLayout.includes('patterne') || isArticleStyle || isCustom;
+                    const isSinglePatternC = !isCustom && rawLayout.includes('patternc') && urls.length === 1;
+                    const isSinglePatternA = !isCustom && rawLayout.includes('patterna') && urls.length === 1;
+                    if (isSinglePatternC || isSinglePatternA) {
+                        isPatternB = false;
+                    }
+                    if (isCustom || rawLayout === "default" || rawLayout === "" || rawLayout === "auto") {
+                        isPatternB = true;
+                    }
+                    const isDoublePatternB = (isPatternB && urls.length === 2) && (rawLayout.includes('patternc') || rawLayout.includes('patterna') || rawLayout === "default");
+                    const isTriplePatternB = isPatternB && urls.length >= 3;
+
+                    const isSingleLeft75 = (urls.length === 1) && (rawLayout.includes('patterng') || rawLayout.includes('left75') || rawLayout.includes('pattern75') || rawLayout.includes('75left') || rawLayout.includes('75'));
+                    
+                    if (isSingleLeft75) {
+                        // Single image: Left side covering ~58% width, dynamic height based on text content
+                        let w0 = Math.round(W_canvas * 0.58);
+                        let cap0 = String(captions[0] || '').trim();
+                        let capAllowance0 = cap0 ? Math.ceil(cap0.length / Math.max(1, Math.floor(w0 / 6.5))) * 15 + 8 : 0;
+                        
+                        let h0;
+                        if (totalChars <= 1400) {
+                            // Short/medium articles: image covers full height of right column
+                            h0 = Math.max(200, H_canvas - capAllowance0);
+                        } else {
+                            // Longer articles: image covers ~72% height, remaining text flows below
+                            h0 = Math.max(300, Math.round(H_canvas * 0.72));
+                        }
+                        
+                        obstacles.push({
+                            url: urls[0],
+                            caption: captions[0] || '',
+                            x: 0,
+                            y: 0,
+                            w: w0,
+                            h: Math.round(h0 + capAllowance0),
+                            imgH: Math.round(h0),
+                            isCentered: false,
+                            visW: w0,
+                            objectFit: 'contain',
+                            objectPosition: 'center center'
+                        });
+                    } else if (rawLayout.includes('patterng')) {
+                        // Pattern G ALWAYS forces a horizontal gallery of ALL images at the top!
+                        let count = urls.length;
+                        if (count > 0) {
+                            let gap = 16;
+                            let w = (W_canvas - (gap * (count - 1))) / count;
+                            
+                            // Balance their heights so they align nicely (using maximum height)
+                            let maxH = 0;
+                            for (let i = 0; i < count; i++) {
+                                let asp = aspectRatios[i] || 1.0;
+                                let thisH = w / asp;
+                                if (thisH > maxH) maxH = thisH;
+                            }
+                            
+                            // Cap height to prevent insanely tall images if they are vertical
+                            if (maxH > W_canvas * 0.75) maxH = W_canvas * 0.75;
+                            
+                            for (let i = 0; i < count; i++) {
+                                obstacles.push({ url: urls[i], caption: captions[i] || '', x: Math.round(i * (w + gap)), y: 0, w: Math.round(w), h: Math.round(maxH), imgH: Math.round(maxH), objectFit: 'contain', objectPosition: 'center center' });
+                            }
+                        }
+                    } else if (rawLayout.includes('patternd')) {
+                        // Pattern D: 2 images in staggered diagonal newspaper layout
+                        // PHOTO 1: Top-Left (Column 0)
+                        // PHOTO 2: Bottom-Right (Column 2)
+                        let N_layout_cols = 3;
+                        let grid_gap = 24;
+                        let single_col_w = Math.round((W_canvas - (N_layout_cols - 1) * grid_gap) / N_layout_cols);
+                        
+                        let w0 = single_col_w;
+                        let dynamicH0 = Math.round(w0 / aspect0);
+                        let maxH0 = Math.round(Math.min(dynamicH0, Math.max(220, single_col_w * 0.82)));
+                        let h0 = Math.max(160, maxH0);
+                        let cap0 = String(captions[0] || '').trim();
+                        let capAllowance0 = cap0 ? Math.ceil(cap0.length / Math.max(1, Math.floor(w0 / 6.5))) * 15 + 8 : 0;
+                        let totalH0 = Math.round(h0 + capAllowance0);
+                        
+                        obstacles.push({
+                            url: urls[0],
+                            caption: captions[0] || '',
+                            x: 0,
+                            y: 0,
+                            w: Math.round(w0),
+                            h: Math.round(totalH0),
+                            imgH: Math.round(h0),
+                            isCentered: false,
+                            visW: Math.round(w0),
+                            objectFit: 'contain',
+                            objectPosition: 'center center'
+                        });
+
+                        if (urls.length > 1) {
+                            let aspect1 = aspectRatios[1] || 1.0;
+                            let w1 = single_col_w;
+                            let dynamicH1 = Math.round(w1 / aspect1);
+                            let maxH1 = Math.round(Math.min(dynamicH1, Math.max(220, single_col_w * 0.82)));
+                            let h1 = Math.max(160, maxH1);
+                            let cap1 = String(captions[1] || '').trim();
+                            let capAllowance1 = cap1 ? Math.ceil(cap1.length / Math.max(1, Math.floor(w1 / 6.5))) * 15 + 8 : 0;
+                            let totalH1 = Math.round(h1 + capAllowance1);
+                            let x1 = Math.round(W_canvas - w1);
+                            let y1 = Math.max(0, Math.round(H_canvas - totalH1));
+                            
+                            obstacles.push({
+                                url: urls[1],
+                                caption: captions[1] || '',
+                                x: Math.round(x1),
+                                y: Math.round(y1),
+                                w: Math.round(w1),
+                                h: Math.round(totalH1),
+                                imgH: Math.round(h1),
+                                isCentered: false,
+                                visW: Math.round(w1),
+                                objectFit: 'contain',
+                                objectPosition: 'center center'
+                            });
+                        }
+                    } else if (isTriplePatternB) {
+                        let w0 = W_canvas;
+                        let dynamicH0 = Math.round(w0 / aspect0);
+                        let maxAllowedH0 = Math.round(Math.max(H_canvas, 1200) * 0.40);
+                        let h0 = Math.min(dynamicH0, maxAllowedH0);
+                        let visW0 = (dynamicH0 > maxAllowedH0) ? Math.round(maxAllowedH0 * aspect0) : W_canvas;
+                        let x0 = Math.round((W_canvas - visW0) / 2);
+                        
+                        let gap = 16;
+                        let availW = W_canvas - gap;
+                        let a1 = (aspectRatios && aspectRatios.length > 1 && aspectRatios[1]) ? aspectRatios[1] : 1.0;
+                        let a2 = (aspectRatios && aspectRatios.length > 2 && aspectRatios[2]) ? aspectRatios[2] : 1.0;
+                        
+                        let H_bot = Math.round(availW / (a1 + a2));
+                        let w1 = Math.round(availW * (a1 / (a1 + a2)));
+                        let w2 = availW - w1;
+                        let sharedH = Math.min(H_bot, Math.round(Math.max(H_canvas, 1200) * 0.35));
+                        sharedH = Math.max(sharedH, 150);
+                        
+                        let cap0 = String(captions[0] || '').trim();
+                        let capAllowance0 = cap0 ? Math.ceil(cap0.length / Math.max(1, Math.floor(visW0 / 6.5))) * 15 + 8 : 0;
+                        
+                        obstacles.push({ url: urls[0], caption: captions[0] || '', x: x0, y: 0, w: Math.round(visW0), h: Math.round(h0 + capAllowance0), imgH: Math.round(h0), isCentered: true, visW: Math.round(visW0), objectFit: 'cover', objectPosition: 'center center' });
+                        
+                        let yBottom = Math.round(h0 + capAllowance0 + gap);
+                        obstacles.push({ url: urls[1], caption: captions[1] || '', x: 0, y: yBottom, w: Math.round(w1), h: Math.round(sharedH), imgH: Math.round(sharedH), isCentered: false, visW: Math.round(w1), objectFit: 'cover', objectPosition: 'center center' });
+                        obstacles.push({ url: urls[2], caption: captions[2] || '', x: Math.round(w1 + gap), y: yBottom, w: Math.round(w2), h: Math.round(sharedH), imgH: Math.round(sharedH), isCentered: false, visW: Math.round(w2), objectFit: 'cover', objectPosition: 'center center' });
+                    } else if (isDoublePatternB) {
+                        let a0 = aspect0 || 1.0;
+                        let a1 = (aspectRatios && aspectRatios.length > 1 && aspectRatios[1]) ? aspectRatios[1] : 1.0;
+                        let gap = 16;
+                        let availW = W_canvas - gap;
+                        
+                        // Exact height and proportional widths so both images fill their boxes with 0% crop and 0% white gaps!
+                        let H_calc = Math.round(availW / (a0 + a1));
+                        let maxAllowedH = Math.round(Math.max(H_canvas, 1400) * 0.60);
+                        let sharedH = Math.min(H_calc, maxAllowedH);
+                        sharedH = Math.max(sharedH, 180);
+                        
+                        let w_img0 = Math.round(sharedH * a0);
+                        let w_img1 = Math.round(sharedH * a1);
+                        let totalGalW = w_img0 + gap + w_img1;
+                        
+                        if (totalGalW > W_canvas) {
+                            let scale = availW / (w_img0 + w_img1);
+                            w_img0 = Math.round(w_img0 * scale);
+                            w_img1 = availW - w_img0;
+                            sharedH = Math.round(w_img0 / a0);
+                            totalGalW = W_canvas;
+                        }
+                        
+                        let startX0 = 0;
+                        let startX1 = w_img0 + gap;
+                        if (totalGalW < W_canvas) {
+                            startX0 = Math.round((W_canvas - totalGalW) / 2);
+                            startX1 = startX0 + w_img0 + gap;
+                        }
+                        
+                        let cap0 = String(captions[0] || '').trim();
+                        let capAllowance0 = cap0 ? Math.ceil(cap0.length / Math.max(1, Math.floor(w_img0 / 6.5))) * 15 + 8 : 0;
+                        
+                        let cap1 = String(captions[1] || '').trim();
+                        let capAllowance1 = cap1 ? Math.ceil(cap1.length / Math.max(1, Math.floor(w_img1 / 6.5))) * 15 + 8 : 0;
+                        
+                        let maxCapAllowance = Math.max(capAllowance0, capAllowance1);
+                        let totalSharedH = Math.round(sharedH + maxCapAllowance);
+                        
+                        obstacles.push({
+                            url: urls[0],
+                            caption: captions[0] || '',
+                            x: startX0,
+                            y: 0,
+                            w: Math.round(w_img0),
+                            h: Math.round(totalSharedH),
+                            imgH: Math.round(sharedH),
+                            isCentered: false,
+                            visW: Math.round(w_img0),
+                            objectFit: 'contain',
+                            objectPosition: 'center center'
+                        });
+                        
+                        obstacles.push({
+                            url: urls[1],
+                            caption: captions[1] || '',
+                            x: startX1,
+                            y: 0,
+                            w: Math.round(w_img1),
+                            h: Math.round(totalSharedH),
+                            imgH: Math.round(sharedH),
+                            isCentered: false,
+                            visW: Math.round(w_img1),
+                            objectFit: 'contain',
+                            objectPosition: 'center center'
+                        });
+                    } else if (urls.length === 1 || rawLayout.includes('patternb') || rawLayout.includes('patternd') || rawLayout.includes('single') || rawLayout.includes('hero') || isSinglePatternC || rawLayout.includes('patternc')) {
+                        // Force a premium standard 4:3 box for the main featured image
+                        let w0 = W_canvas;
+                        let h0 = Math.round(W_canvas * 0.70); 
+                        let maxAllowedH = Math.round(Math.max(H_canvas, 1200) * 0.60);
+                        if (h0 > maxAllowedH) h0 = maxAllowedH;
+                        
+                        let imgX = 0;
+                        let imgY = 0;
+                        let isPatternB_centered = true;
+                        
+                        let cap0 = String(captions[0] || '').trim();
+                        let capAllowance0 = cap0 ? Math.ceil(cap0.length / Math.max(1, Math.floor((isPatternB_centered ? w0 : w0) / 6.5))) * 15 + 8 : 0;
+                        
+                        obstacles.push({
+                            url: urls[0],
+                            caption: captions[0] || '',
+                            x: imgX,
+                            y: imgY,
+                            w: Math.round(w0),
+                            h: Math.round(h0 + capAllowance0),
+                            imgH: Math.round(h0),
+                            isCentered: isPatternB_centered,
+                            visW: Math.round(w0),
+                            objectFit: 'contain',
+                            objectPosition: 'center center'
+                        });
+                    } else if (isSinglePatternA || rawLayout.includes('patterna')) {
+                        let N_layout_cols = resolveColumns(data.layout_columns, totalChars);
+                        let grid_gap = 24;
+                        let single_col_w = Math.round((W_canvas - (N_layout_cols - 1) * grid_gap) / N_layout_cols);
+                        let side_w = (N_layout_cols >= 3) ? single_col_w : Math.round((W_canvas - grid_gap) * 0.48);
+                        let w0 = side_w;
+                        let dynamicH = Math.round(w0 / aspect0);
+                        let maxAllowedH = Math.round(Math.max(H_canvas, 1200) * 0.55);
+                        let h0 = Math.min(dynamicH, maxAllowedH);
+                        if (dynamicH > maxAllowedH) {
+                            w0 = Math.round(h0 * aspect0);
+                        }
+                        let imgVisW = w0;
+                        let imgX = 0; // Left side
+                        let isPatternB_centered = false;
+                        
+                        let cap0 = String(captions[0] || '').trim();
+                        let capAllowance0 = cap0 ? Math.ceil(cap0.length / Math.max(1, Math.floor((isPatternB_centered ? imgVisW : w0) / 6.5))) * 15 + 8 : 0;
+                        
+                        obstacles.push({
+                            url: urls[0],
+                            caption: captions[0] || '',
+                            x: imgX,
+                            y: 0,
+                            w: Math.round(w0),
+                            h: Math.round(h0 + capAllowance0),
+                            imgH: Math.round(h0),
+                            isCentered: isPatternB_centered,
+                            visW: Math.round(imgVisW),
+                            objectFit: 'contain',
+                            objectPosition: 'center center'
+                        });
+                    } else {
+                        // Default / Custom with 1 image: Right side side-by-side with text
+                        let N_layout_cols = resolveColumns(data.layout_columns, totalChars);
+                        let grid_gap = 24;
+                        let single_col_w = Math.round((W_canvas - (N_layout_cols - 1) * grid_gap) / N_layout_cols);
+                        let side_w = (N_layout_cols >= 3) ? single_col_w : Math.round((W_canvas - grid_gap) * 0.48);
+                        let w0 = side_w;
+                        let dynamicH = Math.round(w0 / aspect0);
+                        let maxAllowedH = Math.round(Math.max(H_canvas, 1200) * 0.55);
+                        let h0 = Math.min(dynamicH, maxAllowedH);
+                        if (dynamicH > maxAllowedH) {
+                            w0 = Math.round(h0 * aspect0);
+                        }
+                        let imgVisW = w0;
+                        let imgX = Math.round(W_canvas - w0);
+                        let isPatternB_centered = false;
+                        
+                        let cap0 = String(captions[0] || '').trim();
+                        let capAllowance0 = cap0 ? Math.ceil(cap0.length / Math.max(1, Math.floor((isPatternB_centered ? imgVisW : w0) / 6.5))) * 15 + 8 : 0;
+                        
+                        obstacles.push({
+                            url: urls[0],
+                            caption: captions[0] || '',
+                            x: imgX,
+                            y: 0,
+                            w: Math.round(w0),
+                            h: Math.round(h0 + capAllowance0),
+                            imgH: Math.round(h0),
+                            isCentered: isPatternB_centered,
+                            visW: Math.round(imgVisW),
+                            objectFit: 'contain',
+                            objectPosition: 'center center'
+                        });
+                    }
+
+                    if (urls.length > 1 && !isDoublePatternB && !isTriplePatternB && !rawLayout.includes('patternd') && !rawLayout.includes('patterng')) {
+                        const aspect1 = aspectRatios[1] || 1.0;
+                        let w1 = W_canvas * Math.max(0.40, Math.min(0.58, 0.48 * S_scale));
+                        let h1 = w1 / aspect1;
+                        h1 = Math.min(h1, imgHeightPx * (urls.length > 2 && totalChars < 2500 ? 0.75 : 1.0));
+                        let gap = 60;
+                        let y1 = h0 + gap; // Spacing below Hero
+                        let x1 = W_canvas - w1; // Align secondary image on right side below Hero
+                        
+                        obstacles.push({
+                            url: urls[1],
+                            caption: captions[1] || '',
+                            x: Math.round(x1),
+                            y: Math.round(y1),
+                            w: Math.round(w1),
+                            h: Math.round(h1),
+                            imgH: Math.round(h1),
+                            objectFit: 'contain',
+                            objectPosition: 'center center'
+                        });
+                    }
+
+                    if (urls.length > 2 && !isDoublePatternB && !isTriplePatternB && !rawLayout.includes('patternd') && !rawLayout.includes('patterng')) {
+                        const aspect2 = aspectRatios[2] || 1.0;
+                        let w2 = W_canvas * Math.max(0.40, Math.min(0.58, 0.48 * S_scale));
+                        let h2 = w2 / aspect2;
+                        h2 = Math.min(h2, imgHeightPx * (urls.length > 2 && totalChars < 2500 ? 0.75 : 1.0));
+                        let y2 = H_canvas - h2;
+                        
+                        obstacles.push({
+                            url: urls[2],
+                            caption: captions[2] || '',
+                            x: Math.round(W_canvas - w2), // Align bottom-right
+                            y: Math.round(y2),
+                            w: Math.round(w2),
+                            h: Math.round(h2),
+                            imgH: Math.round(h2),
+                            objectFit: 'contain',
+                            objectPosition: 'center center'
+                        });
+                    }
+                }
+                if (isCustom && (data.summary || (data.bullet_points && data.bullet_points.length > 0)) && data.show_summary !== false && String(data.show_summary).toLowerCase() !== "false") {
+                    let maxImgY = 0;
+                    obstacles.forEach(o => {
+                        if (o.type !== 'summary_bullets') {
+                            maxImgY = Math.max(maxImgY, o.y + o.h);
+                        }
+                    });
+                    // Position summary box cleanly below top image & text column area
+                    let summaryY = Math.max(maxImgY, 350) + 16;
+                    obstacles.push({
+                        type: 'summary_bullets',
+                        x: 0,
+                        y: Math.round(summaryY),
+                        w: W_canvas,
+                        h: 260
+                    });
+                }
+                return obstacles;
+            }
+
+            function runLayoutPass(conf, S, H_layout, isFinal) {
+                // Clear the compositor canvas
+                canvas.innerHTML = '';
+                
+                // Get canvas width
+                const W_canvas = canvas.offsetWidth || 1060;
+                
+                // Calculate columns
+                let N = resolveColumns(data.layout_columns, totalChars);
+                
+                const G = 24; // Column gap in pixels
+                const W_col = (W_canvas - (N - 1) * G) / N;
+                
+                const H_canvas = H_layout;
+                
+                // Calculate image dimensions and create absolute obstacles
+                const imgHeightPx = Math.round(0.58 * W_canvas);
+                let S_img = S || 1.0;
+                const obstacles = getObstacles(W_canvas, S_img, imgHeightPx, H_canvas);
+
+                // Render summary box early to measure its exact dynamic height from DOM
+                const sumObs = obstacles.find(o => o.type === 'summary_bullets');
+                if (sumObs) {
+                    const measuredH = renderSummaryBulletsBox(sumObs.y);
+                    if (measuredH > 0) {
+                        sumObs.h = measuredH;
+                    }
+                }
+
+                // Render absolute images onto canvas if it's the final pass
+                if (isFinal) {
+                    obstacles.forEach(obs => {
+                        if (obs.type === 'summary_bullets') {
+                            // Already rendered above during dynamic height measurement
+                            return;
+                        }
+                        const imgEl = document.createElement('div');
+                        imgEl.className = 'nc-absolute-image';
+                        imgEl.style.position = 'absolute';
+                        imgEl.style.left = `${obs.x}px`;
+                        imgEl.style.top = `${obs.y}px`;
+                        imgEl.style.width = `${obs.w}px`;
+                        imgEl.style.height = 'auto';
+                        imgEl.style.boxSizing = 'border-box';
+                        imgEl.style.border = 'none';
+                        imgEl.style.padding = '0';
+                        imgEl.style.background = 'var(--bg-color, #FFFFFF)';
+                        imgEl.style.zIndex = '5';
+                        
+                        let cleanCap = obs.caption;
+                        if (typeof cleanCap === 'object' && cleanCap !== null) {
+                            cleanCap = cleanCap.caption || cleanCap.text || cleanCap.title || '';
+                        }
+                        let capStr = String(cleanCap || '').trim();
+                        if (capStr === '[object Object]') capStr = '';
+
+                        let captionHeight = 0;
+                        if (capStr) {
+                            const wrapW = obs.isCentered ? obs.visW : obs.w;
+                            const charsPerLine = Math.max(1, Math.floor(wrapW / 6.5));
+                            const lines = Math.ceil(capStr.length / charsPerLine);
+                            captionHeight = lines * 15;
+                        }
+                        const imgH = obs.imgH || (obs.h - (captionHeight ? captionHeight + 8 : 0));
+                        
+                        let captionHtml = capStr ? `<div class="image-caption nc-image-caption" style="position: relative; z-index: 2; font-size: 11px; font-style: italic; color: #444; margin-top: 4px; line-height: 1.3; width: 100%; text-align: center; word-wrap: break-word;">${capStr}</div>` : '';
+                        if (obs.isCentered) {
+                            const isFullBleed = (obs.visW >= obs.w);
+                            imgEl.style.display = 'flex';
+                            imgEl.style.flexDirection = 'column';
+                            imgEl.style.alignItems = 'center';
+                            imgEl.style.border = 'none';
+                            imgEl.style.background = 'transparent';
+                            imgEl.style.padding = '0';
+                            
+                            const innerStyle = isFullBleed 
+                                ? `position: relative; overflow: hidden; width: ${obs.visW}px; display: flex; flex-direction: column; align-items: center; box-sizing: border-box;`
+                                : `position: relative; overflow: hidden; width: ${obs.visW}px; border: none; padding: 0; background: var(--bg-color, #FFFFFF); display: flex; flex-direction: column; align-items: center; box-sizing: border-box;`;
+
+                            const blurBg = `<div style="position: absolute; top: -10px; left: -10px; right: -10px; bottom: -10px; background-image: url('${obs.url}'); background-size: cover; background-position: center; filter: blur(25px); opacity: 0.6; z-index: 1;"></div>`;
+
+                            imgEl.innerHTML = '<div style="' + innerStyle + '">' + blurBg + '<img src="' + obs.url + '" style="position: relative; z-index: 2; width: 100%; height: ' + imgH + 'px; max-height: none !important; object-fit: ' + (obs.objectFit || 'contain') + '; object-position: ' + (obs.objectPosition || 'center center') + '; display: block;" />' + captionHtml + '</div>';
+                        } else {
+                            const blurBg = `<div style="position: absolute; top: -10px; left: -10px; right: -10px; bottom: -10px; background-image: url('${obs.url}'); background-size: cover; background-position: center; filter: blur(25px); opacity: 0.6; z-index: 1;"></div>`;
+                            imgEl.innerHTML = '<div style="position: relative; overflow: hidden; width: 100%; height: 100%;">' + blurBg + '<img src="' + obs.url + '" style="position: relative; z-index: 2; width: 100%; height: ' + imgH + 'px; max-height: none !important; object-fit: ' + (obs.objectFit || 'contain') + '; object-position: ' + (obs.objectPosition || 'center center') + '; display: block;" />' + captionHtml + '</div>';
+                        }
+                        canvas.appendChild(imgEl);
+                    });
+                }
+                
+                let inflatedObstacles = obstacles.map(obs => {
+                    return {
+                        x: obs.x - 8,
+                        y: obs.y - 8,
+                        w: obs.w + 16,
+                        h: obs.h + 16
+                    };
+                });
+                
+                const rawLayoutStr = String(data.image_layout || "default").toLowerCase().replace(/[^a-z]/g, "");
+                if (urls.length === 2 && !rawLayoutStr.includes('patternd') && (rawLayoutStr.includes('patternc') || rawLayoutStr.includes('patterna') || rawLayoutStr.includes('patternb') || rawLayoutStr === 'default' || rawLayoutStr === '')) {
+                    let maxH = 0;
+                    obstacles.forEach(o => {
+                        if (o.y === 0 && o.h > maxH && o.type !== 'summary_bullets') {
+                            maxH = o.h;
+                        }
+                    });
+                    if (maxH > 0) {
+                        inflatedObstacles.push({
+                            x: -12,
+                            y: -12,
+                            w: W_canvas + 24,
+                            h: maxH + 24
+                        });
+                    }
+                }
+
+                // Flow layout function
+                const regions = [];
+                const rawLayoutStrPass = String(data.image_layout || "default").toLowerCase().replace(/[^a-z]/g, "");
+                const isSingleLeft75Pass = (urls.length === 1) && (rawLayoutStrPass.includes('patterng') || rawLayoutStrPass.includes('left75') || rawLayoutStrPass.includes('pattern75') || rawLayoutStrPass.includes('75left') || rawLayoutStrPass.includes('75'));
+
+                if (isSingleLeft75Pass && obstacles.length > 0) {
+                    const obs0 = obstacles[0];
+                    const G_side = 24;
+                    const rightX = obs0.w + G_side;
+                    const rightW = W_canvas - rightX;
+                    const rightH = obs0.h;
+                    
+                    // 1. Right Column next to the 75% left image
+                    const colRight = document.createElement('div');
+                    colRight.className = 'nc-column col-right';
+                    colRight.style.position = 'absolute';
+                    colRight.style.left = `${rightX}px`;
+                    colRight.style.top = '0px';
+                    colRight.style.width = `${rightW}px`;
+                    
+                    const rBoxRight = document.createElement('div');
+                    rBoxRight.className = 'nc-text-region-box';
+                    rBoxRight.style.position = 'absolute';
+                    rBoxRight.style.left = '0px';
+                    rBoxRight.style.top = '0px';
+                    rBoxRight.style.width = `${rightW}px`;
+                    rBoxRight.style.height = `${rightH}px`;
+                    rBoxRight.style.boxSizing = 'border-box';
+                    rBoxRight.style.overflow = 'hidden';
+                    colRight.appendChild(rBoxRight);
+                    canvas.appendChild(colRight);
+                    regions.push({ rBox: rBoxRight, height: rightH, y: 0, col: 0 });
+                    
+                    // 2. Full-Width Bottom Section spanning across under the image (only when canvas height allows)
+                    const botY = obs0.h + 16;
+                    const botH = Math.max(0, H_canvas - botY);
+                    
+                    if (botH > 25) {
+                        const colBot = document.createElement('div');
+                        colBot.className = 'nc-column col-bottom';
+                        colBot.style.position = 'absolute';
+                        colBot.style.left = '0px';
+                        colBot.style.top = `${botY}px`;
+                        colBot.style.width = `${W_canvas}px`;
+                        
+                        const rBoxBot = document.createElement('div');
+                        rBoxBot.className = 'nc-text-region-box';
+                        rBoxBot.style.position = 'absolute';
+                        rBoxBot.style.left = '0px';
+                        rBoxBot.style.top = '0px';
+                        rBoxBot.style.width = `${W_canvas}px`;
+                        rBoxBot.style.height = `${botH}px`;
+                        rBoxBot.style.boxSizing = 'border-box';
+                        rBoxBot.style.overflow = 'hidden';
+                        colBot.appendChild(rBoxBot);
+                        canvas.appendChild(colBot);
+                        regions.push({ rBox: rBoxBot, height: botH, y: botY, col: 1 });
+                    }
+                } else {
+                    for (let c = 0; c < N; c++) {
+                        const L_c = c * (W_col + G);
+                        const R_c = L_c + W_col;
+                        
+                        let intervals = [{ yStart: 0, yEnd: H_canvas, xOffset: 0, w: W_col }];
+                        
+                        inflatedObstacles.forEach(obs => {
+                            const xOverlapStart = Math.max(L_c, obs.x);
+                            const xOverlapEnd = Math.min(R_c, obs.x + obs.w);
+                            if (xOverlapStart >= xOverlapEnd) return;
+                            
+                            const yOverlapStart = Math.max(0, obs.y);
+                            const yOverlapEnd = Math.min(H_canvas, obs.y + obs.h);
+                            if (yOverlapStart >= yOverlapEnd) return;
+                            
+                            const nextIntervals = [];
+                            intervals.forEach(int => {
+                                const yIntersectStart = Math.max(int.yStart, yOverlapStart);
+                                const yIntersectEnd = Math.min(int.yEnd, yOverlapEnd);
+                                
+                                if (yIntersectStart >= yIntersectEnd) {
+                                    nextIntervals.push(int);
+                                    return;
+                                }
+                                
+                                if (int.yStart < yIntersectStart) {
+                                    nextIntervals.push({
+                                        yStart: int.yStart,
+                                        yEnd: yIntersectStart,
+                                        xOffset: int.xOffset,
+                                        w: int.w
+                                    });
+                                }
+                                
+                                const intStart = int.xOffset;
+                                const intEnd = int.xOffset + int.w;
+                                
+                                const obsStart = obs.x - L_c;
+                                const obsEnd = obs.x + obs.w - L_c;
+                                
+                                // Left piece
+                                if (intStart < obsStart) {
+                                    const wRem = Math.min(intEnd, obsStart) - intStart;
+                                    if (wRem >= 40) {
+                                        nextIntervals.push({
+                                            yStart: yIntersectStart,
+                                            yEnd: yIntersectEnd,
+                                            xOffset: intStart,
+                                            w: wRem
+                                        });
+                                    }
+                                }
+                                
+                                // Right piece
+                                if (intEnd > obsEnd) {
+                                    const newStart = Math.max(intStart, obsEnd);
+                                    const wRem = intEnd - newStart;
+                                    if (wRem >= 40) {
+                                        nextIntervals.push({
+                                            yStart: yIntersectStart,
+                                            yEnd: yIntersectEnd,
+                                            xOffset: newStart,
+                                            w: wRem
+                                        });
+                                    }
+                                }
+                                
+                                if (int.yEnd > yIntersectEnd) {
+                                    nextIntervals.push({
+                                        yStart: yIntersectEnd,
+                                        yEnd: int.yEnd,
+                                        xOffset: int.xOffset,
+                                        w: int.w
+                                    });
+                                }
+                            });
+                            intervals = nextIntervals;
+                        });
+                        
+                        intervals.forEach(int => {
+                            const h = int.yEnd - int.yStart;
+                            if (h < 24 || int.w < 40) return;
+                            
+                            const rBox = document.createElement('div');
+                            rBox.className = 'nc-text-region-box';
+                            rBox.style.position = 'absolute';
+                            rBox.style.left = `${int.xOffset}px`;
+                            rBox.style.top = `${int.yStart}px`;
+                            rBox.style.width = `${int.w}px`;
+                            rBox.style.height = `${h}px`;
+                            rBox.style.boxSizing = 'border-box';
+                            rBox.style.overflow = 'hidden';
+                            
+                            const colDiv = canvas.querySelector(`.col-${c}`) || document.createElement('div');
+                            if (!canvas.contains(colDiv)) {
+                                colDiv.className = `nc-column col-${c}`;
+                                colDiv.style.position = 'absolute';
+                                colDiv.style.left = `${L_c}px`;
+                                colDiv.style.top = '0px';
+                                colDiv.style.width = `${W_col}px`;
+                                canvas.appendChild(colDiv);
+                            }
+                            colDiv.appendChild(rBox);
+                            
+                            regions.push({ rBox, height: h, y: int.yStart, col: c });
+                        });
+                    }
+                }
+                
+                // Strict multi-column newspaper reading flow:
+                // Column by column (Column 0 -> Column 1 -> Column 2), and top-to-bottom within each column.
+                regions.sort((a, b) => {
+                    if (a.col !== b.col) {
+                        return a.col - b.col;
+                    }
+                    return a.y - b.y;
+                });
+                
+                let paragraphs = [];
+                for (const sec of (data.sections || [])) {
+                    const cleanSec = String(sec || '').replace(/[\u00a0\u200b]/g, ' ').replace(/\s+/g, ' ').trim();
+                    if (cleanSec) {
+                        paragraphs.push(cleanSec);
+                    }
+                }
+                if (paragraphs.length === 0) {
+                    const rawFb = String(data.article_text || data.article_content || data.raw_content || '').replace(/[\u00a0\u200b]/g, ' ').replace(/\s+/g, ' ').trim();
+                    if (rawFb) {
+                        paragraphs.push(rawFb);
+                    } else {
+                        paragraphs.push("భోగాపురం మండలంలో వైఎస్ఆర్ కాంగ్రెస్ పార్టీ అధినేత వైఎస్ జగన్ మోహన్ రెడ్డి పర్యటనకు ప్రజల నుండి విశేష స్పందన లభించింది. పర్యటన పొడవునా వేలాదిగా తరలివచ్చిన ప్రజలు మరియు కార్యకర్తలు ఆయనకు ఘన స్వాగతం పలికారు.");
+                    }
+                }
+
+                if (paragraphs.length > 0 && data.dateline) {
+                    paragraphs[0] = ((data.template_id === 'classic') ? `[${data.dateline}] — ` : `${data.dateline} — `) + paragraphs[0];
+                }
+                
+                let pIdx = 0;
+                let currentRegionIdx = 0;
+                let activeRegion = regions[currentRegionIdx];
+                
+                while (activeRegion && pIdx < paragraphs.length) {
+                    let text = paragraphs[pIdx];
+                    const p = document.createElement('p');
+                    p.innerText = text;
+                    p.style.fontSize = `${conf.fontSize}px`;
+                    p.style.lineHeight = conf.lineHeight;
+                    p.style.marginBottom = `${conf.paraMargin}px`;
+                    p.style.marginTop = '0';
+                    p.style.textAlign = 'justify';
+                    p.style.wordBreak = 'break-word';
+                    p.style.overflowWrap = 'break-word';
+                    activeRegion.rBox.appendChild(p);
+                    
+                    if (currentRegionIdx === regions.length - 1) {
+                        if (isFinal) {
+                            pIdx++;
+                            continue;
+                        } else {
+                            if (activeRegion.rBox.scrollHeight > activeRegion.height) {
+                                return false; // Overflowed the final column in search mode
+                            }
+                            pIdx++;
+                            continue;
+                        }
+                    }
+                    
+                    if (activeRegion.rBox.scrollHeight > activeRegion.height) {
+                        activeRegion.rBox.removeChild(p);
+                        const words = text.split(/\s+/);
+                        const testP = p.cloneNode();
+                        activeRegion.rBox.appendChild(testP);
+                        
+                        let lowW = 0;
+                        let highW = words.length;
+                        let fitCount = 0;
+                        while (lowW <= highW) {
+                            let midW = Math.floor((lowW + highW) / 2);
+                            testP.innerText = words.slice(0, midW).join(' ');
+                            if (activeRegion.rBox.scrollHeight <= activeRegion.height) {
+                                fitCount = midW;
+                                lowW = midW + 1;
+                            } else {
+                                highW = midW - 1;
+                            }
+                        }
+                        let wIdx = fitCount;
+                        activeRegion.rBox.removeChild(testP);
+                        if (wIdx > 0) {
+                            const fitP = p.cloneNode();
+                            fitP.innerText = words.slice(0, wIdx).join(' ');
+                            activeRegion.rBox.appendChild(fitP);
+                            const rem = words.slice(wIdx).join(' ');
+                            if (rem.trim().length > 0) paragraphs.splice(pIdx, 1, rem); else pIdx++;
+                        } else {
+                            // If not even 1 word fits, force break word by characters
+                            const chars = text.split('');
+                            let cIdx = 0;
+                            const testCharP = p.cloneNode();
+                            activeRegion.rBox.appendChild(testCharP);
+                            for (; cIdx < chars.length; cIdx++) {
+                                testCharP.innerText = chars.slice(0, cIdx + 1).join('');
+                                if (activeRegion.rBox.scrollHeight > activeRegion.height) break;
+                            }
+                            activeRegion.rBox.removeChild(testCharP);
+                            if (cIdx > 0) {
+                                const fitP = p.cloneNode();
+                                fitP.innerText = chars.slice(0, cIdx).join('');
+                                activeRegion.rBox.appendChild(fitP);
+                                const rem = chars.slice(cIdx).join('');
+                                if (rem.trim().length > 0) paragraphs.splice(pIdx, 1, rem); else pIdx++;
+                            } else {
+                                // 0 chars fit in this small region: do NOT drop paragraph, preserve for next region
+                            }
+                        }
+                        currentRegionIdx++;
+                        activeRegion = regions[currentRegionIdx];
+                    } else pIdx++;
+                }
+                
+                if (regions.length === 0 || pIdx < paragraphs.length) {
+                    return false; // Did not fit all paragraphs
+                }
+                
+                // Third image is now handled as an absolute obstacle at bottom-right
+                
+                if (isFinal) {
+                    if (isSingleLeft75Pass && obstacles.length > 0) {
+                        const rBoxRight = regions[0] ? regions[0].rBox : null;
+                        const rBoxBot = regions[1] ? regions[1].rBox : null;
+                        const hasBottomText = rBoxBot && rBoxBot.lastElementChild && rBoxBot.innerText.trim() !== '';
+                        
+                        if (rBoxRight && !hasBottomText) {
+                            // All text fits cleanly in the right column! Align image height exactly to the right column
+                            const textBottomY = rBoxRight.scrollHeight;
+                            if (textBottomY > 120) {
+                                const imgDomEl = canvas.querySelector('.nc-absolute-image');
+                                if (imgDomEl) {
+                                    let capEl = imgDomEl.querySelector('.nc-image-caption');
+                                    let capH = capEl ? capEl.offsetHeight + 4 : 0;
+                                    let targetImgH = Math.max(100, textBottomY - capH);
+                                    let imgTag = imgDomEl.querySelector('img');
+                                    if (imgTag) {
+                                        imgTag.style.height = `${targetImgH}px`;
+                                    }
+                                    imgDomEl.style.height = `${textBottomY}px`;
+                                    obstacles[0].h = textBottomY;
+                                }
+                            }
+                        }
+                    }
+
+                    let maxY = 0;
+                    regions.forEach(r => {
+                        if (r.rBox.lastElementChild && r.rBox.innerText.trim() !== '') {
+                            const contentHeight = r.rBox.scrollHeight;
+                            r.rBox.style.height = `${contentHeight}px`;
+                            r.rBox.style.overflow = 'visible';
+                            maxY = Math.max(maxY, r.y + contentHeight);
+                        } else {
+                            r.rBox.style.height = '0px';
+                        }
+                    });
+                    obstacles.forEach(img => maxY = Math.max(maxY, img.y + img.h));
+                    
+                    canvas.style.height = `${Math.max(maxY, 150)}px`;
+                    
+                    // Force zero whitespace below the canvas
+                    const innerBorder = document.querySelector('.inner-border');
+                    if (innerBorder) {
+                        innerBorder.style.flex = 'none';
+                        innerBorder.style.height = 'auto';
+                    }
+                    const container = document.querySelector('.newspaper-container');
+                    if (container) {
+                        container.style.height = 'auto';
+                        container.style.minHeight = '0px';
+                    }
+                    
+                    window.__IMAGE_LAYOUT_LOGS__ = {
+                        image_count: imgCount,
+                        image_orientations: orientations.join(', '),
+                        selected_layout: 'Region-Based Newspaper Page Compositor (Binary Search Balanced)',
+                        final_dimensions: obstacles.map(obs => `${obs.w}x${obs.h}px`).join(', ')
+                    };
+                }
+                return true;
+            }
+
+            function renderSummaryBulletsBox(yTop) {
+                const templateIdStr = String(data.template_id || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+                const logoIdStr = String(data.logo_id || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+                const rawLayout = String(data.image_layout || "default").toLowerCase().replace(/[^a-z]/g, "");
+                const showSummaryFlag = data.show_summary === true || String(data.show_summary).toLowerCase() === "true";
+                const isCustom = (templateIdStr.includes("custom") || logoIdStr.includes("custom")) && showSummaryFlag;
+                const showSummary = isCustom && data.show_summary !== false && String(data.show_summary).toLowerCase() !== "false";
+                if (!showSummary) {
+                    return 0;
+                }
+                if ((!data.summary || !String(data.summary).trim()) && (!data.bullet_points || data.bullet_points.length === 0)) {
+                    return 0;
+                }
+                const containerEl = document.createElement('div');
+                containerEl.className = 'nc-absolute-summary';
+                containerEl.style.position = 'absolute';
+                containerEl.style.left = '0px';
+                containerEl.style.top = `${yTop}px`;
+                containerEl.style.width = '100%';
+                containerEl.style.boxSizing = 'border-box';
+                containerEl.style.display = 'flex';
+                containerEl.style.flexDirection = 'row';
+                containerEl.style.gap = '24px';
+                containerEl.style.zIndex = '5';
+                containerEl.style.fontFamily = 'var(--primary-font, "Playfair Display", serif)';
+                
+                let langStr = (data.language || data.language_name || 'en').toLowerCase();
+                let langKey = 'en';
+                if (langStr.includes('telugu') || langStr === 'te') langKey = 'te';
+                else if (langStr.includes('hindi') || langStr === 'hi') langKey = 'hi';
+                else if (langStr.includes('kannada') || langStr === 'kn') langKey = 'kn';
+                else if (langStr.includes('tamil') || langStr === 'ta') langKey = 'ta';
+                else if (langStr.includes('malayalam') || langStr === 'ml') langKey = 'ml';
+
+                let sumLabels = { 'te': 'సారాంశం', 'hi': 'सारांश', 'kn': 'ಸಾರಾಂಶ', 'ta': 'சுരുக்கம்', 'ml': 'സംഗ్రహం', 'en': 'SUMMARY' };
+                let bulLabels = { 'te': 'ముఖ్య అంశాలు', 'hi': 'मुख्य बिंदु', 'kn': 'ಪ್ರಮುಖ ముఖ్యాంಶలు', 'ta': 'முக்கிய அம்சங்கள்', 'ml': 'പ്രధాన വിവരాలు', 'en': 'KEY TAKEAWAYS' };
+
+                let sumTitle = sumLabels[langKey] || 'SUMMARY';
+                let bulTitle = bulLabels[langKey] || 'KEY TAKEAWAYS';
+
+                let bpHtml = (data.bullet_points || []).slice(0, 4).map(bp => `<li style="margin-bottom: 6px;">${bp}</li>`).join('');
+                
+                let sumBg = data.summary_bg || '#FFF4CC';
+                let bulBg = data.bullet_bg || '#00A79D';
+                let sumHeadingColor = '#B28600';
+                let sumTextColor = '#333333';
+                let bulHeadingColor = '#CCF2F0';
+                let bulTextColor = '#FFFFFF';
+                let listStyle = 'disc';
+                let sumBorder = '#FFE066';
+                let bulBorder = '#008C83';
+                
+                if (data.template_id === 'custom') {
+                    sumBg = '#F8E71C';
+                    bulBg = '#00B7C6';
+                    sumHeadingColor = '#000000';
+                    sumTextColor = '#000000';
+                    bulHeadingColor = '#FFFFFF';
+                    listStyle = '"✦  "';
+                    sumBorder = 'transparent';
+                    bulBorder = 'transparent';
+                }
+                
+                let summaryBoxHtml = '';
+                if (data.summary && String(data.summary).trim()) {
+                    summaryBoxHtml = `
+                        <div style="flex: 1; background-color: ${sumBg}; padding: 20px; border-radius: 12px; border: 1px solid ${sumBorder}; display: flex; flex-direction: column; justify-content: flex-start;">
+                            <div style="font-weight: 800; font-size: 15px; text-transform: uppercase; color: ${sumHeadingColor}; margin-bottom: 8px; letter-spacing: 0.5px;">${sumTitle}</div>
+                            <div style="font-size: 14px; line-height: 1.6; color: ${sumTextColor}; text-align: justify;">${data.summary}</div>
+                        </div>
+                    `;
+                }
+
+                let bulletBoxHtml = '';
+                if (data.bullet_points && data.bullet_points.length > 0) {
+                    bulletBoxHtml = `
+                        <div style="flex: 1; background-color: ${bulBg}; padding: 20px; border-radius: 12px; border: 1px solid ${bulBorder}; display: flex; flex-direction: column; justify-content: flex-start; color: ${bulTextColor};">
+                            <div style="font-weight: 800; font-size: 15px; text-transform: uppercase; color: ${bulHeadingColor}; margin-bottom: 8px; letter-spacing: 0.5px;">${bulTitle}</div>
+                            <ul style="margin: 0; padding-left: 20px; font-size: 14px; line-height: 1.6; list-style-type: ${listStyle};">
+                                ${bpHtml}
+                            </ul>
+                        </div>
+                    `;
+                }
+
+                containerEl.innerHTML = summaryBoxHtml + bulletBoxHtml;
+                canvas.appendChild(containerEl);
+                return containerEl.offsetHeight || 180;
+            }
+
+            async function executeLayout() {
+                const dims = await Promise.all(urls.map(url => getImageDimensions(url)));
+                aspectRatios = dims.map(d => (d.width && d.height) ? (d.width / d.height) : 1.0);
+                await waitReady();
+                
+                // Force headline to fit on a single line
+                const hl = document.querySelector('.headline');
+                if (hl) {
+                    hl.style.whiteSpace = 'normal';
+                    hl.style.wordBreak = 'break-word';
+                    hl.style.display = 'block';
+                    hl.style.width = '100%';
+                }
+
+                // Dynamic scaling factor S based on character count
+                let S = 1.0 - (totalChars - 1400) / 3000;
+                S = Math.max(0.75, Math.min(1.25, S));
+
+                const W_canvas = canvas.offsetWidth || 1060;
+                const N = resolveColumns(data.layout_columns, totalChars);
+                const W_col = (W_canvas - (N - 1) * 24) / N;
+                const canvasTop = canvas.getBoundingClientRect().top + window.scrollY;
+                const H_avail = Math.max(1200, TARGET_MAX_HEIGHT - canvasTop - 60);
+                
+                const imgHeightPx = Math.round(0.58 * W_canvas);
+                let S_img = S || 1.0;
+                const obstacles = getObstacles(W_canvas, S_img, imgHeightPx, H_avail);
+                
+                let maxObstacleY = 0;
+                // Only consider fixed top obstacles (at y=0) for the page height floor limit
+                obstacles.forEach(obs => {
+                    if (obs.y === 0 && obs.type !== 'summary_bullets') {
+                        maxObstacleY = Math.max(maxObstacleY, obs.y + obs.h);
+                    }
+                });
+                
+                // Available width for columns: N * W_col.
+                // But images block some of the columns. Let's compute the available area for text.
+                let blockedArea = 0;
+                obstacles.forEach(obs => {
+                    for (let c = 0; c < N; c++) {
+                        const L_c = c * (W_col + 24);
+                        const R_c = L_c + W_col;
+                        const xOverlapStart = Math.max(L_c, obs.x);
+                        const xOverlapEnd = Math.min(R_c, obs.x + obs.w);
+                        if (xOverlapStart < xOverlapEnd) {
+                            blockedArea += (xOverlapEnd - xOverlapStart) * obs.h;
+                        }
+                    }
+                });
+                
+                const estFontSize = Math.sqrt(Math.max(100000, N * W_col * H_avail - blockedArea) / (totalChars * 0.54));
+                const maxFontSize = (urls.length > 2 && totalChars < 2500) ? 23.0 : 21.0;
+                const conf = { fontSize: Math.min(maxFontSize, estFontSize), lineHeight: 1.28, paraMargin: 8, imgMaxPct: 0.58, padding: 32 };
+
+                // Step 1: Find best font size that fits 100% of text within H_avail
+                let targetFs = Math.min(maxFontSize, estFontSize);
+                let foundFit = false;
+                
+                for (let fs = targetFs; fs >= 11.0; fs -= 0.5) {
+                    conf.fontSize = fs;
+                    if (runLayoutPass(conf, S, H_avail, false)) {
+                        foundFit = true;
+                        targetFs = fs;
+                        break;
+                    }
+                }
+
+                const rawLayoutStr = String(data.image_layout || "default").toLowerCase().replace(/[^a-z]/g, "");
+                const isSingleLeft75Layout = (urls.length === 1) && (rawLayoutStr.includes('patterng') || rawLayoutStr.includes('left75') || rawLayoutStr.includes('pattern75') || rawLayoutStr.includes('75left') || rawLayoutStr.includes('75'));
+                let low = isSingleLeft75Layout ? Math.max(200, Math.round(totalChars * 0.42)) : Math.max(300, Math.round(maxObstacleY + 30));
+                let high = H_avail;
+                let H_best = high;
+
+                if (foundFit) {
+                    // Binary search for minimum height at targetFs
+                    conf.fontSize = targetFs;
+                    H_best = high;
+                    for (let step = 0; step < 10; step++) {
+                        const mid = Math.round((low + high) / 2);
+                        if (runLayoutPass(conf, S, mid, false)) {
+                            H_best = mid;
+                            high = mid - 1;
+                        } else {
+                            low = mid + 1;
+                        }
+                    }
+                } else {
+                    // Content is exceptionally long: fix fontSize at 11.0px and expand height until it fits
+                    conf.fontSize = 11.0;
+                    low = H_avail;
+                    high = H_avail + 6000;
+                    H_best = high;
+                    for (let step = 0; step < 12; step++) {
+                        const mid = Math.round((low + high) / 2);
+                        if (runLayoutPass(conf, S, mid, false)) {
+                            H_best = mid;
+                            high = mid - 1;
+                        } else {
+                            low = mid + 1;
+                        }
+                    }
+                }
+                
+                // Final render pass with H_best (plus 4px margin for safe line wrapping rounding variations)
+                runLayoutPass(conf, S, H_best + 4, true);
+
+                // Wait for all canvas images to finish downloading/rendering
+                const canvasImgs = Array.from(canvas.querySelectorAll('img'));
+                await Promise.all(canvasImgs.map(img => {
+                    if (img.complete && img.naturalWidth > 0) return Promise.resolve();
+                    return new Promise(resolve => {
+                        img.onload = resolve;
+                        img.onerror = resolve;
+                        setTimeout(resolve, 2500);
+                    });
+                }));
+                
+                let st = document.getElementById('nc-layout-style');
+                if (!st) { st = document.createElement('style'); st.id = 'nc-layout-style'; document.head.appendChild(st); }
+                st.innerHTML = `
+                    * { -webkit-font-smoothing: antialiased !important; }
+                    body { margin: 0 !important; padding: 0 !important; }
+                    .newspaper-container { height: auto !important; min-height: unset !important; padding-bottom: 0px !important; margin-bottom: 0px !important; }
+                `;
+                
+                // Precision shrink-wrap canvas exactly to the lowest content pixel
+                let rBoxBottoms = [];
+                document.querySelectorAll('.nc-text-region-box p, .nc-absolute-image, .nc-image-caption').forEach(el => {
+                    let rect = el.getBoundingClientRect();
+                    if (rect.height > 0 && rect.bottom > 0) {
+                        rBoxBottoms.push(rect.bottom);
+                    }
+                });
+                
+                let contentMaxY = rBoxBottoms.length > 0 ? Math.max(...rBoxBottoms) : 0;
+                console.log("[LAYOUT DEBUG] contentMaxY: " + contentMaxY);
+                if (contentMaxY > 0) {
+                    let canvasRect = canvas.getBoundingClientRect();
+                    let actualContentHeight = contentMaxY - canvasRect.top;
+                    
+                    actualContentHeight += 2;
+                    
+                    // CUSTOM TEMPLATE ENHANCEMENT: Thick border + RTI Footer
+                    const rawLayout = String(data.image_layout || "default").toLowerCase().replace(/[^a-z]/g, "");
+                    if (data.template_id === 'custom' && rawLayout.includes('patterng')) {
+                        const customBorderColor = data.border_color || '#F8E71C';
+                        
+                        // Apply thick border to the container
+                        st.innerHTML += `
+                            .newspaper-container { 
+                                border: 15px solid ${customBorderColor} !important; 
+                                padding-bottom: 15px !important;
+                            }
+                        `;
+                        
+                        // Build the RTI footer
+                        const footerEl = document.createElement('div');
+                        footerEl.className = 'rti-custom-footer';
+                        footerEl.style.position = 'relative';
+                        footerEl.style.marginTop = '15px';
+                        footerEl.style.width = '100%';
+                        footerEl.style.height = '60px';
+                        footerEl.style.backgroundColor = customBorderColor;
+                        footerEl.style.display = 'flex';
+                        footerEl.style.justifyContent = 'space-between';
+                        footerEl.style.alignItems = 'center';
+                        footerEl.style.padding = '0 30px';
+                        footerEl.style.boxSizing = 'border-box';
+                        footerEl.style.zIndex = '100';
+                        
+                        const pubNameText = data.publication_name || 'News Edition';
+                        let logoHtml = '';
+                        if (data.logo_url) {
+                            logoHtml = `<img src="${data.logo_url}" style="height: 40px; object-fit: contain;">`;
+                        } else {
+                            logoHtml = `<h2 style="margin:0; color:#111; font-family:'Playfair Display',serif; font-size: 30px; font-weight:900;">${pubNameText}</h2>`;
+                        }
+                        
+                        footerEl.innerHTML = `
+                            <div>${logoHtml}</div>
+                            <div style="color: #111; font-size: 14px; font-family: sans-serif; text-align: right; font-weight: bold;">
+                                ${pubNameText}<br>
+                                ${data.location || 'Local Edition'} (${data.publication_date || ''})
+                            </div>
+                        `;
+                        
+                        // Append directly to container below canvas
+                        container.appendChild(footerEl);
+                    }
+                    
+                    canvas.style.height = actualContentHeight + 'px';
+                    canvas.style.minHeight = actualContentHeight + 'px';
+                    canvas.style.maxHeight = actualContentHeight + 'px';
+                    canvas.setAttribute('data-computed-height', actualContentHeight);
+                }
+                
+                window.__LAYOUT_DONE__ = true;
+            }
+
+            setTimeout(() => { if (!window.__LAYOUT_DONE__) { console.warn("[LAYOUT TIMEOUT FORCED DONE]"); window.__LAYOUT_DONE__ = true; } }, 4000);
+            executeLayout().then(() => {
+                window.__LAYOUT_DONE__ = true;
+            }).catch(err => {
+                console.error("[LAYOUT FATAL ERROR]", err && err.stack ? err.stack : err);
+                window.__LAYOUT_DONE__ = true;
+            });
+        }
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', startCompositorLayout);
+        } else {
+            startCompositorLayout();
+        }
+        </script>
+        </body>
+</html>

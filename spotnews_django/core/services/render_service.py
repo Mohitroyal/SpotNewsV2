@@ -500,10 +500,12 @@ class RenderService:
             }}
             {custom_border_css}
             .article-content, .paragraph, .nc-text-region-box p, #compositor-canvas p {{
-                text-align: left !important;
-                text-justify: none !important;
-                letter-spacing: normal !important;
-                word-spacing: normal !important;
+                text-align: justify !important;
+                text-justify: inter-word !important;
+                text-align-last: left !important;
+                letter-spacing: -0.15px !important;
+                margin-bottom: 4px !important;
+                line-height: 1.22 !important;
             }}
         </style>
         """
@@ -873,7 +875,7 @@ class RenderService:
                     } else if (isDoublePatternB) {
                         let a0 = aspect0 || 1.0;
                         let a1 = (aspectRatios && aspectRatios.length > 1 && aspectRatios[1]) ? aspectRatios[1] : 1.0;
-                        let gap = 16;
+                        let gap = 10;
                         let availW = W_canvas - gap;
                         
                         // Exact uncropped height needed if both images scale by their natural aspect ratio
@@ -1112,7 +1114,7 @@ class RenderService:
                 // Calculate columns
                 let N = resolveColumns(data.layout_columns, totalChars);
                 
-                const G = 24; // Column gap in pixels
+                const G = 14; // Column gap in pixels
                 const W_col = (W_canvas - (N - 1) * G) / N;
                 
                 const H_canvas = H_layout;
@@ -1191,10 +1193,10 @@ class RenderService:
                 
                 let inflatedObstacles = obstacles.map(obs => {
                     return {
-                        x: obs.x - 8,
-                        y: obs.y - 8,
-                        w: obs.w + 16,
-                        h: obs.h + 16
+                        x: obs.x - 4,
+                        y: obs.y - 4,
+                        w: obs.w + 8,
+                        h: obs.h + 6
                     };
                 });
                 
@@ -1208,10 +1210,10 @@ class RenderService:
                     });
                     if (maxH > 0) {
                         inflatedObstacles.push({
-                            x: -12,
-                            y: -12,
-                            w: W_canvas + 24,
-                            h: maxH + 24
+                            x: -8,
+                            y: -8,
+                            w: W_canvas + 16,
+                            h: maxH + 8
                         });
                     }
                 }
@@ -1425,9 +1427,10 @@ class RenderService:
                     p.style.lineHeight = conf.lineHeight;
                     p.style.marginBottom = `${conf.paraMargin}px`;
                     p.style.marginTop = '0';
-                    p.style.textAlign = 'left';
-                    p.style.textJustify = 'none';
-                    p.style.letterSpacing = 'normal';
+                    p.style.textAlign = 'justify';
+                    p.style.textJustify = 'inter-word';
+                    p.style.textAlignLast = 'left';
+                    p.style.letterSpacing = '-0.15px';
                     p.style.wordSpacing = 'normal';
                     p.style.wordBreak = 'break-word';
                     p.style.overflowWrap = 'break-word';
@@ -1678,7 +1681,7 @@ class RenderService:
 
                 const W_canvas = canvas.offsetWidth || 1060;
                 const N = resolveColumns(data.layout_columns, totalChars);
-                const W_col = (W_canvas - (N - 1) * 24) / N;
+                const W_col = (W_canvas - (N - 1) * 14) / N;
                 const canvasTop = canvas.getBoundingClientRect().top + window.scrollY;
                 const H_avail = Math.max(1200, TARGET_MAX_HEIGHT - canvasTop - 60);
                 
@@ -1699,7 +1702,7 @@ class RenderService:
                 let blockedArea = 0;
                 obstacles.forEach(obs => {
                     for (let c = 0; c < N; c++) {
-                        const L_c = c * (W_col + 24);
+                        const L_c = c * (W_col + 14);
                         const R_c = L_c + W_col;
                         const xOverlapStart = Math.max(L_c, obs.x);
                         const xOverlapEnd = Math.min(R_c, obs.x + obs.w);
@@ -1710,8 +1713,8 @@ class RenderService:
                 });
                 
                 const estFontSize = Math.sqrt(Math.max(100000, N * W_col * H_avail - blockedArea) / (totalChars * 0.54));
-                const maxFontSize = (urls.length > 2 && totalChars < 2500) ? 23.0 : 21.0;
-                const conf = { fontSize: Math.min(maxFontSize, estFontSize), lineHeight: 1.28, paraMargin: 8, imgMaxPct: 0.58, padding: 32 };
+                const maxFontSize = (totalChars > 1400) ? 16.5 : (totalChars > 900 ? 17.5 : 19.0);
+                const conf = { fontSize: Math.min(maxFontSize, estFontSize), lineHeight: 1.22, paraMargin: 4, imgMaxPct: 0.58, padding: 32 };
 
                 // Step 1: Find best font size that fits 100% of text within H_avail
                 let targetFs = Math.min(maxFontSize, estFontSize);

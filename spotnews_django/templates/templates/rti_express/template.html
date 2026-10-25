@@ -62,15 +62,15 @@
         </div>
 
         <!-- ZONE 2: Metadata Zone -->
-        <div class="metadata-zone" style="position: relative; z-index: 2; width: 100%; height: auto; padding: 5px 0; display: flex; flex-direction: column; justify-content: center; align-items: center; box-sizing: border-box; {% if show_inner_borders %}border-bottom: 1px solid var(--border-color, #111111);{% endif %} margin: 0; font-size: 13px; font-weight: bold; text-transform: uppercase; letter-spacing: 1.2px; white-space: nowrap; background: var(--paper-color);">
+        <div class="metadata-zone" style="position: relative; z-index: 2; width: 100%; height: auto; padding: 3px 0; display: flex; flex-direction: column; justify-content: center; align-items: center; box-sizing: border-box; {% if show_inner_borders %}border-bottom: 1px solid var(--border-color, #111111);{% endif %} margin: 0; font-size: 12.5px; font-weight: bold; text-transform: uppercase; letter-spacing: 1px; white-space: nowrap; background: var(--paper-color);">
             <span>{{ publication_name }} - {{ publication_date }}</span>
             <span>WANTED REPORTERS: 7668886666</span>
         </div>
 
-        <!-- ZONE 3: Headline Zone (Height: Auto, Min-height: 100px) -->
-        <div class="headline-zone" style="position: relative; z-index: 2; min-height: 100px; height: auto; padding: 15px 0 10px 0; box-sizing: border-box; display: flex; flex-direction: column; justify-content: center; {% if show_inner_borders %}border-bottom: 1px solid var(--border-color, #111111);{% endif %} margin-bottom: 15px; width: 100%;">
-            <div class="headline-section" style="margin: 0; padding: 15px; background-color: {{ heading_bg if (heading_bg and heading_bg|lower not in ['#ffffff', '#fff', 'white']) else '#CC2222' }}; border: 2px solid {{ border_color if border_color else '#CC2222' }}; text-align: center; box-sizing: border-box;">
-                <h1 class="headline" style="font-size: 52px; font-weight: bold; margin: 0; line-height: 1.15; text-align: center; width: 100%; box-sizing: border-box; color: #FFFFFF;">{{ headline }}</h1>
+        <!-- ZONE 3: Headline Zone (Height: Auto, Min-height: unset) -->
+        <div class="headline-zone" style="position: relative; z-index: 2; min-height: unset; height: auto; padding: 6px 0 4px 0; box-sizing: border-box; display: flex; flex-direction: column; justify-content: center; {% if show_inner_borders %}border-bottom: 1px solid var(--border-color, #111111);{% endif %} margin-bottom: 8px; width: 100%;">
+            <div class="headline-section" style="margin: 0; padding: 8px 12px; background-color: {{ heading_bg if (heading_bg and heading_bg|lower not in ['#ffffff', '#fff', 'white']) else '#CC2222' }}; border: 2px solid {{ border_color if border_color else '#CC2222' }}; text-align: center; box-sizing: border-box;">
+                <h1 class="headline" style="font-size: 52px; font-weight: bold; margin: 0; line-height: 1.12; text-align: center; width: 100%; box-sizing: border-box; color: #FFFFFF;">{{ headline }}</h1>
             </div>
         </div>
 

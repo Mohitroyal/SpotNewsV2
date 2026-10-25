@@ -8,7 +8,7 @@
     --accent-color: #a30000;
     /* Bold Red */
     --border-color: #CFE8FF;
-    --column-gap: 26px;
+    --column-gap: 14px;
 }
 
 body {
@@ -16,7 +16,7 @@ body {
     color: var(--text-color);
     font-family: 'Lora', 'Noto Serif Telugu', 'Noto Serif Telugu', 'Noto Sans Telugu', 'Noto Serif Devanagari', 'Noto Sans Devanagari', 'Noto Serif Kannada', 'Noto Sans Kannada', 'Noto Serif Malayalam', 'Noto Sans Malayalam', 'Noto Serif Tamil', 'Noto Sans Tamil', 'Noto Serif Bengali', 'Noto Sans Bengali', 'Noto Serif Gujarati', 'Noto Sans Gujarati', 'Noto Serif Gurmukhi', 'Noto Sans Gurmukhi', 'Noto Serif Oriya', 'Noto Sans Oriya', 'Noto Serif Devanagari', 'Noto Sans Devanagari', 'Noto Serif Kannada', 'Noto Sans Kannada', 'Noto Serif Malayalam', 'Noto Sans Malayalam', 'Noto Serif Tamil', 'Noto Sans Tamil', 'Noto Serif Bengali', 'Noto Sans Bengali', 'Noto Serif Gujarati', 'Noto Sans Gujarati', 'Noto Serif Gurmukhi', 'Noto Sans Gurmukhi', 'Noto Serif Oriya', 'Noto Sans Oriya', serif;
     margin: 0;
-    padding: 30px;
+    padding: 15px;
     display: flex;
     justify-content: center;
     align-items: flex-start;
@@ -59,7 +59,7 @@ html[lang="ml"] .headline {
     background: var(--paper-color);
     border: 2px solid var(--border-color);
     box-shadow: 0 10px 40px rgba(0, 0, 0, 0.08);
-    padding: 40px 15px 15px 15px;
+    padding: 16px 14px 10px 14px;
     box-sizing: border-box;
     position: relative;
     display: flex;
@@ -70,7 +70,7 @@ html[lang="ml"] .headline {
 /* HEADER SECTION */
 .header-section {
     width: 100%;
-    margin-bottom: 12px;
+    margin-bottom: 6px;
     text-align: center;
 }
 
@@ -84,7 +84,7 @@ html[lang="ml"] .headline {
 
 .logo-container svg,
 .logo-container img {
-    max-height: 80px;
+    max-height: 72px;
     width: auto;
     max-width: 100%;
     display: block;
@@ -98,12 +98,12 @@ html[lang="ml"] .headline {
     align-items: center;
     border-top: 2px solid var(--border-color);
     border-bottom: 2px solid var(--border-color);
-    padding: 5px 10px;
-    font-size: 13.5px;
+    padding: 4px 10px;
+    font-size: 13px;
     font-weight: 700;
     text-transform: uppercase;
-    letter-spacing: 1.2px;
-    margin-top: 8px;
+    letter-spacing: 1.1px;
+    margin-top: 4px;
     color: #111111;
 }
 
@@ -114,15 +114,15 @@ html[lang="ml"] .headline {
 
 /* HEADLINE SECTION */
 .headline-section {
-    margin: 22px 0 14px 0;
+    margin: 6px 0 6px 0;
     text-align: center;
 }
 
 .headline {
     font-family: 'Merriweather', 'Noto Serif Telugu', 'Noto Serif Telugu', 'Noto Sans Telugu', 'Noto Serif Devanagari', 'Noto Sans Devanagari', 'Noto Serif Kannada', 'Noto Sans Kannada', 'Noto Serif Malayalam', 'Noto Sans Malayalam', 'Noto Serif Tamil', 'Noto Sans Tamil', 'Noto Serif Bengali', 'Noto Sans Bengali', 'Noto Serif Gujarati', 'Noto Sans Gujarati', 'Noto Serif Gurmukhi', 'Noto Sans Gurmukhi', 'Noto Serif Oriya', 'Noto Sans Oriya', 'Noto Serif Devanagari', 'Noto Sans Devanagari', 'Noto Serif Kannada', 'Noto Sans Kannada', 'Noto Serif Malayalam', 'Noto Sans Malayalam', 'Noto Serif Tamil', 'Noto Sans Tamil', 'Noto Serif Bengali', 'Noto Sans Bengali', 'Noto Serif Gujarati', 'Noto Sans Gujarati', 'Noto Serif Gurmukhi', 'Noto Sans Gurmukhi', 'Noto Serif Oriya', 'Noto Sans Oriya', serif;
-    font-size: 68px;
+    font-size: 64px;
     font-weight: bold;
-    line-height: 1.15;
+    line-height: 1.12;
     color: #111111;
     margin: 0;
     letter-spacing: -0.5px;
@@ -194,17 +194,18 @@ html[lang="ml"] .headline {
     ;
     column-gap: var(--column-gap);
     column-rule: 1px solid #dcdcd8;
-    text-align: left;
-    text-justify: none;
-    font-size: 15px;
-    line-height: 1.45;
+    text-align: justify;
+    text-justify: inter-word;
+    text-align-last: left;
+    font-size: 15.5px;
+    line-height: 1.22;
     color: #1a1a1a;
 }
 
 .paragraph {
     margin-top: 0;
-    margin-bottom: 8px;
-    text-indent: 20px;
+    margin-bottom: 4px;
+    text-indent: 16px;
 }
 
 .paragraph:first-of-type {
