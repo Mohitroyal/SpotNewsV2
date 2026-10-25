@@ -16,7 +16,7 @@ def get_firebase_app():
     if _firebase_app is not None:
         return _firebase_app
 
-    # Try locating firebase_service_account.json
+    # 1. Try locating firebase_service_account.json
     candidates = [
         getattr(settings, 'FIREBASE_CREDENTIALS_PATH', None),
         os.path.join(settings.BASE_DIR, 'firebase_service_account.json'),
@@ -37,12 +37,15 @@ def get_firebase_app():
         pass
 
     if cred_path:
-        cred = credentials.Certificate(cred_path)
-        _firebase_app = firebase_admin.initialize_app(cred)
-        logger.info("Firebase Admin initialized successfully using %s", cred_path)
-        return _firebase_app
+        try:
+            cred = credentials.Certificate(cred_path)
+            _firebase_app = firebase_admin.initialize_app(cred)
+            logger.info("Firebase Admin initialized successfully using %s", cred_path)
+            return _firebase_app
+        except Exception as e:
+            logger.warning("Failed initializing Firebase with file %s: %s", cred_path, e)
 
-    # Fallback to environment variable (useful on Render/Heroku)
+    # 2. Fallback to environment variable (useful on Render/Heroku)
     raw_json = os.getenv('FIREBASE_SERVICE_ACCOUNT_JSON')
     if raw_json:
         try:
@@ -55,7 +58,42 @@ def get_firebase_app():
         except Exception as e:
             logger.error("Failed to parse FIREBASE_SERVICE_ACCOUNT_JSON env var: %s", e)
 
-    raise FileNotFoundError("firebase_service_account.json could not be found and FIREBASE_SERVICE_ACCOUNT_JSON env var is not set.")
+    # 3. Fallback to Supabase Database (public.app_config table)
+    try:
+        import json
+        from django.db import connection
+        with connection.cursor() as cur:
+            cur.execute("SELECT config_value FROM public.app_config WHERE config_key = 'firebase_service_account' LIMIT 1;")
+            row = cur.fetchone()
+            if row and row[0]:
+                cred_dict = json.loads(row[0])
+                cred = credentials.Certificate(cred_dict)
+                _firebase_app = firebase_admin.initialize_app(cred)
+                logger.info("Firebase Admin initialized successfully from database public.app_config table")
+                return _firebase_app
+    except Exception as db_err:
+        logger.warning("Could not load Firebase credentials from database app_config: %s", db_err)
+
+    # 4. Fallback to psycopg2 direct query using DATABASE_URL
+    try:
+        import json
+        db_url = getattr(settings, 'DATABASE_URL', None) or os.getenv('DATABASE_URL')
+        if db_url:
+            conn = psycopg2.connect(db_url)
+            cur = conn.cursor()
+            cur.execute("SELECT config_value FROM public.app_config WHERE config_key = 'firebase_service_account' LIMIT 1;")
+            row = cur.fetchone()
+            conn.close()
+            if row and row[0]:
+                cred_dict = json.loads(row[0])
+                cred = credentials.Certificate(cred_dict)
+                _firebase_app = firebase_admin.initialize_app(cred)
+                logger.info("Firebase Admin initialized successfully from direct psycopg2 database connection")
+                return _firebase_app
+    except Exception as pg_err:
+        logger.error("Failed connecting to database for Firebase credentials: %s", pg_err)
+
+    raise FileNotFoundError("firebase_service_account.json could not be found, FIREBASE_SERVICE_ACCOUNT_JSON env var is not set, and database config is unavailable.")
 
 
 DEFAULT_APP_LOGO = "https://rffrqokpnqoycpozrjuc.supabase.co/storage/v1/object/public/newscraft-clippings/assets/app_logo.png"
@@ -183,13 +221,14 @@ def send_user_notification(
     channel_id: str = "reporter",
     extra_data: Optional[Dict[str, str]] = None,
     email: Optional[str] = None,
+    phone: Optional[str] = None,
 ) -> Dict[str, Any]:
     """
-    Send a push notification to all devices registered for a specific user or email.
+    Send a push notification to all devices registered for a specific user, email, or phone.
     """
-    tokens = _get_tokens_for_user(user_id=user_id, email=email)
+    tokens = _get_tokens_for_user(user_id=user_id, email=email, phone=phone)
     if not tokens:
-        return {"success": False, "error": f"No active device tokens found for user={user_id} email={email}"}
+        return {"success": False, "error": f"No active device tokens found for user={user_id} email={email} phone={phone}"}
 
     success_count = 0
     failures = []
@@ -216,9 +255,9 @@ def send_user_notification(
     }
 
 
-def _get_tokens_for_user(user_id: Optional[str] = None, email: Optional[str] = None) -> List[str]:
+def _get_tokens_for_user(user_id: Optional[str] = None, email: Optional[str] = None, phone: Optional[str] = None) -> List[str]:
     """
-    Fetch device tokens from PostgreSQL public.device_tokens by user_id or email
+    Fetch device tokens from PostgreSQL public.device_tokens by user_id, email, or phone
     """
     tokens = []
     if user_id:
@@ -273,6 +312,22 @@ def _get_tokens_for_user(user_id: Optional[str] = None, email: Optional[str] = N
                     tokens = [r[0] for r in rows if r[0]]
                 except Exception as e:
                     logger.error("Error fetching tokens for email %s: %s", clean_email, str(e))
+    if not tokens and phone:
+        clean_phone = "".join(filter(str.isdigit, str(phone)))[-10:]
+        if clean_phone:
+            try:
+                from django.db import connection
+                with connection.cursor() as cur:
+                    cur.execute("""
+                        SELECT dt.token 
+                        FROM public.device_tokens dt
+                        JOIN public.profiles p ON dt.user_id = p.id
+                        WHERE p.phone LIKE %s;
+                    """, (f"%{clean_phone}%",))
+                    rows = cur.fetchall()
+                    tokens = [r[0] for r in rows if r[0]]
+            except Exception as ph_err:
+                logger.warning("Error fetching tokens for phone %s: %s", clean_phone, ph_err)
 
     return tokens
 

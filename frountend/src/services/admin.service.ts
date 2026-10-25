@@ -338,32 +338,101 @@ export const approveClippingToFeed = async (
       if (updErr) throw updErr;
     }
 
-    // Trigger Push Notification to live feed subscribers
-    try {
-      const headline = details?.headline || 'Spot News 24x7 - తాజా వార్తలు';
-      const districtTag = details?.district ? `[${details.district}] ` : '';
-      api.post('/api/v1/notifications/send', {
-        topic: 'all',
-        title: `🚨 ${districtTag}${headline.substring(0, 50)}`,
-        body: `కొత్త వార్తా కథనం లైవ్ ఫీడ్‌లో ప్రచురించబడింది. ఇప్పుడే చదవండి!`,
-        image_url: details?.png_url || 'https://rffrqokpnqoycpozrjuc.supabase.co/storage/v1/object/public/newscraft-clippings/assets/app_logo.png',
-        url: `/feed`,
-        channel_id: 'news'
-      }).catch((e) => console.warn('[Push] Published clipping alert warning:', e));
-    } catch { /* non-critical */ }
+    let userId = details?.user_id;
+    let userEmail = details?.user_email;
+    let headline = details?.headline;
+    let district = details?.district;
+    let pngUrl = details?.png_url;
 
-    // Send in-app notification to the reporter
-    if (details?.user_id) {
+    // Fetch clipping metadata from database if not passed
+    if (!userId || !headline) {
+      try {
+        const { data: clipData } = await supabase
+          .from('clippings')
+          .select('user_id, headline, district, png_url')
+          .eq('id', clippingId)
+          .maybeSingle();
+        if (clipData) {
+          userId = userId || clipData.user_id;
+          headline = headline || clipData.headline;
+          district = district || clipData.district;
+          pngUrl = pngUrl || clipData.png_url;
+        }
+      } catch (err) {
+        console.warn('[AdminService] Could not enrich clipping details for push:', err);
+      }
+    }
+
+    const apiUrl = (import.meta.env.VITE_API_URL || import.meta.env.VITE_DJANGO_API_URL || 'https://spotnewsv2.onrender.com').replace(/\/+$/, '');
+    const defaultLogo = 'https://rffrqokpnqoycpozrjuc.supabase.co/storage/v1/object/public/newscraft-clippings/assets/app_logo.png';
+    const displayHeadline = (headline || 'Spot News 24x7 - తాజా వార్తలు').trim();
+
+    // 1. Direct Push Notification & In-App notification to the Reporter
+    if (userId) {
       try {
         await supabase.from('notifications').insert({
-          user_id: details.user_id,
-          user_email: details.user_email || '',
+          user_id: userId,
+          user_email: userEmail || '',
           title: '🎉 Clipping Approved & Live on Feed!',
-          message: `Your clipping "${(details.headline || '').substring(0, 55)}" has been approved by the District Admin and is now live on the feed.`,
+          message: `Your clipping "${displayHeadline.substring(0, 55)}" has been approved by the District Admin and is now live on the feed.`,
           notification_type: 'clipping_approved'
         });
       } catch { /* non-critical */ }
+
+      try {
+        const { data: userTokens } = await supabase
+          .from('device_tokens')
+          .select('token')
+          .eq('user_id', userId);
+
+        const reporterPushPayload = {
+          user_id: userId,
+          email: userEmail || undefined,
+          title: '🎉 మీ వార్త ఆమోదించబడింది! (Clipping Approved)',
+          body: `అభినందనలు! మీరు సమర్పించిన "${displayHeadline.substring(0, 50)}" కథనం అడ్మిన్ ద్వారా ఆమోదించబడింది మరియు లైవ్ ఫీడ్‌లో ప్రచురించబడింది.`,
+          image_url: pngUrl || defaultLogo,
+          url: `/n/${clippingId}`,
+          channel_id: 'reporter',
+        };
+
+        if (userTokens && userTokens.length > 0) {
+          for (const ut of userTokens) {
+            fetch(`${apiUrl}/api/v1/notifications/send`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ ...reporterPushPayload, token: ut.token }),
+            }).catch((err) => console.warn('[Push] Reporter direct token push error:', err));
+          }
+        } else {
+          fetch(`${apiUrl}/api/v1/notifications/send`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(reporterPushPayload),
+          }).catch((err) => console.warn('[Push] Reporter user_id push error:', err));
+        }
+      } catch (repPushErr) {
+        console.warn('[Push] Failed to dispatch reporter push notification:', repPushErr);
+      }
     }
+
+    // 2. Broadcast Push Notification to Readers / Live Feed Subscribers
+    try {
+      const districtTag = district ? `[${district}] ` : '';
+      const subscriberPayload = {
+        topic: 'all',
+        title: `🚨 ${districtTag}${displayHeadline.substring(0, 50)}`,
+        body: 'కొత్త వార్తా కథనం లైవ్ ఫీడ్‌లో ప్రచురించబడింది. ఇప్పుడే చదవండి!',
+        image_url: pngUrl || defaultLogo,
+        url: `/n/${clippingId}`,
+        channel_id: 'news',
+      };
+
+      fetch(`${apiUrl}/api/v1/notifications/send`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(subscriberPayload),
+      }).catch((e) => console.warn('[Push] Published clipping alert warning:', e));
+    } catch { /* non-critical */ }
 
     return { success: true };
   } catch (err: any) {
@@ -392,17 +461,73 @@ export const rejectClippingSubmission = async (
       if (updErr) throw updErr;
     }
 
-    // Send rejection notification to the reporter
-    if (details?.user_id) {
+    let userId = details?.user_id;
+    let userEmail = details?.user_email;
+    let headline = details?.headline;
+
+    if (!userId || !headline) {
+      try {
+        const { data: clipData } = await supabase
+          .from('clippings')
+          .select('user_id, headline')
+          .eq('id', clippingId)
+          .maybeSingle();
+        if (clipData) {
+          userId = userId || clipData.user_id;
+          headline = headline || clipData.headline;
+        }
+      } catch (err) {
+        console.warn('[AdminService] Could not enrich clipping for rejection push:', err);
+      }
+    }
+
+    // Send in-app notification to the reporter
+    if (userId) {
       try {
         await supabase.from('notifications').insert({
-          user_id: details.user_id,
-          user_email: details.user_email || '',
+          user_id: userId,
+          user_email: userEmail || '',
           title: '❌ Clipping Rejected by District Admin',
-          message: details?.reason || `Your clipping "${(details.headline || '').substring(0, 55)}" was not approved for feed publishing.`,
+          message: details?.reason || `Your clipping "${(headline || '').substring(0, 55)}" was not approved for feed publishing.`,
           notification_type: 'clipping_rejected'
         });
       } catch { /* non-critical */ }
+
+      // Send push notification to the reporter
+      try {
+        const apiUrl = (import.meta.env.VITE_API_URL || import.meta.env.VITE_DJANGO_API_URL || 'https://spotnewsv2.onrender.com').replace(/\/+$/, '');
+        const { data: userTokens } = await supabase
+          .from('device_tokens')
+          .select('token')
+          .eq('user_id', userId);
+
+        const rejectPayload = {
+          user_id: userId,
+          email: userEmail || undefined,
+          title: '❌ వార్తా కథనం తిరస్కరించబడింది',
+          body: details?.reason || `మీరు సమర్పించిన "${(headline || '').substring(0, 50)}" కథనం ప్రచురణకు ఆమోదించబడలేదు.`,
+          url: '/history',
+          channel_id: 'reporter',
+        };
+
+        if (userTokens && userTokens.length > 0) {
+          for (const ut of userTokens) {
+            fetch(`${apiUrl}/api/v1/notifications/send`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ ...rejectPayload, token: ut.token }),
+            }).catch((err) => console.warn('[Push] Reject direct token push error:', err));
+          }
+        } else {
+          fetch(`${apiUrl}/api/v1/notifications/send`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(rejectPayload),
+          }).catch((err) => console.warn('[Push] Reject user_id push error:', err));
+        }
+      } catch (repPushErr) {
+        console.warn('[Push] Failed to dispatch reject push notification:', repPushErr);
+      }
     }
 
     return { success: true };

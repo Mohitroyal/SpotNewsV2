@@ -4,7 +4,7 @@ import { supabase } from "@/lib/supabase";
 
 export const API_BASE_URL = import.meta.env.VITE_API_URL
   ? `${import.meta.env.VITE_API_URL}`
-  : "https://news-backend-sjw6.onrender.com";
+  : "https://spotnewsv2.onrender.com";
 
 /**
  * Axios instance.

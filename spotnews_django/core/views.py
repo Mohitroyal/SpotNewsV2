@@ -163,13 +163,13 @@ def send_notification_view(request):
     channel_id = body_data.get("channel_id", "news")
     extra_data = body_data.get("data")
 
-    from core.services.notification_service import (
-        send_topic_notification,
-        send_token_notification,
-        send_user_notification,
-    )
-
     try:
+        from core.services.notification_service import (
+            send_topic_notification,
+            send_token_notification,
+            send_user_notification,
+        )
+
         if token:
             result = send_token_notification(
                 token=token,
@@ -207,7 +207,9 @@ def send_notification_view(request):
         status_code = 200 if result.get("success") else 500
         return JsonResponse(result, status=status_code)
     except Exception as e:
-        return JsonResponse({"error": str(e)}, status=500)
+        import traceback
+        logger.error("Exception in send_notification_view: %s\n%s", str(e), traceback.format_exc())
+        return JsonResponse({"error": str(e), "traceback": traceback.format_exc()}, status=500)
 
 @csrf_exempt
 def send_approval_sms_view(request):
