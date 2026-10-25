@@ -208,6 +208,64 @@ def send_notification_view(request):
         return JsonResponse({"error": str(e)}, status=500)
 
 @csrf_exempt
+def send_approval_sms_view(request):
+    if request.method != "POST":
+        return JsonResponse({"error": "Method not allowed. Use POST."}, status=405)
+    try:
+        body_data = json.loads(request.body.decode("utf-8")) if request.body else {}
+        phone = body_data.get("phone", "").strip()
+        name = body_data.get("name", "Reporter").strip()
+        message = body_data.get("message", f"Spot News 24x7: Congratulations {name}! Your reporter application has been APPROVED. Open Spot News app and set up your Press ID Card to complete login.").strip()
+
+        clean_digits = "".join(filter(str.isdigit, str(phone)))
+        if len(clean_digits) == 10:
+            clean_digits = "91" + clean_digits
+
+        if not clean_digits or len(clean_digits) != 12:
+            return JsonResponse({"error": "Invalid phone number", "received": phone}, status=400)
+
+        sms_result = {"phone": clean_digits, "name": name}
+        if settings.MSG91_AUTHKEY:
+            try:
+                import httpx
+                headers = {
+                    "authkey": settings.MSG91_AUTHKEY,
+                    "Content-Type": "application/json",
+                    "accept": "application/json"
+                }
+                template_id = getattr(settings, 'MSG91_APPROVAL_TEMPLATE_ID', '') or settings.MSG91_TEMPLATE_ID
+                flow_payload = {
+                    "flow_id": template_id,
+                    "sender": settings.MSG91_SENDER_ID,
+                    "short_url": "0",
+                    "recipients": [
+                        {
+                            "mobiles": clean_digits,
+                            "name": name,
+                            settings.MSG91_OTP_VARIABLE: "APPROVED"
+                        }
+                    ]
+                }
+                with httpx.Client(timeout=10.0) as client:
+                    resp = client.post("https://api.msg91.com/api/v5/flow/", json=flow_payload, headers=headers)
+                    sms_result["status"] = resp.status_code
+                    sms_result["body"] = resp.text
+                    sms_result["success"] = resp.status_code == 200
+            except Exception as msgErr:
+                logger.warning(f"[MSG91] Error sending approval SMS: {msgErr}")
+                sms_result["error"] = str(msgErr)
+                sms_result["success"] = False
+        else:
+            logger.info(f"[MSG91-MOCK] Would send approval SMS to {clean_digits}: {message}")
+            sms_result["mock"] = True
+            sms_result["success"] = True
+
+        return JsonResponse({"success": True, "message": "Approval SMS processed", "result": sms_result})
+    except Exception as e:
+        logger.error(f"Approval SMS error: {str(e)}")
+        return JsonResponse({"error": str(e)}, status=500)
+
+@csrf_exempt
 def device_tokens_stats_view(request):
     try:
         with connection.cursor() as cursor:

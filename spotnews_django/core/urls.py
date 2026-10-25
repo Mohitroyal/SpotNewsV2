@@ -1,7 +1,8 @@
 from django.urls import path
 from .views import (
     health_check, health_msg91, admin_stats, admin_auth_users,
-    send_notification_view, device_tokens_stats_view, story_share_view
+    send_notification_view, device_tokens_stats_view, story_share_view,
+    send_approval_sms_view
 )
 from .admin_extras import admin_generations, admin_user_role, admin_user_plan, admin_user_ban, admin_user_delete, admin_logos
 
@@ -54,6 +55,8 @@ urlpatterns = [
     path('v1/reporter/payment/status/', check_payment_status),
     path('v1/reporter/payment/webhook', razorpay_webhook, name='razorpay_webhook'),
     path('v1/reporter/payment/webhook/', razorpay_webhook),
+    path('v1/reporter/send-approval-sms', send_approval_sms_view, name='send_approval_sms'),
+    path('v1/reporter/send-approval-sms/', send_approval_sms_view),
 
     # Daily Newspaper PDF Generator Endpoints
     path('v1/admin/daily-newspaper/clippings', get_eligible_clippings, name='daily_newspaper_clippings'),
