@@ -194,7 +194,8 @@ html[lang="ml"] .headline {
     ;
     column-gap: var(--column-gap);
     column-rule: 1px solid #dcdcd8;
-    text-align: justify;
+    text-align: left;
+    text-justify: none;
     font-size: 15px;
     line-height: 1.45;
     color: #1a1a1a;

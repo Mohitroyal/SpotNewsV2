@@ -499,8 +499,11 @@ class RenderService:
                 text-shadow: 0 1px 0 rgba(0,0,0,0.08);
             }}
             {custom_border_css}
-            .article-content, .paragraph {{
+            .article-content, .paragraph, .nc-text-region-box p, #compositor-canvas p {{
                 text-align: left !important;
+                text-justify: none !important;
+                letter-spacing: normal !important;
+                word-spacing: normal !important;
             }}
         </style>
         """
@@ -1425,7 +1428,10 @@ class RenderService:
                     p.style.lineHeight = conf.lineHeight;
                     p.style.marginBottom = `${conf.paraMargin}px`;
                     p.style.marginTop = '0';
-                    p.style.textAlign = 'justify';
+                    p.style.textAlign = 'left';
+                    p.style.textJustify = 'none';
+                    p.style.letterSpacing = 'normal';
+                    p.style.wordSpacing = 'normal';
                     p.style.wordBreak = 'break-word';
                     p.style.overflowWrap = 'break-word';
                     activeRegion.rBox.appendChild(p);
@@ -1633,7 +1639,7 @@ class RenderService:
                     summaryBoxHtml = `
                         <div style="flex: 1; background-color: ${sumBg}; padding: 20px; border-radius: 12px; border: 1px solid ${sumBorder}; display: flex; flex-direction: column; justify-content: flex-start;">
                             <div style="font-weight: 800; font-size: 15px; text-transform: uppercase; color: ${sumHeadingColor}; margin-bottom: 8px; letter-spacing: 0.5px;">${sumTitle}</div>
-                            <div style="font-size: 14px; line-height: 1.6; color: ${sumTextColor}; text-align: justify;">${data.summary}</div>
+                            <div style="font-size: 14px; line-height: 1.6; color: ${sumTextColor}; text-align: left; text-justify: none;">${data.summary}</div>
                         </div>
                     `;
                 }
