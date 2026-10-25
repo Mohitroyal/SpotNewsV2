@@ -8,6 +8,15 @@ if (typeof window !== "undefined" && window.localStorage) {
   try {
     localStorage.removeItem("spotnews_last_reporter_name");
     localStorage.removeItem("spotnews_last_reporter_photo");
+    if (localStorage.getItem("spotnews_active_reporter_name") === "వార్తా పాఠకులు") {
+      localStorage.setItem("spotnews_active_reporter_name", "Guest Reader");
+    }
+    if (localStorage.getItem("spotnews_reader_name") === "వార్తా పాఠకులు") {
+      localStorage.setItem("spotnews_reader_name", "Guest Reader");
+    }
+    if (localStorage.getItem("spotnews_reporter_name_guest@spotnews.local") === "వార్తా పాఠకులు") {
+      localStorage.setItem("spotnews_reporter_name_guest@spotnews.local", "Guest Reader");
+    }
   } catch (e) {
     // ignore
   }
@@ -20,11 +29,11 @@ export const getReporterName = (email?: string): string => {
       const cleanEmail = email.toLowerCase().trim();
       if (cleanEmail) {
         const name = localStorage.getItem(`spotnews_reporter_name_${cleanEmail}`);
-        if (name) return name;
+        if (name) return name === "వార్తా పాఠకులు" ? "Guest Reader" : name;
       }
     }
     const activeName = localStorage.getItem('spotnews_active_reporter_name');
-    if (activeName) return activeName;
+    if (activeName) return activeName === "వార్తా పాఠకులు" ? "Guest Reader" : activeName;
   } catch (e) {
     console.warn("[NameStore] Error reading reporter name:", e);
   }
@@ -167,6 +176,8 @@ interface AuthStore {
   setDistrict: (district: string) => void;
   userState: string;
   setUserState: (state: string) => void;
+  mandal?: string;
+  setMandal?: (mandal: string) => void;
 }
 
 export const useAuthStore = create<AuthStore>()(
@@ -187,7 +198,8 @@ export const useAuthStore = create<AuthStore>()(
           user?.firstName ||
           "";
 
-        const existingName = accountName || storedName || "";
+        const rawExisting = accountName || storedName || "";
+        const existingName = rawExisting === "వార్తా పాఠకులు" ? "Guest Reader" : rawExisting;
 
         const accountPhoto =
           user?.avatarUrl ||
@@ -212,15 +224,18 @@ export const useAuthStore = create<AuthStore>()(
           user_metadata: updatedMetadata,
           role:
             (user as any)?.email?.toLowerCase() === 'mohitroyal116@gmail.com' || (user as any)?.email?.toLowerCase() === 'mohithroyal116@gmail.com' ? 'reporter' :
-            (user as any)?.role ||
-            (user as any)?.user_metadata?.role ||
-            (user as any)?.app_metadata?.role ||
-            (isSuperAdminUser(user) ? 'admin' : 'user'),
+            (isSuperAdminUser(user) ? 'superadmin' :
+              ((user as any)?.role ||
+              (user as any)?.user_metadata?.role ||
+              (user as any)?.app_metadata?.role ||
+              'user')),
           plan:
-            user?.plan ||
+            isSuperAdminUser(user) ? 'pro' :
+            (user?.plan ||
             (user as any)?.subscription_plan ||
+            ((user as any)?.role === 'superadmin' ? 'superadmin' : undefined) ||
             ((user as any)?.role === 'admin' ? 'admin' : undefined) ||
-            (isSuperAdminUser(user) ? 'admin' : 'free'),
+            'free'),
         } as any;
 
         if (existingPhoto && email) {
@@ -243,7 +258,7 @@ export const useAuthStore = create<AuthStore>()(
           if (email === 'mohitroyal116@gmail.com' || email === 'mohithroyal116@gmail.com') {
             updatedUser.role = 'reporter';
           } else if (isSuperAdminUser(updatedUser)) {
-            updatedUser.role = 'admin';
+            updatedUser.role = 'superadmin';
           }
 
           const newName =
@@ -273,10 +288,12 @@ export const useAuthStore = create<AuthStore>()(
         }),
       otpState: null,
       setOtpState: (otpState) => set({ otpState }),
-      district: 'Hyderabad',
+      district: 'All',
       setDistrict: (district) => set({ district }),
-      userState: 'Telangana',
+      userState: 'All',
       setUserState: (userState) => set({ userState }),
+      mandal: 'All mandals',
+      setMandal: (mandal) => set({ mandal }),
     }),
     { name: "newscraft-auth" }
   )
@@ -399,14 +416,8 @@ export const useUIStore = create<UIStore>()(
 // ─── Admin RBAC Helper ────────────────────────────────────────────────────────
 export const SUPER_ADMIN_EMAILS = [
   'mohithroyal16450@gmail.com',
-  'baba.journilist@gmail.com',
   'baba.journlist@gmail.com',
-  'mahammadkousar2@gmail.com',
-];
-
-export const DISTRICT_ADMIN_EMAILS = [
-  'mpokkala@gitam.in',
-  'mpokkala@gmail.com',
+  'baba.journilist@gmail.com',
 ];
 
 export const SUPER_ADMIN_PHONES = [
@@ -418,31 +429,13 @@ export const SUPER_ADMIN_EMAIL = 'mohithroyal16450@gmail.com';
 
 /**
  * Returns true if the user is a superadmin:
- * - Emails: in SUPER_ADMIN_EMAILS
+ * - Emails: mohithroyal16450@gmail.com or baba.journlist@gmail.com / baba.journilist@gmail.com
  * - Phones: 9346843889 or 7668886666
- * - Role: 'superadmin'
- * Note: mpokkala@gitam.in is strictly district admin, not superadmin.
  */
 export const isSuperAdminUser = (userOrEmail?: any): boolean => {
   if (!userOrEmail) return false;
 
-  const email = (
-    typeof userOrEmail === 'string'
-      ? userOrEmail
-      : userOrEmail?.email || userOrEmail?.user_metadata?.email || ''
-  ).trim().toLowerCase();
-
-  // mpokkala@gitam.in is strictly District Admin
-  if (email === 'mpokkala@gitam.in') {
-    return false;
-  }
-
-  // 1. Check superadmin emails list
-  if (email && SUPER_ADMIN_EMAILS.some((e) => e.toLowerCase() === email)) {
-    return true;
-  }
-
-  // 2. Check role property if object
+  // Check role property if object
   if (typeof userOrEmail === 'object') {
     const role = (
       userOrEmail.role ||
@@ -455,7 +448,7 @@ export const isSuperAdminUser = (userOrEmail?: any): boolean => {
     }
   }
 
-  // 3. Check phone number
+  // Check phone number
   const phone = (
     typeof userOrEmail === 'string'
       ? userOrEmail
@@ -466,11 +459,17 @@ export const isSuperAdminUser = (userOrEmail?: any): boolean => {
     return true;
   }
 
+  const email = (
+    typeof userOrEmail === 'string'
+      ? userOrEmail
+      : userOrEmail?.email || userOrEmail?.user_metadata?.email || ''
+  ).trim().toLowerCase();
+
   if (email && SUPER_ADMIN_PHONES.some((p) => email.includes(p))) {
     return true;
   }
 
-  return false;
+  return SUPER_ADMIN_EMAILS.some((e) => e.toLowerCase() === email);
 };
 
 /**
@@ -491,7 +490,6 @@ export const isAdminUser = (userOrEmail?: any): boolean => {
 
   const adminEmails = Array.from(new Set([
     ...SUPER_ADMIN_EMAILS.map((e) => e.toLowerCase()),
-    ...DISTRICT_ADMIN_EMAILS.map((e) => e.toLowerCase()),
     ...envAdminEmails,
   ]));
 

@@ -38,20 +38,12 @@ export const LOCAL_LOGOS_KEY = 'spotnews_admin_publication_logos';
 
 export const DEFAULT_PUBLICATION_LOGOS: PublicationLogo[] = [
   {
-    id: 'pub_spot_news_24x7',
-    name: 'Spot News 24x7',
-    logo_url: recoveredLogo,
-    publication_code: 'spot_news_24x7',
-    is_active: true,
-    created_at: '2026-01-01T00:00:00.000Z',
-  },
-  {
     id: 'pub_rti_express',
     name: 'RTI Express',
     logo_url: rtiExpressLogo,
     publication_code: 'rti_express',
     is_active: true,
-    created_at: '2026-01-02T00:00:00.000Z',
+    created_at: '2026-01-01T00:00:00.000Z',
   },
   {
     id: 'pub_bharath_reporter',
@@ -59,13 +51,21 @@ export const DEFAULT_PUBLICATION_LOGOS: PublicationLogo[] = [
     logo_url: rtiExpressLogo,
     publication_code: 'bharath_reporter',
     is_active: true,
-    created_at: '2026-01-03T00:00:00.000Z',
+    created_at: '2026-01-02T00:00:00.000Z',
   },
   {
     id: 'pub_national_news',
-    name: 'National News 24x7',
+    name: 'National News',
     logo_url: recoveredLogo,
     publication_code: 'national_news',
+    is_active: true,
+    created_at: '2026-01-03T00:00:00.000Z',
+  },
+  {
+    id: 'pub_the_extra_news',
+    name: 'The Extra News',
+    logo_url: recoveredLogo,
+    publication_code: 'the_extra_news',
     is_active: true,
     created_at: '2026-01-04T00:00:00.000Z',
   },
@@ -139,7 +139,7 @@ export const getAdminStats = async (fromDate?: string, toDate?: string): Promise
 
   // 1. Try Backend API first for full database accurate stats
   try {
-    const res = await api.get('/api/v1/admin/stats', { params });
+    const res = await api.get('/api/v1/admin/stats', { params, timeout: 3500 });
     if (res.data && typeof res.data.totalUsers === 'number' && res.data.totalUsers >= 0) {
       const logos = await getPublicationLogos();
       return {
@@ -162,7 +162,7 @@ export const getAdminStats = async (fromDate?: string, toDate?: string): Promise
   try {
     const { data, error } = await supabase.rpc('get_admin_stats');
     const fallbackLogos = await getPublicationLogos();
-    
+
     if (data && !error) {
       return {
         totalUsers: data.totalUsers ?? 0,
@@ -177,7 +177,7 @@ export const getAdminStats = async (fromDate?: string, toDate?: string): Promise
         debug_info: 'Supabase RPC Fallback (Bypassed RLS)'
       };
     }
-    
+
     // If RPC is missing, return 0s as absolute fallback
     return {
       totalUsers: 0,
@@ -224,21 +224,14 @@ export const getAdminClippings = async (options?: {
   if (options?.toDate) params.to_date = options.toDate;
   if (options?.userId) params.user_id = options.userId;
   if (options?.district && options.district !== 'all') params.district = options.district;
-  if (options?.status && options.status !== 'all') params.status = options.status;
 
   // 1. Try Backend API first
   try {
-    const res = await api.get('/api/v1/admin/generations', { params });
+    const res = await api.get('/api/v1/admin/generations', { params, timeout: 3500 });
     if (res.data && Array.isArray(res.data.results)) {
       return {
         total: res.data.total ?? res.data.results.length,
-        results: res.data.results.map((c: any) => ({
-          ...c,
-          district: c.district || '',
-          state: c.state || '',
-          is_posted: c.is_posted ?? false,
-          status: c.status || 'completed',
-        })),
+        results: res.data.results,
       };
     }
   } catch (err) {
@@ -264,10 +257,7 @@ export const getAdminClippings = async (options?: {
       query = query.eq('user_id', options.userId);
     }
     if (options?.district && options.district !== 'all') {
-      query = query.ilike('district', options.district);
-    }
-    if (options?.status && options.status !== 'all') {
-      query = query.eq('status', options.status);
+      query = query.eq('district', options.district);
     }
 
     const from = (page - 1) * pageSize;
@@ -423,7 +413,7 @@ export const rejectClippingSubmission = async (
 };
 
 // ─── Users ────────────────────────────────────────────────────────────────────
-export { getAdminUsers } from './admin-users.service';
+export { getAdminUsers, getCachedAdminUsers } from './admin-users.service';
 
 // ─── Edit User Role / Plan ────────────────────────────────────────────────────
 export const updateUserRole = async (
@@ -433,7 +423,7 @@ export const updateUserRole = async (
   plan?: string,
   district?: string
 ): Promise<{ success: boolean; error?: string }> => {
-  const targetPlan = plan || (role === 'superadmin' ? 'superadmin' : (role === 'admin' ? 'admin' : (role === 'reporter' ? 'reporter' : 'free')));
+  const targetPlan = plan || (role === 'superadmin' ? 'pro' : (role === 'admin' ? 'pro' : (role === 'reporter' ? 'reporter' : 'free')));
 
   // 1. Primary: Use Backend API (runs with service_role key, safely bypassing RLS)
   try {
@@ -462,10 +452,6 @@ export const updateUserRole = async (
     }
   } catch (backendErr: any) {
     console.warn('[AdminService] Backend role update error:', backendErr?.response?.data || backendErr?.message);
-    const detail = backendErr?.response?.data?.detail;
-    if (detail) {
-      return { success: false, error: detail };
-    }
   }
 
   // 2. Fallback: direct Supabase upsert
@@ -594,56 +580,75 @@ const enrichLogoWithAsset = (logo: any): PublicationLogo => {
 
 // ─── Publication Logos ────────────────────────────────────────────────────────
 export const getPublicationLogos = async (): Promise<PublicationLogo[]> => {
+  const getDeletedIds = (): Set<string> => {
+    try {
+      const raw = localStorage.getItem('spotnews_admin_deleted_logos');
+      return new Set(raw ? JSON.parse(raw) : []);
+    } catch {
+      return new Set();
+    }
+  };
+
+  const getLocalLogos = (): PublicationLogo[] => {
+    try {
+      const raw = localStorage.getItem(LOCAL_LOGOS_KEY);
+      return raw ? JSON.parse(raw) : [];
+    } catch {
+      return [];
+    }
+  };
+
+  const deletedIds = getDeletedIds();
+  let baseLogos: PublicationLogo[] = [];
+
   // 1. Try Backend Admin API first (reliable, bypasses RLS, auto-seeds)
   try {
-    const res = await api.get('/api/v1/admin/logos');
+    const res = await api.get('/api/v1/admin/logos', { timeout: 3500 });
     if (res.data && Array.isArray(res.data) && res.data.length > 0) {
-      const enriched = res.data.map(enrichLogoWithAsset);
-      try {
-        localStorage.setItem(LOCAL_LOGOS_KEY, JSON.stringify(enriched));
-      } catch { /* silent */ }
-      return enriched;
+      baseLogos = res.data.map(enrichLogoWithAsset);
     }
   } catch (err) {
     console.warn('[AdminService] Backend /admin/logos unavailable, trying Supabase / local:', err);
   }
 
   // 2. Try Supabase publication_logos table
-  try {
-    const { data, error } = await supabase
-      .from('publication_logos')
-      .select('*')
-      .order('created_at', { ascending: true });
-    if (!error && Array.isArray(data) && data.length > 0) {
-      return data.map(enrichLogoWithAsset);
-    }
-  } catch {
-    /* fallback to local */
-  }
-
-  // 3. Try localStorage custom logos
-  try {
-    if (typeof window !== 'undefined' && window.localStorage) {
-      const saved = localStorage.getItem(LOCAL_LOGOS_KEY);
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          return parsed.map(enrichLogoWithAsset);
-        }
+  if (baseLogos.length === 0) {
+    try {
+      const { data, error } = await supabase
+        .from('publication_logos')
+        .select('*')
+        .order('created_at', { ascending: true });
+      if (!error && Array.isArray(data) && data.length > 0) {
+        baseLogos = data.map(enrichLogoWithAsset);
       }
+    } catch {
+      /* fallback to local */
     }
-  } catch {
-    /* parse error */
   }
 
-  // 4. Fallback to default publication brand logos
-  return DEFAULT_PUBLICATION_LOGOS;
+  // 3. Merge: DEFAULT_PUBLICATION_LOGOS + remote baseLogos + localStorage localLogos
+  const localLogos = getLocalLogos().map(enrichLogoWithAsset);
+  const mapByCode = new Map<string, PublicationLogo>();
+
+  DEFAULT_PUBLICATION_LOGOS.forEach((l) => mapByCode.set(l.publication_code, l));
+  baseLogos.forEach((l) => mapByCode.set(l.publication_code, l));
+  localLogos.forEach((l) => mapByCode.set(l.publication_code, l));
+
+  const finalLogos = Array.from(mapByCode.values()).filter(
+    (l) => !deletedIds.has(l.id) && !deletedIds.has(l.publication_code)
+  );
+
+  try {
+    localStorage.setItem(LOCAL_LOGOS_KEY, JSON.stringify(finalLogos));
+  } catch { /* silent */ }
+
+  return finalLogos;
 };
 
 export const getActivePublicationLogos = async (): Promise<PublicationLogo[]> => {
   // 1. Try Backend active logos endpoint (public, unauthenticated/authenticated)
   try {
-    const res = await api.get('/api/v1/admin/logos/active');
+    const res = await api.get('/api/v1/admin/logos/active', { timeout: 3500 });
     if (res.data && Array.isArray(res.data) && res.data.length > 0) {
       return res.data.map(enrichLogoWithAsset);
     }
@@ -847,9 +852,16 @@ export const toggleLogoActive = async (
 };
 
 export const removePublicationLogo = async (id: string): Promise<{ success: boolean }> => {
-  // 1. Update local storage
+  // 1. Update local storage & track deleted ID
   try {
-    const current = await getPublicationLogos();
+    const deletedRaw = localStorage.getItem('spotnews_admin_deleted_logos');
+    const deletedArr: string[] = deletedRaw ? JSON.parse(deletedRaw) : [];
+    if (!deletedArr.includes(id)) {
+      deletedArr.push(id);
+      localStorage.setItem('spotnews_admin_deleted_logos', JSON.stringify(deletedArr));
+    }
+
+    const current = (JSON.parse(localStorage.getItem(LOCAL_LOGOS_KEY) || '[]') as PublicationLogo[]);
     const updated = current.filter((l) => l.id !== id && l.publication_code !== id);
     localStorage.setItem(LOCAL_LOGOS_KEY, JSON.stringify(updated));
   } catch {

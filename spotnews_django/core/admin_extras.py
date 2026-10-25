@@ -101,13 +101,20 @@ def admin_user_role(request, user_id):
             data = json.loads(request.body)
             role = data.get('role', 'user')
             plan = data.get('plan')
+            district = data.get('district')
             if role not in ('superadmin', 'admin', 'reporter', 'user'):
                 return JsonResponse({"detail": f"Invalid role: {role}"}, status=400)
             with connection.cursor() as cursor:
-                if plan and plan in ('free', 'pro', 'enterprise'):
-                    cursor.execute("UPDATE profiles SET role = %s, plan = %s WHERE id = %s", [role, plan, user_id])
-                else:
-                    cursor.execute("UPDATE profiles SET role = %s WHERE id = %s", [role, user_id])
+                updates = ["role = %s"]
+                params = [role]
+                if plan:
+                    updates.append("plan = %s")
+                    params.append(plan)
+                if district is not None:
+                    updates.append("district = %s")
+                    params.append(district)
+                params.append(user_id)
+                cursor.execute(f"UPDATE profiles SET {', '.join(updates)} WHERE id = %s", params)
             return JsonResponse({"success": True})
         except Exception as e:
             return JsonResponse({"detail": str(e)}, status=400)
@@ -119,8 +126,6 @@ def admin_user_plan(request, user_id):
         try:
             data = json.loads(request.body)
             plan = data.get('plan', 'free')
-            if plan not in ('free', 'pro', 'enterprise'):
-                return JsonResponse({"detail": f"Invalid plan: {plan}. Must be free, pro, or enterprise."}, status=400)
             with connection.cursor() as cursor:
                 cursor.execute("UPDATE profiles SET plan = %s WHERE id = %s", [plan, user_id])
             return JsonResponse({"success": True})

@@ -1,0 +1,146 @@
+/* Scoped Design System for RTI Express Spot News 24x7 Admin Panel */
+@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+Telugu:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
+
+.adm-root {
+  /* Design Tokens strictly adhering to required palette */
+  --adm-blue: #015bb3;
+  --adm-navy: #1d4479;
+  --adm-bg: #eaf1fb;
+  --adm-chip-bg: #dee9f5;
+  --adm-card-bg: #ffffff;
+  --adm-card-border: #d0e2f7;
+  --adm-text-primary: #0a2540;
+  --adm-text-secondary: #415a77;
+  --adm-text-muted: #6b7a90;
+  --adm-green: #059669;
+  --adm-orange: #fe9a00;
+  --adm-red: #d32f2f;
+  --adm-yellow: #ffb900;
+  --adm-shadow: 0 4px 16px -2px rgba(1, 91, 179, 0.08), 0 2px 6px -1px rgba(0, 0, 0, 0.04);
+  --adm-shadow-hover: 0 8px 24px -4px rgba(1, 91, 179, 0.14), 0 4px 10px -2px rgba(0, 0, 0, 0.06);
+
+  font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+  background-color: var(--adm-bg);
+  color: var(--adm-text-primary);
+  min-height: 100vh;
+  box-sizing: border-box;
+}
+
+/* Dark Mode Scoped */
+.adm-root.adm-dark {
+  --adm-bg: #0c1829;
+  --adm-navy: #0e2038;
+  --adm-chip-bg: #1a3353;
+  --adm-card-bg: #14253d;
+  --adm-card-border: #234168;
+  --adm-text-primary: #f0f6fc;
+  --adm-text-secondary: #bfd2e6;
+  --adm-text-muted: #849cb6;
+  --adm-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.4);
+  --adm-shadow-hover: 0 8px 28px -4px rgba(0, 0, 0, 0.6);
+}
+
+.adm-root * {
+  box-sizing: border-box;
+}
+
+/* Telugu typography helper */
+.adm-telugu {
+  font-family: 'Noto Sans Telugu', 'Plus Jakarta Sans', sans-serif;
+  line-height: 1.45;
+}
+
+/* 20px radius cards, 12px controls */
+.adm-card {
+  border-radius: 20px;
+  background-color: var(--adm-card-bg);
+  border: 1px solid var(--adm-card-border);
+  box-shadow: var(--adm-shadow);
+  transition: all 0.2s ease;
+}
+
+.adm-card:hover {
+  box-shadow: var(--adm-shadow-hover);
+}
+
+.adm-ctrl {
+  border-radius: 12px;
+  min-height: 44px;
+}
+
+/* Glow effects for active segmented tab & filter chips */
+.adm-glow-blue {
+  box-shadow: 0 0 16px rgba(1, 91, 179, 0.45);
+}
+
+.adm-glow-orange {
+  box-shadow: 0 0 16px rgba(254, 154, 0, 0.5);
+}
+
+.adm-glow-green {
+  box-shadow: 0 0 16px rgba(5, 150, 105, 0.45);
+}
+
+/* Coloured left edge indicator */
+.adm-border-left-orange {
+  border-left: 5px solid var(--adm-orange) !important;
+}
+
+.adm-border-left-green {
+  border-left: 5px solid var(--adm-green) !important;
+}
+
+.adm-border-left-red {
+  border-left: 5px solid var(--adm-red) !important;
+}
+
+.adm-border-left-blue {
+  border-left: 5px solid var(--adm-blue) !important;
+}
+
+.adm-border-left-yellow {
+  border-left: 5px solid var(--adm-yellow) !important;
+}
+
+/* Stat card colored top bar - curves along 20px radius */
+.adm-top-bar-blue {
+  border-top: 3.5px solid var(--adm-blue) !important;
+}
+
+.adm-top-bar-green {
+  border-top: 3.5px solid var(--adm-green) !important;
+}
+
+.adm-top-bar-orange {
+  border-top: 3.5px solid var(--adm-orange) !important;
+}
+
+.adm-top-bar-teal {
+  border-top: 3.5px solid var(--adm-green) !important;
+}
+
+/* Animations */
+@keyframes admPulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.7; transform: scale(1.08); }
+}
+
+.adm-live-dot {
+  animation: admPulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+/* Scrollbar styles scoped */
+.adm-root ::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+.adm-root ::-webkit-scrollbar-track {
+  background: transparent;
+}
+.adm-root ::-webkit-scrollbar-thumb {
+  background: var(--adm-card-border);
+  border-radius: 3px;
+}
+.adm-root ::-webkit-scrollbar-thumb:hover {
+  background: var(--adm-text-muted);
+}
