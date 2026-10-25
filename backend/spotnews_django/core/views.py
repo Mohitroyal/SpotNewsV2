@@ -110,9 +110,7 @@ def admin_auth_users(request):
                     u.id, u.email, u.phone, p.role, u.created_at, u.raw_user_meta_data->>'full_name' as full_name, p.plan,
                     (SELECT COUNT(*) FROM clippings c WHERE c.user_id = u.id) as total_generations,
                     (SELECT COUNT(*) FROM clippings c WHERE c.user_id = u.id AND DATE(c.created_at AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Kolkata') = DATE(CURRENT_TIMESTAMP AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Kolkata')) as generations_today,
-                    u.last_sign_in_at,
-                    p.district,
-                    p.state
+                    u.last_sign_in_at
                 FROM auth.users u
                 LEFT JOIN profiles p ON p.id = u.id
                 ORDER BY u.created_at DESC NULLS LAST
@@ -132,8 +130,6 @@ def admin_auth_users(request):
                     "total_generations": r[7] or 0,
                     "generations_today": r[8] or 0,
                     "last_sign_in_at": str(r[9]) if r[9] else "",
-                    "district": r[10] or "",
-                    "state": r[11] or "",
                     "is_banned": False,
                     "banned_until": ""
                 })
@@ -230,3 +226,197 @@ def device_tokens_stats_view(request):
         })
     except Exception as e:
         return JsonResponse({"error": str(e)}, status=500)
+
+from django.http import HttpResponse
+
+def story_share_view(request, clip_id):
+    """
+    Renders an HTML page with Open Graph (OG) meta tags so WhatsApp, Telegram, etc.
+    display the clipping image as a rich preview card.
+    When tapped in WhatsApp, it opens this URL which redirects directly into the app
+    if installed, or prompts to download from Google Play if not installed.
+    """
+    headline = "RTI Express Spot News 24x7"
+    png_url = ""
+    summary = "పూర్తి వార్త యాప్‌లో చదవండి — RTI Express Spot News 24x7"
+    
+    try:
+        with connection.cursor() as cursor:
+            cursor.execute("SELECT headline, png_url, summary FROM public.clippings WHERE id = %s", [str(clip_id)])
+            row = cursor.fetchone()
+            if row:
+                headline = row[0] or headline
+                png_url = row[1] or ""
+                summary = row[2] or summary
+    except Exception as e:
+        print(f"Error fetching clipping {clip_id}: {e}")
+
+    # Fallback to Supabase REST if connection failed or not found in local cursor
+    if not png_url:
+        try:
+            import urllib.request
+            supa_url = f"https://rffrqokpnqoycpozrjuc.supabase.co/rest/v1/clippings?id=eq.{clip_id}&select=headline,png_url,summary"
+            anon_key = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJmZnJxb2twbnFveWNwb3pyanVjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg5NDE4MjUsImV4cCI6MjA5NDUxNzgyNX0.9BcRAPuhoK1C6SMeUvexABXp5HW2dfEJbdcRT_2FiL4"
+            req = urllib.request.Request(supa_url, headers={
+                "apikey": anon_key,
+                "Authorization": f"Bearer {anon_key}",
+                "User-Agent": "SpotNewsBackend/1.0"
+            })
+            with urllib.request.urlopen(req, timeout=5) as res:
+                data = json.loads(res.read().decode('utf-8'))
+                if data and len(data) > 0:
+                    headline = data[0].get("headline") or headline
+                    png_url = data[0].get("png_url") or ""
+                    summary = data[0].get("summary") or summary
+        except Exception as err:
+            print(f"Supabase fallback fetch error: {err}")
+
+    package_name = "com.newscraft.mobile"
+    play_store_url = f"https://play.google.com/store/apps/details?id={package_name}"
+    scheme_url = f"spotnews://feed?clipId={clip_id}"
+    intent_url = f"intent://feed?clipId={clip_id}#Intent;scheme=spotnews;package={package_name};S.browser_fallback_url={play_store_url};end"
+    share_url = request.build_absolute_uri()
+
+    html = f"""<!DOCTYPE html>
+<html lang="te">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{headline} | RTI Express Spot News 24x7</title>
+    
+    <!-- WhatsApp & Social Open Graph Tags (Way2News style) -->
+    <meta property="og:type" content="article" />
+    <meta property="og:site_name" content="RTI Express Spot News 24x7" />
+    <meta property="og:title" content="{headline}" />
+    <meta property="og:description" content="పూర్తి వార్త చదవడానికి క్లిక్ చేయండి - RTI Express Spot News 24x7" />
+    <meta property="og:image" content="{png_url}" />
+    <meta property="og:image:secure_url" content="{png_url}" />
+    <meta property="og:image:type" content="image/png" />
+    <meta property="og:image:width" content="1080" />
+    <meta property="og:image:height" content="1350" />
+    <meta property="og:url" content="{share_url}" />
+    
+    <!-- Twitter Card -->
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="{headline}" />
+    <meta name="twitter:description" content="పూర్తి వార్త చదవడానికి క్లిక్ చేయండి - RTI Express Spot News 24x7" />
+    <meta name="twitter:image" content="{png_url}" />
+
+    <!-- App Links for Android -->
+    <meta property="al:android:url" content="{scheme_url}" />
+    <meta property="al:android:package" content="{package_name}" />
+    <meta property="al:android:app_name" content="Spot News 24x7" />
+
+    <style>
+        * {{ box-sizing: border-box; margin: 0; padding: 0; }}
+        body {{
+            background: #0b1523;
+            color: #ffffff;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 16px;
+        }}
+        .container {{
+            max-width: 480px;
+            width: 100%;
+            background: linear-gradient(145deg, #132238 0%, #0b1523 100%);
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            border-radius: 20px;
+            padding: 24px 20px 20px;
+            text-align: center;
+            box-shadow: 0 20px 50px rgba(0,0,0,0.6);
+        }}
+        .brand-badge {{
+            display: inline-block;
+            background: rgba(20, 90, 177, 0.25);
+            border: 1px solid rgba(20, 90, 177, 0.5);
+            color: #4da3ff;
+            padding: 6px 14px;
+            border-radius: 999px;
+            font-size: 13px;
+            font-weight: 700;
+            margin-bottom: 14px;
+        }}
+        .headline {{
+            font-size: 18px;
+            font-weight: 800;
+            line-height: 1.45;
+            margin-bottom: 14px;
+            color: #ffffff;
+            word-break: break-word;
+        }}
+        .clipping-img {{
+            width: 100%;
+            max-height: 380px;
+            object-fit: contain;
+            border-radius: 12px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            background: #050b14;
+            margin-bottom: 16px;
+            cursor: pointer;
+            display: block;
+        }}
+        .btn {{
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            width: 100%;
+            padding: 14px;
+            border-radius: 12px;
+            text-decoration: none;
+            font-weight: 700;
+            font-size: 15px;
+            margin-bottom: 10px;
+            border: none;
+            cursor: pointer;
+            transition: opacity 0.2s;
+        }}
+        .btn-app {{
+            background: linear-gradient(135deg, #015BB3 0%, #0284c7 100%);
+            color: #ffffff !important;
+            box-shadow: 0 4px 14px rgba(1, 91, 179, 0.4);
+        }}
+        .btn-playstore {{
+            background: linear-gradient(135deg, #00875a 0%, #006644 100%);
+            color: #ffffff !important;
+            box-shadow: 0 4px 14px rgba(0, 135, 90, 0.4);
+        }}
+        .footer-text {{
+            font-size: 12px;
+            color: #718096;
+            margin-top: 10px;
+            line-height: 1.4;
+        }}
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="brand-badge">⚡ RTI Express Spot News 24x7</div>
+        <h1 class="headline">{headline}</h1>
+        {f'<img class="clipping-img" src="{png_url}" alt="News Clipping" onclick="openApp()" />' if png_url else ''}
+        <a href="{scheme_url}" class="btn btn-app" onclick="openApp(); return false;">🚀 యాప్‌లో తెరవండి (Open in App)</a>
+        <a href="{play_store_url}" class="btn btn-playstore" target="_blank" rel="noopener">📥 Google Play నుండి డౌన్‌లోడ్ చేయండి</a>
+        <p class="footer-text">యాప్ మీ ఫోన్‌లో ఇప్పటికే ఉంటే "యాప్‌లో తెరవండి" పై క్లిక్ చేయండి.</p>
+    </div>
+
+    <script>
+        function openApp() {{
+            window.location.href = "{scheme_url}";
+            setTimeout(function() {{
+                window.location.href = "{intent_url}";
+            }}, 400);
+        }}
+        // If opened on Android device, attempt auto-redirect to app
+        if (/Android/i.test(navigator.userAgent)) {{
+            openApp();
+        }}
+    </script>
+</body>
+</html>"""
+    return HttpResponse(html, content_type="text/html; charset=utf-8")
+

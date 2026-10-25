@@ -1,7 +1,7 @@
 from django.urls import path
 from .views import (
     health_check, health_msg91, admin_stats, admin_auth_users,
-    send_notification_view, device_tokens_stats_view
+    send_notification_view, device_tokens_stats_view, story_share_view
 )
 from .admin_extras import admin_generations, admin_user_role, admin_user_plan, admin_user_ban, admin_user_delete, admin_logos
 
@@ -23,6 +23,12 @@ from .reporter_payment_views import (
 )
 
 urlpatterns = [
+    # Rich Link Preview & Deep Link Share endpoint (Way2News style)
+    path('n/<str:clip_id>', story_share_view, name='story_share'),
+    path('n/<str:clip_id>/', story_share_view),
+    path('story/<str:clip_id>', story_share_view, name='story_share_alt'),
+    path('story/<str:clip_id>/', story_share_view),
+
     path('health', health_check, name='health_check'),
     path('health/msg91', health_msg91, name='health_msg91'),
     path('v1/admin/stats', admin_stats, name='admin_stats'),
