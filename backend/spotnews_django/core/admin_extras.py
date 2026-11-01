@@ -108,58 +108,151 @@ def admin_user_role(request, user_id):
             plan = data.get('plan')
             district = data.get('district')
             phone_number = data.get('phone_number')
+            email = (data.get('email') or '').strip().lower()
             
             if role not in ('superadmin', 'admin', 'reporter', 'user'):
                 return JsonResponse({"detail": f"Invalid role: {role}"}, status=400)
                 
             with connection.cursor() as cursor:
-                # If promoting to admin, enforce: every district will get one admin only
+                target_user_id = str(user_id).strip()
+                target_email = email
+
+                # 1. Resolve actual target_user_id and target_email
+                if target_email:
+                    try:
+                        cursor.execute("SELECT id FROM auth.users WHERE LOWER(email) = LOWER(%s) LIMIT 1", [target_email])
+                        row = cursor.fetchone()
+                        if row and row[0]:
+                            target_user_id = str(row[0])
+                        else:
+                            cursor.execute("SELECT id FROM profiles WHERE LOWER(email) = LOWER(%s) LIMIT 1", [target_email])
+                            row2 = cursor.fetchone()
+                            if row2 and row2[0]:
+                                target_user_id = str(row2[0])
+                    except Exception:
+                        pass
+
+                if not target_email and target_user_id:
+                    try:
+                        cursor.execute("SELECT email FROM auth.users WHERE id::text = %s LIMIT 1", [target_user_id])
+                        row = cursor.fetchone()
+                        if row and row[0]:
+                            target_email = str(row[0]).strip().lower()
+                        else:
+                            cursor.execute("SELECT email FROM profiles WHERE id::text = %s LIMIT 1", [target_user_id])
+                            row2 = cursor.fetchone()
+                            if row2 and row2[0]:
+                                target_email = str(row2[0]).strip().lower()
+                    except Exception:
+                        pass
+
+                cleaned_district = str(district).strip() if district else None
+
+                # 2. Role specific plan assignment & admin single-district rule
                 if role == 'admin':
-                    if not district or not str(district).strip():
+                    if not cleaned_district:
+                        try:
+                            cursor.execute("SELECT district FROM profiles WHERE id::text = %s OR LOWER(COALESCE(email, '')) = LOWER(%s)", [target_user_id, target_email or ''])
+                            row = cursor.fetchone()
+                            if row and row[0] and str(row[0]).strip():
+                                cleaned_district = str(row[0]).strip()
+                        except Exception:
+                            pass
+
+                    if not cleaned_district:
                         return JsonResponse({
                             "detail": "An admin must be assigned to a specific district. Every district will get one admin only."
                         }, status=400)
                     
-                    cleaned_district = str(district).strip()
-                    # Check if another admin already occupies this district
-                    cursor.execute("""
-                        SELECT email, full_name, district 
-                        FROM profiles 
-                        WHERE role = 'admin' 
-                          AND LOWER(TRIM(COALESCE(district, ''))) = LOWER(TRIM(%s)) 
-                          AND id != %s
-                    """, [cleaned_district, user_id])
-                    existing = cursor.fetchone()
-                    if existing:
-                        admin_name = existing[0] or existing[1] or "another administrator"
-                        return JsonResponse({
-                            "detail": f"District '{cleaned_district}' already has an assigned admin ({admin_name}). Every district will get one admin only."
-                        }, status=400)
+                    try:
+                        cursor.execute("""
+                            SELECT email, full_name, district 
+                            FROM profiles 
+                            WHERE role = 'admin' 
+                              AND LOWER(TRIM(COALESCE(district, ''))) = LOWER(TRIM(%s)) 
+                              AND id::text != %s
+                              AND LOWER(COALESCE(email, '')) != LOWER(%s)
+                        """, [cleaned_district, target_user_id, target_email or ''])
+                        existing = cursor.fetchone()
+                        if existing:
+                            admin_name = existing[0] or existing[1] or "another administrator"
+                            return JsonResponse({
+                                "detail": f"District '{cleaned_district}' already has an assigned admin ({admin_name}). Every district will get one admin only."
+                            }, status=400)
+                    except Exception:
+                        pass
                     
                     target_plan = plan or 'admin'
-                    cursor.execute(
-                        "UPDATE profiles SET role = %s, district = %s, plan = %s WHERE id = %s",
-                        [role, cleaned_district, target_plan, user_id]
-                    )
                 else:
-                    # Role is superadmin, reporter, or user
-                    cleaned_district = str(district).strip() if district else None
-                    if plan and plan in ('free', 'pro', 'enterprise', 'reporter', 'superadmin'):
-                        cursor.execute(
-                            "UPDATE profiles SET role = %s, plan = %s, district = COALESCE(%s, district) WHERE id = %s",
-                            [role, plan, cleaned_district, user_id]
-                        )
+                    if role == 'superadmin':
+                        target_plan = plan or 'superadmin'
+                    elif role == 'reporter':
+                        target_plan = plan or 'reporter'
                     else:
-                        cursor.execute(
-                            "UPDATE profiles SET role = %s, district = COALESCE(%s, district) WHERE id = %s",
-                            [role, cleaned_district, user_id]
-                        )
-                
-                if phone_number and str(phone_number).strip():
-                    cursor.execute(
-                        "UPDATE profiles SET phone_number = %s WHERE id = %s",
-                        [str(phone_number).strip(), user_id]
-                    )
+                        target_plan = plan or 'free'
+
+                # 3. Update profiles table
+                try:
+                    cursor.execute("""
+                        UPDATE profiles 
+                        SET role = %s, 
+                            plan = %s, 
+                            district = COALESCE(%s, district),
+                            phone_number = COALESCE(%s, phone_number)
+                        WHERE id::text = %s OR (LOWER(COALESCE(email, '')) = LOWER(%s) AND %s != '')
+                    """, [role, target_plan, cleaned_district, phone_number, target_user_id, target_email or '', target_email or ''])
+                    
+                    if cursor.rowcount == 0:
+                        cursor.execute("""
+                            INSERT INTO profiles (id, email, role, plan, district, phone_number)
+                            VALUES (%s, %s, %s, %s, %s, %s)
+                            ON CONFLICT (id) DO UPDATE 
+                            SET role = EXCLUDED.role, 
+                                plan = EXCLUDED.plan, 
+                                district = COALESCE(EXCLUDED.district, profiles.district), 
+                                phone_number = COALESCE(EXCLUDED.phone_number, profiles.phone_number)
+                        """, [target_user_id, target_email, role, target_plan, cleaned_district, phone_number])
+                except Exception as pe:
+                    print("Profiles update notice:", pe)
+
+                # 4. If role is reporter, activate reporter_applications
+                if role == 'reporter':
+                    try:
+                        cursor.execute("""
+                            UPDATE reporter_applications 
+                            SET status = 'active'
+                            WHERE id::text = %s OR (LOWER(COALESCE(email, '')) = LOWER(%s) AND %s != '')
+                        """, [target_user_id, target_email or '', target_email or ''])
+                    except Exception as re:
+                        print("Reporter application activation notice:", re)
+
+                # 5. Synchronize auth.users raw metadata
+                try:
+                    auth_meta = json.dumps({
+                        "role": role,
+                        "plan": target_plan,
+                        "district": cleaned_district or ""
+                    })
+                    cursor.execute("""
+                        UPDATE auth.users 
+                        SET raw_app_meta_data = COALESCE(raw_app_meta_data, '{}'::jsonb) || %s::jsonb,
+                            raw_user_meta_data = COALESCE(raw_user_meta_data, '{}'::jsonb) || %s::jsonb
+                        WHERE id::text = %s OR (LOWER(COALESCE(email, '')) = LOWER(%s) AND %s != '')
+                    """, [auth_meta, auth_meta, target_user_id, target_email or '', target_email or ''])
+                except Exception:
+                    pass
+
+                # 6. Synchronize public.users if table exists
+                try:
+                    is_admin_val = (role in ('admin', 'superadmin'))
+                    is_super_val = (role == 'superadmin')
+                    cursor.execute("""
+                        UPDATE users 
+                        SET is_admin = %s, is_superuser = %s, subscription_plan = %s
+                        WHERE id::text = %s OR (LOWER(COALESCE(email, '')) = LOWER(%s) AND %s != '')
+                    """, [is_admin_val, is_super_val, target_plan, target_user_id, target_email or '', target_email or ''])
+                except Exception:
+                    pass
                     
             return JsonResponse({"success": True})
         except Exception as e:
@@ -172,10 +265,24 @@ def admin_user_plan(request, user_id):
         try:
             data = json.loads(request.body)
             plan = data.get('plan', 'free')
-            if plan not in ('free', 'pro', 'enterprise'):
-                return JsonResponse({"detail": f"Invalid plan: {plan}. Must be free, pro, or enterprise."}, status=400)
+            if plan not in ('free', 'pro', 'enterprise', 'admin', 'superadmin'):
+                return JsonResponse({"detail": f"Invalid plan: {plan}. Must be free, pro, enterprise, admin, or superadmin."}, status=400)
             with connection.cursor() as cursor:
                 cursor.execute("UPDATE profiles SET plan = %s WHERE id = %s", [plan, user_id])
+                try:
+                    auth_meta = json.dumps({"plan": plan})
+                    cursor.execute("""
+                        UPDATE auth.users 
+                        SET raw_app_meta_data = COALESCE(raw_app_meta_data, '{}'::jsonb) || %s::jsonb,
+                            raw_user_meta_data = COALESCE(raw_user_meta_data, '{}'::jsonb) || %s::jsonb
+                        WHERE id = %s
+                    """, [auth_meta, auth_meta, user_id])
+                except Exception:
+                    pass
+                try:
+                    cursor.execute("UPDATE users SET subscription_plan = %s WHERE id = %s", [plan, user_id])
+                except Exception:
+                    pass
             return JsonResponse({"success": True})
         except Exception as e:
             return JsonResponse({"detail": str(e)}, status=400)

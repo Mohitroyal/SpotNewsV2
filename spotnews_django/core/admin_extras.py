@@ -19,48 +19,53 @@ def admin_generations(request):
         query = (
             "SELECT c.id, c.status, c.created_at, c.user_id, c.headline, c.template_id, "
             "c.language, c.tone, c.publication_name, c.publication_date, c.layout_columns, "
-            "c.font_family, c.png_url, c.pdf_url, c.district, c.state, c.is_posted, "
-            "p.email, p.full_name, p.plan "
+            "c.font_family, c.png_url, c.pdf_url, p.email, p.full_name, p.plan, "
+            "c.district, c.state, c.is_posted "
             "FROM clippings c LEFT JOIN profiles p ON c.user_id = p.id"
         )
-        count_query = "SELECT COUNT(*) FROM clippings c LEFT JOIN profiles p ON c.user_id = p.id"
+        count_query = "SELECT COUNT(*) FROM clippings c"
         
         where_clauses = []
-        where_params = []
+        params = []
         
         if user_id:
             where_clauses.append("c.user_id = %s")
-            where_params.append(user_id)
+            params.append(user_id)
             
-        if district and district.strip() and district.strip().lower() != 'all':
-            where_clauses.append("LOWER(TRIM(c.district)) = LOWER(%s)")
-            where_params.append(district.strip())
+        if district and district.strip().lower() != 'all':
+            where_clauses.append("LOWER(TRIM(COALESCE(c.district, ''))) = LOWER(TRIM(%s))")
+            params.append(district.strip())
             
-        if status and status.strip() and status.strip().lower() != 'all':
-            where_clauses.append("c.status = %s")
-            where_params.append(status.strip())
-            
-        if from_date and from_date.strip():
+        if status and status.strip().lower() != 'all':
+            st = status.strip().lower()
+            if st == 'pending':
+                where_clauses.append("(c.status = 'pending_approval' OR (COALESCE(c.is_posted, false) = false AND c.status != 'rejected'))")
+            elif st == 'approved':
+                where_clauses.append("(c.is_posted = true OR c.status = 'approved')")
+            elif st == 'rejected':
+                where_clauses.append("c.status = 'rejected'")
+
+        if from_date:
             where_clauses.append("c.created_at >= %s")
-            where_params.append(f"{from_date.strip()} 00:00:00+05:30")
-            
-        if to_date and to_date.strip():
+            params.append(f"{from_date} 00:00:00+05:30")
+        if to_date:
             where_clauses.append("c.created_at <= %s")
-            where_params.append(f"{to_date.strip()} 23:59:59+05:30")
+            params.append(f"{to_date} 23:59:59+05:30")
             
         if where_clauses:
-            clause_str = " WHERE " + " AND ".join(where_clauses)
-            query += clause_str
-            count_query += clause_str
+            where_sql = " WHERE " + " AND ".join(where_clauses)
+            query += where_sql
+            count_query += where_sql
             
+        query_params = list(params)
         query += " ORDER BY c.created_at DESC LIMIT %s OFFSET %s"
-        exec_params = list(where_params) + [page_size, offset]
+        query_params.extend([page_size, offset])
         
         with connection.cursor() as cursor:
-            cursor.execute(count_query, where_params)
+            cursor.execute(count_query, params)
             total = cursor.fetchone()[0]
             
-            cursor.execute(query, exec_params)
+            cursor.execute(query, query_params)
             rows = cursor.fetchall()
             
             results = []
@@ -81,12 +86,12 @@ def admin_generations(request):
                     "image_count": 0,
                     "png_url": r[12] or "",
                     "pdf_url": r[13] or "",
-                    "district": r[14] or "",
-                    "state": r[15] or "",
-                    "is_posted": bool(r[16]) if r[16] is not None else False,
-                    "user_email": r[17] or "",
-                    "user_name": r[18] or "",
-                    "user_plan": r[19] or "free"
+                    "user_email": r[14] or "",
+                    "user_name": r[15] or "",
+                    "user_plan": r[16] or "free",
+                    "district": r[17] or "",
+                    "state": r[18] or "",
+                    "is_posted": bool(r[19]) if r[19] is not None else False
                 })
                 
         return JsonResponse({"total": total, "results": results})
@@ -102,19 +107,153 @@ def admin_user_role(request, user_id):
             role = data.get('role', 'user')
             plan = data.get('plan')
             district = data.get('district')
+            phone_number = data.get('phone_number')
+            email = (data.get('email') or '').strip().lower()
+            
             if role not in ('superadmin', 'admin', 'reporter', 'user'):
                 return JsonResponse({"detail": f"Invalid role: {role}"}, status=400)
+                
             with connection.cursor() as cursor:
-                updates = ["role = %s"]
-                params = [role]
-                if plan:
-                    updates.append("plan = %s")
-                    params.append(plan)
-                if district is not None:
-                    updates.append("district = %s")
-                    params.append(district)
-                params.append(user_id)
-                cursor.execute(f"UPDATE profiles SET {', '.join(updates)} WHERE id = %s", params)
+                target_user_id = str(user_id).strip()
+                target_email = email
+
+                # 1. Resolve actual target_user_id and target_email
+                if target_email:
+                    try:
+                        cursor.execute("SELECT id FROM auth.users WHERE LOWER(email) = LOWER(%s) LIMIT 1", [target_email])
+                        row = cursor.fetchone()
+                        if row and row[0]:
+                            target_user_id = str(row[0])
+                        else:
+                            cursor.execute("SELECT id FROM profiles WHERE LOWER(email) = LOWER(%s) LIMIT 1", [target_email])
+                            row2 = cursor.fetchone()
+                            if row2 and row2[0]:
+                                target_user_id = str(row2[0])
+                    except Exception:
+                        pass
+
+                if not target_email and target_user_id:
+                    try:
+                        cursor.execute("SELECT email FROM auth.users WHERE id::text = %s LIMIT 1", [target_user_id])
+                        row = cursor.fetchone()
+                        if row and row[0]:
+                            target_email = str(row[0]).strip().lower()
+                        else:
+                            cursor.execute("SELECT email FROM profiles WHERE id::text = %s LIMIT 1", [target_user_id])
+                            row2 = cursor.fetchone()
+                            if row2 and row2[0]:
+                                target_email = str(row2[0]).strip().lower()
+                    except Exception:
+                        pass
+
+                cleaned_district = str(district).strip() if district else None
+
+                # 2. Role specific plan assignment & admin single-district rule
+                if role == 'admin':
+                    if not cleaned_district:
+                        try:
+                            cursor.execute("SELECT district FROM profiles WHERE id::text = %s OR LOWER(COALESCE(email, '')) = LOWER(%s)", [target_user_id, target_email or ''])
+                            row = cursor.fetchone()
+                            if row and row[0] and str(row[0]).strip():
+                                cleaned_district = str(row[0]).strip()
+                        except Exception:
+                            pass
+
+                    if not cleaned_district:
+                        return JsonResponse({
+                            "detail": "An admin must be assigned to a specific district. Every district will get one admin only."
+                        }, status=400)
+                    
+                    try:
+                        cursor.execute("""
+                            SELECT email, full_name, district 
+                            FROM profiles 
+                            WHERE role = 'admin' 
+                              AND LOWER(TRIM(COALESCE(district, ''))) = LOWER(TRIM(%s)) 
+                              AND id::text != %s
+                              AND LOWER(COALESCE(email, '')) != LOWER(%s)
+                        """, [cleaned_district, target_user_id, target_email or ''])
+                        existing = cursor.fetchone()
+                        if existing:
+                            admin_name = existing[0] or existing[1] or "another administrator"
+                            return JsonResponse({
+                                "detail": f"District '{cleaned_district}' already has an assigned admin ({admin_name}). Every district will get one admin only."
+                            }, status=400)
+                    except Exception:
+                        pass
+                    
+                    target_plan = plan or 'admin'
+                else:
+                    if role == 'superadmin':
+                        target_plan = plan or 'superadmin'
+                    elif role == 'reporter':
+                        target_plan = plan or 'reporter'
+                    else:
+                        target_plan = plan or 'free'
+
+                # 3. Update profiles table
+                try:
+                    cursor.execute("""
+                        UPDATE profiles 
+                        SET role = %s, 
+                            plan = %s, 
+                            district = COALESCE(%s, district),
+                            phone_number = COALESCE(%s, phone_number)
+                        WHERE id::text = %s OR (LOWER(COALESCE(email, '')) = LOWER(%s) AND %s != '')
+                    """, [role, target_plan, cleaned_district, phone_number, target_user_id, target_email or '', target_email or ''])
+                    
+                    if cursor.rowcount == 0:
+                        cursor.execute("""
+                            INSERT INTO profiles (id, email, role, plan, district, phone_number)
+                            VALUES (%s, %s, %s, %s, %s, %s)
+                            ON CONFLICT (id) DO UPDATE 
+                            SET role = EXCLUDED.role, 
+                                plan = EXCLUDED.plan, 
+                                district = COALESCE(EXCLUDED.district, profiles.district), 
+                                phone_number = COALESCE(EXCLUDED.phone_number, profiles.phone_number)
+                        """, [target_user_id, target_email, role, target_plan, cleaned_district, phone_number])
+                except Exception as pe:
+                    print("Profiles update notice:", pe)
+
+                # 4. If role is reporter, activate reporter_applications
+                if role == 'reporter':
+                    try:
+                        cursor.execute("""
+                            UPDATE reporter_applications 
+                            SET status = 'active'
+                            WHERE id::text = %s OR (LOWER(COALESCE(email, '')) = LOWER(%s) AND %s != '')
+                        """, [target_user_id, target_email or '', target_email or ''])
+                    except Exception as re:
+                        print("Reporter application activation notice:", re)
+
+                # 5. Synchronize auth.users raw metadata
+                try:
+                    auth_meta = json.dumps({
+                        "role": role,
+                        "plan": target_plan,
+                        "district": cleaned_district or ""
+                    })
+                    cursor.execute("""
+                        UPDATE auth.users 
+                        SET raw_app_meta_data = COALESCE(raw_app_meta_data, '{}'::jsonb) || %s::jsonb,
+                            raw_user_meta_data = COALESCE(raw_user_meta_data, '{}'::jsonb) || %s::jsonb
+                        WHERE id::text = %s OR (LOWER(COALESCE(email, '')) = LOWER(%s) AND %s != '')
+                    """, [auth_meta, auth_meta, target_user_id, target_email or '', target_email or ''])
+                except Exception:
+                    pass
+
+                # 6. Synchronize public.users if table exists
+                try:
+                    is_admin_val = (role in ('admin', 'superadmin'))
+                    is_super_val = (role == 'superadmin')
+                    cursor.execute("""
+                        UPDATE users 
+                        SET is_admin = %s, is_superuser = %s, subscription_plan = %s
+                        WHERE id::text = %s OR (LOWER(COALESCE(email, '')) = LOWER(%s) AND %s != '')
+                    """, [is_admin_val, is_super_val, target_plan, target_user_id, target_email or '', target_email or ''])
+                except Exception:
+                    pass
+                    
             return JsonResponse({"success": True})
         except Exception as e:
             return JsonResponse({"detail": str(e)}, status=400)
@@ -126,8 +265,24 @@ def admin_user_plan(request, user_id):
         try:
             data = json.loads(request.body)
             plan = data.get('plan', 'free')
+            if plan not in ('free', 'pro', 'enterprise', 'admin', 'superadmin'):
+                return JsonResponse({"detail": f"Invalid plan: {plan}. Must be free, pro, enterprise, admin, or superadmin."}, status=400)
             with connection.cursor() as cursor:
                 cursor.execute("UPDATE profiles SET plan = %s WHERE id = %s", [plan, user_id])
+                try:
+                    auth_meta = json.dumps({"plan": plan})
+                    cursor.execute("""
+                        UPDATE auth.users 
+                        SET raw_app_meta_data = COALESCE(raw_app_meta_data, '{}'::jsonb) || %s::jsonb,
+                            raw_user_meta_data = COALESCE(raw_user_meta_data, '{}'::jsonb) || %s::jsonb
+                        WHERE id = %s
+                    """, [auth_meta, auth_meta, user_id])
+                except Exception:
+                    pass
+                try:
+                    cursor.execute("UPDATE users SET subscription_plan = %s WHERE id = %s", [plan, user_id])
+                except Exception:
+                    pass
             return JsonResponse({"success": True})
         except Exception as e:
             return JsonResponse({"detail": str(e)}, status=400)

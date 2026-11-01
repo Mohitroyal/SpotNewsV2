@@ -145,13 +145,57 @@ def send_topic_notification(
         ),
     )
 
+    # 1. Send to FCM topic
+    topic_res = None
     try:
-        response = messaging.send(message)
-        logger.info("Sent topic notification [%s] message_id: %s", topic, response)
-        return {"success": True, "message_id": response, "topic": topic}
+        topic_res = messaging.send(message)
+        logger.info("Sent topic notification [%s] message_id: %s", topic, topic_res)
     except Exception as e:
-        logger.error("Failed to send topic notification [%s]: %s", topic, str(e))
-        return {"success": False, "error": str(e), "topic": topic}
+        logger.warning("Topic notification [%s] failed (will try direct device multicast): %s", topic, str(e))
+
+    # 2. Direct multicast to all registered device tokens in public.device_tokens
+    # Ensures all app users receive the push notification even if topic subscription failed
+    multicast_sent = 0
+    multicast_failed = 0
+    try:
+        all_tokens = _get_all_device_tokens()
+        if all_tokens:
+            batch_size = 500
+            for i in range(0, len(all_tokens), batch_size):
+                batch = all_tokens[i:i + batch_size]
+                multicast_msg = messaging.MulticastMessage(
+                    tokens=batch,
+                    notification=messaging.Notification(**notification_kwargs),
+                    data=data_payload,
+                    android=messaging.AndroidConfig(
+                        priority="high",
+                        notification=messaging.AndroidNotification(
+                            channel_id=channel_id,
+                            sound="default",
+                            color="#015BB3",
+                            image=image_url,
+                            icon="ic_stat_logo",
+                        ),
+                    ),
+                )
+                batch_response = messaging.send_each_for_multicast(multicast_msg)
+                multicast_sent += batch_response.success_count
+                multicast_failed += batch_response.failure_count
+                for idx, resp in enumerate(batch_response.responses):
+                    if not resp.success and resp.exception:
+                        exc_str = str(resp.exception).lower()
+                        if "not-registered" in exc_str or "unregistered" in exc_str or "invalid-argument" in exc_str:
+                            _remove_stale_token(batch[idx])
+            logger.info("Direct multicast delivered to %d tokens (success: %d, failure: %d)",
+                        len(all_tokens), multicast_sent, multicast_failed)
+    except Exception as multi_err:
+        logger.warning("Direct multicast error: %s", multi_err)
+
+    if topic_res or multicast_sent > 0:
+        return {"success": True, "message_id": topic_res or "multicast_direct", "topic": topic, "direct_sent": multicast_sent}
+    else:
+        return {"success": False, "error": "Failed to deliver topic notification and no device tokens reached", "topic": topic}
+
 
 
 def send_token_notification(
@@ -255,6 +299,33 @@ def send_user_notification(
     }
 
 
+def _get_all_device_tokens() -> List[str]:
+    """
+    Fetch all active FCM device tokens from public.device_tokens
+    """
+    tokens = []
+    try:
+        from django.db import connection
+        with connection.cursor() as cur:
+            cur.execute("SELECT DISTINCT token FROM public.device_tokens WHERE token IS NOT NULL AND LENGTH(token) > 10;")
+            rows = cur.fetchall()
+            tokens = [r[0] for r in rows if r[0]]
+    except Exception as dj_err:
+        logger.warning("Django connection error for all tokens, trying psycopg2 fallback: %s", dj_err)
+        db_url = getattr(settings, 'DATABASE_URL', None) or os.getenv('DATABASE_URL')
+        if db_url:
+            try:
+                conn = psycopg2.connect(db_url)
+                cur = conn.cursor()
+                cur.execute("SELECT DISTINCT token FROM public.device_tokens WHERE token IS NOT NULL AND LENGTH(token) > 10;")
+                rows = cur.fetchall()
+                conn.close()
+                tokens = [r[0] for r in rows if r[0]]
+            except Exception as e:
+                logger.error("Error fetching all tokens: %s", str(e))
+    return tokens
+
+
 def _get_tokens_for_user(user_id: Optional[str] = None, email: Optional[str] = None, phone: Optional[str] = None) -> List[str]:
     """
     Fetch device tokens from PostgreSQL public.device_tokens by user_id, email, or phone
@@ -280,6 +351,22 @@ def _get_tokens_for_user(user_id: Optional[str] = None, email: Optional[str] = N
                     tokens = [r[0] for r in rows if r[0]]
                 except Exception as e:
                     logger.error("Error fetching tokens for user %s: %s", user_id, str(e))
+
+    # If no token found by direct user_id, enrich email and phone from profiles table
+    if not tokens and user_id:
+        try:
+            from django.db import connection
+            with connection.cursor() as cur:
+                cur.execute("SELECT email, phone FROM public.profiles WHERE id = %s;", (user_id,))
+                p_row = cur.fetchone()
+                if p_row:
+                    if not email and p_row[0]:
+                        email = p_row[0]
+                    if not phone and p_row[1]:
+                        phone = p_row[1]
+        except Exception as p_err:
+            logger.warning("Could not enrich user email/phone from profiles: %s", p_err)
+
 
     if not tokens and email:
         clean_email = email.strip().lower()
