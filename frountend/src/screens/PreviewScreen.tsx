@@ -112,27 +112,25 @@ export const PreviewScreen = () => {
 
 
 
-  // Fetch from Supabase directly if not present in memory store
-
+  // Fetch from Supabase directly on mount if not in memory or if output (png_url) is missing
   useEffect(() => {
-
-    if (!generation && id) {
-
+    if (!id) return;
+    if (!generation || !generation.png_url) {
       generationService.getById(id).then((res: any) => {
-
         const item = res?.data || res;
-
         if (item && item.id) {
-
-          addGeneration(item);
-
+          const hasOutput = Boolean(item.png_url);
+          const progress = hasOutput ? 100 : (item.progress ?? (item.custom_layout?.progress ?? 15));
+          const updatedItem = { ...item, progress };
+          if (!generation) {
+            addGeneration(updatedItem);
+          } else {
+            updateGeneration(id, updatedItem);
+          }
         }
-
       }).catch(err => console.warn("Direct fetch error:", err));
-
     }
-
-  }, [id, generation, addGeneration]);
+  }, [id, generation?.id, generation?.png_url, addGeneration, updateGeneration]);
 
 
 
@@ -326,6 +324,7 @@ export const PreviewScreen = () => {
 
   useEffect(() => {
 
+    // CRITICAL: A clipping must ONLY be submitted for review/approval AFTER the composed clipping PNG exists!
     if (!generation?.id || !generation?.png_url) return;
 
     // Only run once per mount -- hasAutoSubmittedRef guards repeated fires
@@ -491,20 +490,13 @@ export const PreviewScreen = () => {
 
 
   useEffect(() => {
-
+    // Only poll if generation exists and does not yet have an output PNG, and hasn't failed
     if (
-
       !generation ||
-
-      generation.status === 'completed' ||
-
+      Boolean(generation.png_url) ||
       generation.status === 'failed' ||
-
-      generation.png_url
-
+      Boolean(generation.error)
     ) return;
-
-
 
     startTimeRef.current  = Date.now();
 
@@ -598,34 +590,19 @@ export const PreviewScreen = () => {
 
           // Compute progress from stage map
 
-          const progress = generationData.png_url ? 100 : (generationData.progress ?? getProgress(stage));
-
-
+          const hasOutput = Boolean(generationData.png_url);
+          const progress = hasOutput ? 100 : (generationData.progress ?? getProgress(stage));
 
           updateGeneration(generation.id, { ...generationData, progress });
 
+          console.log(`[POLL] #${attempt} | status=${generationData.status} | stage=${stage} | progress=${progress}% | hasOutput=${hasOutput}`);
 
-
-          console.log(`[POLL] #${attempt} | status=${generationData.status} | stage=${stage} | progress=${progress}%`);
-
-
-
-          const isDone = Boolean(generationData.png_url) ||
-
-            generationData.status === 'completed' ||
-
-            generationData.status === 'approved' ||
-
-            generationData.status === 'pending_approval' ||
-
-            generationData.status === 'failed';
-
+          // Only terminate polling when the composed output file is ready OR when generation explicitly failed.
+          // Moderation approval (status: approved/pending_approval) must NOT prematurely terminate polling!
+          const isDone = hasOutput || generationData.status === 'failed' || Boolean(generationData.error);
           if (isDone) {
-
             clearInterval(intervalRef.current!);
-
             clearInterval(elapsedTimerRef.current!);
-
           }
 
         }
@@ -844,7 +821,7 @@ export const PreviewScreen = () => {
 
   // ── Derived state for the progress UI ────────────────────────────────────
 
-  const progressPercent = generation.progress ?? getProgress(liveStage || generation.stage);
+  const progressPercent = generation.png_url ? 100 : (generation.progress ?? getProgress(liveStage || generation.stage));
 
   const timeLeft        = Math.max(0, MAX_POLL_MS - elapsedMs);
 
