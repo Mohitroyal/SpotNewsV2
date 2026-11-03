@@ -45,6 +45,12 @@ def run_clipping_generation_background(clipping_id, data, user_id):
     This will call Grok, Render HTML, Playwright, and Supabase uploads.
 
     """
+    temp_png = f"temp_{clipping_id}.png"
+    temp_pdf = f"temp_{clipping_id}.pdf"
+    temp_overlay = f"temp_overlay_{clipping_id}.png"
+    render_data = {}
+    template_id = str(data.get("template_id") or "classic").strip()
+
 
     try:
 
@@ -53,6 +59,8 @@ def run_clipping_generation_background(clipping_id, data, user_id):
         
 
         async def _generate():
+            nonlocal render_data, template_id
+
 
             content = data.get("article_content", "")
 
@@ -365,13 +373,17 @@ def run_clipping_generation_background(clipping_id, data, user_id):
 
             
 
-            return temp_png, temp_pdf, temp_overlay, hero_box, overlay_box
+            return temp_png, temp_pdf, temp_overlay, hero_box, overlay_box, render_data, template_id
 
             
 
         # Run async code inside the synchronous thread
 
-        temp_png, temp_pdf, temp_overlay, hero_box, overlay_box = asyncio.run(asyncio.wait_for(_generate(), timeout=85.0))
+        temp_png, temp_pdf, temp_overlay, hero_box, overlay_box, gen_render_data, gen_template_id = asyncio.run(asyncio.wait_for(_generate(), timeout=85.0))
+        if gen_render_data:
+            render_data = gen_render_data
+        if gen_template_id:
+            template_id = gen_template_id
 
         
 
@@ -418,6 +430,8 @@ def run_clipping_generation_background(clipping_id, data, user_id):
         png_url = storage_service.upload_file(temp_png, f"clippings/{clipping_id}_{timestamp}.png")
 
         pdf_url = storage_service.upload_file(temp_pdf, f"clippings/{clipping_id}_{timestamp}.pdf")
+        if not png_url:
+            raise RuntimeError("Generated clipping image upload failed - png_url is empty")
 
         
 
@@ -758,6 +772,8 @@ def run_clipping_generation_background(clipping_id, data, user_id):
         clip_state = render_data.get("state") or data.get("state") or "Andhra Pradesh"
 
         clip_district = render_data.get("district") or data.get("district") or "All"
+        pub_name = render_data.get("publication_name") or data.get("publication_name") or "RTI EXPRESS"
+        pub_date = render_data.get("publication_date") or data.get("publication_date") or ""
 
 
 
@@ -769,7 +785,7 @@ def run_clipping_generation_background(clipping_id, data, user_id):
 
                     "UPDATE clippings SET status = %s, png_url = %s, pdf_url = %s, mp4_url = %s, template_id = %s, publication_name = %s, publication_date = %s, state = %s, district = %s, is_posted = %s WHERE id = %s",
 
-                    [final_status, png_url, pdf_url, mp4_url, template_id, render_data["publication_name"], render_data["publication_date"], clip_state, clip_district, final_is_posted, clipping_id]
+                    [final_status, png_url, pdf_url, mp4_url, template_id, pub_name, pub_date, clip_state, clip_district, final_is_posted, clipping_id]
 
                 )
 
@@ -930,6 +946,24 @@ def run_clipping_generation_background(clipping_id, data, user_id):
         except Exception as db_err:
 
             print(f"Failed to update error status: {db_err}")
+            try:
+                connection.close()
+                with connection.cursor() as cursor:
+                    cursor.execute(
+                        "UPDATE clippings SET status = %s, custom_layout = %s::jsonb WHERE id = %s",
+                        ['failed', json.dumps({"error": str(e), "stage": "Processing Error"}), clipping_id]
+                    )
+                    if not connection.in_atomic_block:
+                        connection.commit()
+            except Exception as final_db_err:
+                print(f"Fatal error updating clipping error status: {final_db_err}")
+    finally:
+        for p in (temp_png, temp_pdf, temp_overlay):
+            try:
+                if p and os.path.exists(p):
+                    os.remove(p)
+            except Exception:
+                pass
 
 
 
@@ -999,9 +1033,29 @@ def create_clipping(request):
 
         
 
-        # Generate new ID
+        # Check for client-supplied ID or idempotency key to prevent duplicate jobs from retries
+        client_clipping_id = data.get("id") or data.get("clipping_id")
+        if client_clipping_id:
+            try:
+                with connection.cursor() as cursor:
+                    cursor.execute("SELECT id, status, headline, template_id FROM clippings WHERE id = %s", [str(client_clipping_id)])
+                    existing = cursor.fetchone()
+                    if existing:
+                        existing_id, existing_status, existing_headline, existing_template_id = existing
+                        return JsonResponse({
+                            "success": True,
+                            "data": {
+                                "id": existing_id,
+                                "status": existing_status,
+                                "headline": existing_headline or headline,
+                                "template_id": existing_template_id or template_id
+                            },
+                            "message": f"Clipping generation status: {existing_status}"
+                        })
+            except Exception as e:
+                print(f"[IDEMPOTENCY CHECK ERROR] {e}")
 
-        clipping_id = str(uuid.uuid4())
+        clipping_id = str(client_clipping_id) if client_clipping_id else str(uuid.uuid4())
 
         
 

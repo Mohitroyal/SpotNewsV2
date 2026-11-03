@@ -74,6 +74,9 @@ class GrokService:
 
         """
 
+        if not content or not str(content).strip():
+            raise ValueError("Article content is required and cannot be empty.")
+
         full_lang = language_map.get(language.lower(), "Telugu")
 
         
@@ -139,33 +142,23 @@ class GrokService:
         self.api_key = (os.getenv("GROK_API_KEY") or os.getenv("GROQ_API_KEY") or "").strip()
 
         is_groq = bool(self.api_key and self.api_key.startswith("gsk_"))
+        env_model = (os.getenv("GROQ_MODEL") or os.getenv("GROK_MODEL") or "").strip()
 
         if is_groq:
-
-            models_to_try = [
-
-                "llama-3.3-70b-versatile",
-
-                "llama-3.1-8b-instant",
-
-                "gemma2-9b-it",
-
-            ]
-
+            if env_model:
+                models_to_try = [env_model]
+            else:
+                models_to_try = [
+                    "llama-3.3-70b-versatile",
+                    "llama-3.1-8b-instant",
+                ]
         else:
-
-            models_to_try = ["grok-2-latest", "grok-2", "grok-beta"]
-
-
+            models_to_try = [env_model] if env_model else ["grok-2-latest", "grok-2", "grok-beta"]
 
         normalized = None
-
         import asyncio
-
         for model in models_to_try:
-
             payload["model"] = model
-
             url = "https://api.groq.com/openai/v1/chat/completions" if is_groq else self.base_url
 
             headers = {
@@ -212,7 +205,10 @@ class GrokService:
 
                     err_msg += f" | {e.response.text[:200]}"
 
-                print(f"[WARNING] Model {model} failed: {err_msg}")
+                status_code = getattr(getattr(e, "response", None), "status_code", None)
+                print(f"[WARNING] Model {model} failed (status {status_code}): {err_msg}")
+                if status_code in (401, 403, 404):
+                    continue
 
                 await asyncio.sleep(0.3)
 
