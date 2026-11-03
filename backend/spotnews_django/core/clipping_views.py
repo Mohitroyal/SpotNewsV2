@@ -36,6 +36,8 @@ from .services.storage_service import storage_service
 
 
 
+_INSTANCE_GENERATION_SEMAPHORE = threading.Semaphore(1)
+
 def run_clipping_generation_background(clipping_id, data, user_id):
 
     """
@@ -50,6 +52,23 @@ def run_clipping_generation_background(clipping_id, data, user_id):
     temp_overlay = f"temp_overlay_{clipping_id}.png"
     render_data = {}
     template_id = str(data.get("template_id") or "classic").strip()
+
+    # Bounded single-job execution: allow only ONE active heavyweight generation per instance
+    acquired = _INSTANCE_GENERATION_SEMAPHORE.acquire(timeout=180.0)
+    if not acquired:
+        err_msg = "Server busy: Generation queue timeout. Another clipping is currently rendering. Please retry."
+        print(f"[CONCURRENCY] Clipping {clipping_id} rejected: instance generation slot occupied.")
+        try:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    "UPDATE clippings SET status = %s, custom_layout = %s::jsonb WHERE id = %s",
+                    ['failed', json.dumps({"error": err_msg, "stage": "Server Busy"}), clipping_id]
+                )
+                if not connection.in_atomic_block:
+                    connection.commit()
+        except Exception:
+            pass
+        return
 
 
     try:
@@ -964,6 +983,21 @@ def run_clipping_generation_background(clipping_id, data, user_id):
                     os.remove(p)
             except Exception:
                 pass
+        try:
+            import gc
+            gc.collect()
+        except Exception:
+            pass
+        try:
+            import ctypes
+            libc = ctypes.CDLL("libc.so.6")
+            libc.malloc_trim(0)
+        except Exception:
+            pass
+        try:
+            _INSTANCE_GENERATION_SEMAPHORE.release()
+        except Exception:
+            pass
 
 
 

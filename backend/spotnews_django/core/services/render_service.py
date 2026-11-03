@@ -40,64 +40,137 @@ _RENDER_PROCESS_LOCK = threading.Lock()
 
 
 
-def _get_peak_memory() -> float:
-
-    """Return peak memory usage (max RSS) in MB."""
-
-    if sys.platform != 'win32':
-
-        import resource
-
-        return resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1024.0
-
-    else:
-
+def get_total_system_memory() -> dict:
+    """
+    Measures total container memory (cgroup v1/v2) and full process tree RSS
+    (including Gunicorn master, worker, Playwright Chromium, and FFmpeg).
+    """
+    # 1. cgroup v2 (modern Linux & Render container runtime)
+    if os.path.exists('/sys/fs/cgroup/memory.current'):
         try:
-
-            process = psutil.Process(os.getpid())
-
-            return getattr(process.memory_info(), 'peak_wset', 0) / (1024 * 1024)
-
+            with open('/sys/fs/cgroup/memory.current', 'r') as f:
+                usage_bytes = int(f.read().strip())
+            peak_bytes = usage_bytes
+            if os.path.exists('/sys/fs/cgroup/memory.peak'):
+                try:
+                    with open('/sys/fs/cgroup/memory.peak', 'r') as pf:
+                        peak_bytes = int(pf.read().strip())
+                except Exception:
+                    pass
+            limit_bytes = 512 * 1024 * 1024
+            if os.path.exists('/sys/fs/cgroup/memory.max'):
+                try:
+                    with open('/sys/fs/cgroup/memory.max', 'r') as lf:
+                        val = lf.read().strip()
+                        if val != 'max':
+                            limit_bytes = int(val)
+                except Exception:
+                    pass
+            return {
+                "source": "cgroup_v2",
+                "current_mb": round(usage_bytes / (1024 * 1024), 2),
+                "peak_mb": round(peak_bytes / (1024 * 1024), 2),
+                "limit_mb": round(limit_bytes / (1024 * 1024), 2),
+            }
         except Exception:
+            pass
 
-            return 0.0
+    # 2. cgroup v1
+    if os.path.exists('/sys/fs/cgroup/memory/memory.usage_in_bytes'):
+        try:
+            with open('/sys/fs/cgroup/memory/memory.usage_in_bytes', 'r') as f:
+                usage_bytes = int(f.read().strip())
+            peak_bytes = usage_bytes
+            if os.path.exists('/sys/fs/cgroup/memory/memory.max_usage_in_bytes'):
+                try:
+                    with open('/sys/fs/cgroup/memory/memory.max_usage_in_bytes', 'r') as pf:
+                        peak_bytes = int(pf.read().strip())
+                except Exception:
+                    pass
+            limit_bytes = 512 * 1024 * 1024
+            if os.path.exists('/sys/fs/cgroup/memory/memory.limit_in_bytes'):
+                try:
+                    with open('/sys/fs/cgroup/memory/memory.limit_in_bytes', 'r') as lf:
+                        limit_bytes = int(lf.read().strip())
+                except Exception:
+                    pass
+            return {
+                "source": "cgroup_v1",
+                "current_mb": round(usage_bytes / (1024 * 1024), 2),
+                "peak_mb": round(peak_bytes / (1024 * 1024), 2),
+                "limit_mb": round(limit_bytes / (1024 * 1024), 2),
+            }
+        except Exception:
+            pass
+
+    # 3. Process tree fallback (process + Chromium + FFmpeg children)
+    try:
+        proc = psutil.Process(os.getpid())
+        root = proc
+        try:
+            parent = proc.parent()
+            if parent and 'gunicorn' in parent.name().lower():
+                root = parent
+        except Exception:
+            pass
+        procs = [root] + root.children(recursive=True)
+        total_rss = sum(p.memory_info().rss for p in procs)
+        cur_mb = round(total_rss / (1024 * 1024), 2)
+        global _PEAK_OBSERVED_TOTAL_MB
+        if '_PEAK_OBSERVED_TOTAL_MB' not in globals():
+            _PEAK_OBSERVED_TOTAL_MB = cur_mb
+        else:
+            _PEAK_OBSERVED_TOTAL_MB = max(_PEAK_OBSERVED_TOTAL_MB, cur_mb)
+        return {
+            "source": "process_tree",
+            "current_mb": cur_mb,
+            "peak_mb": round(_PEAK_OBSERVED_TOTAL_MB, 2),
+            "limit_mb": 512.0,
+            "proc_count": len(procs),
+        }
+    except Exception:
+        proc_rss = psutil.Process(os.getpid()).memory_info().rss / (1024 * 1024)
+        return {
+            "source": "process_rss",
+            "current_mb": round(proc_rss, 2),
+            "peak_mb": round(proc_rss, 2),
+            "limit_mb": 512.0,
+        }
 
 
-
+def _get_peak_memory() -> float:
+    """Return peak memory usage in MB."""
+    mem = get_total_system_memory()
+    return mem.get("peak_mb", 0.0)
 
 
 def _log_memory(stage: str):
-
-    """Log current and peak memory usage in MB."""
-
+    """Log current and peak memory usage across container and processes."""
     try:
+        mem = get_total_system_memory()
+        proc = psutil.Process(os.getpid())
+        proc_rss = proc.memory_info().rss / (1024 * 1024)
+        cur_mb = mem.get("current_mb", proc_rss)
+        peak_mb = mem.get("peak_mb", cur_mb)
+        limit_mb = mem.get("limit_mb", 512.0)
+        source = mem.get("source", "unknown")
 
-        process = psutil.Process(os.getpid())
-
-        current_mem = process.memory_info().rss / (1024 * 1024)
-
-        peak_mem = _get_peak_memory()
-
-        print(f"[MEMORY] {stage} - Current RSS: {current_mem:.2f} MB | Peak RSS: {peak_mem:.2f} MB")
-
+        print(f"[MEMORY] {stage} | Container/Tree: {cur_mb:.1f} MB (Peak: {peak_mb:.1f} MB, Limit: {limit_mb:.0f} MB, Source: {source}) | Python RSS: {proc_rss:.1f} MB")
         sys.stdout.flush()
 
-        if current_mem > 450:
-
-            print("[MEMORY WARNING] Memory usage is critically high! Approaching Render Free limit.")
-
+        if cur_mb > 420:
+            print(f"[MEMORY WARNING] Total usage ({cur_mb:.1f} MB) approaching Render 512MB limit! Triggering immediate GC.")
             sys.stdout.flush()
-
             gc.collect()
-
+            try:
+                import ctypes
+                libc = ctypes.CDLL("libc.so.6")
+                libc.malloc_trim(0)
+            except Exception:
+                pass
     except Exception as e:
-
         print(f"[MEMORY LOG ERROR] Failed to log memory: {e}")
-
         sys.stdout.flush()
-
-
-
 
 
 def _get_chromium_executable() -> Optional[str]:
@@ -3687,9 +3760,13 @@ class RenderService:
 
                     "--renderer-process-limit=1",
 
+                    "--single-process",
+
+                    "--in-process-gpu",
+
                     "--single-process-network-service",
 
-                    "--js-flags=--max-old-space-size=48",
+                    "--js-flags=--max-old-space-size=32",
 
                     "--disk-cache-size=1",
 
