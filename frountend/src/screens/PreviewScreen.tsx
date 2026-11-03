@@ -25,43 +25,29 @@ import rtiExpressLogo from '@/assets/rti_express_logo.png';
 // ─── Stage → Progress mapping ───────────────────────────────────────────────
 
 const STAGE_PROGRESS: Record<string, number> = {
-
   'initialization':           5,
-
   'Image Processing':         15,
-
+  'Formatting Article with AI...': 15,
   'Content Generation':       30,
-
   'Translation':              35,
-
   'Database Save (rendering)':40,
-
   'Template Selection':       45,
-
   'HTML Generation':          55,
-
   'Screenshot Generation':    70,
-
   'Font Loading':             72,
-
   'Playwright Launch':        74,
-
+  'Uploading images to storage...': 75,
   'PNG Screenshot Creation':  80,
-
   'Supabase Upload (PNG)':    85,
-
   'PDF Generation':           88,
-
   'PDF Creation':             90,
-
+  'Generating Video (This takes 1-2 minutes)...': 90,
   'Supabase Upload (PDF)':    93,
-
   'Database Save (completed)':97,
-
   'Email Notification':       99,
-
   'Final Response':           100,
-
+  'Complete':                 100,
+  'Generation Completed':     100,
 };
 
 
@@ -112,16 +98,22 @@ export const PreviewScreen = () => {
 
 
 
-  // Fetch from Supabase directly on mount if not in memory or if output (png_url) is missing
+  // Fetch from Supabase / Backend directly on mount if not in memory or if output (png_url) is missing or not marked completed
   useEffect(() => {
     if (!id) return;
-    if (!generation || !generation.png_url) {
+    if (!generation || !generation.png_url || generation.status !== 'completed') {
       generationService.getById(id).then((res: any) => {
         const item = res?.data || res;
         if (item && item.id) {
-          const hasOutput = Boolean(item.png_url);
-          const progress = hasOutput ? 100 : (item.progress ?? (item.custom_layout?.progress ?? 15));
-          const updatedItem = { ...item, progress };
+          const isCompleted = item.status === 'completed' || Boolean(item.png_url);
+          const progress = isCompleted ? 100 : (item.progress ?? (item.custom_layout?.progress ?? 15));
+          const stage = isCompleted ? 'Generation Completed' : (item.stage || 'Processing newspaper layout');
+          const updatedItem = {
+            ...item,
+            status: isCompleted ? 'completed' : item.status,
+            stage,
+            progress
+          };
           if (!generation) {
             addGeneration(updatedItem);
           } else {
@@ -130,7 +122,7 @@ export const PreviewScreen = () => {
         }
       }).catch(err => console.warn("Direct fetch error:", err));
     }
-  }, [id, generation?.id, generation?.png_url, addGeneration, updateGeneration]);
+  }, [id, generation?.id, generation?.png_url, generation?.status, addGeneration, updateGeneration]);
 
 
 
@@ -578,29 +570,29 @@ export const PreviewScreen = () => {
 
           consecFailRef.current = 0;
 
-
-
-          // Track live stage for progress bar
-
-          const stage = generationData.stage || generationData.current_stage || liveStage;
-
-          if (stage) setLiveStage(stage);
-
-
-
           // Compute progress from stage map
 
-          const hasOutput = Boolean(generationData.png_url);
-          const progress = hasOutput ? 100 : (generationData.progress ?? getProgress(stage));
+          const isCompleted = generationData.status === 'completed' || Boolean(generationData.png_url);
+          const isFailed = generationData.status === 'failed' || Boolean(generationData.error);
 
-          updateGeneration(generation.id, { ...generationData, progress });
+          const stage = isCompleted ? 'Generation Completed' : (generationData.stage || generationData.current_stage || liveStage || 'Processing newspaper layout');
+          setLiveStage(stage);
 
-          console.log(`[POLL] #${attempt} | status=${generationData.status} | stage=${stage} | progress=${progress}% | hasOutput=${hasOutput}`);
+          const progress = isCompleted ? 100 : (generationData.progress ?? getProgress(stage));
+
+          const updatedGen = {
+            ...generationData,
+            status: isFailed ? 'failed' : (isCompleted ? 'completed' : (generationData.status || 'processing')),
+            stage,
+            progress
+          };
+
+          updateGeneration(generation.id, updatedGen);
+
+          console.log(`[POLL] #${attempt} | status=${updatedGen.status} | stage=${stage} | progress=${progress}% | isCompleted=${isCompleted}`);
 
           // Only terminate polling when the composed output file is ready OR when generation explicitly failed.
-          // Moderation approval (status: approved/pending_approval) must NOT prematurely terminate polling!
-          const isDone = hasOutput || generationData.status === 'failed' || Boolean(generationData.error);
-          if (isDone) {
+          if (isCompleted || isFailed) {
             clearInterval(intervalRef.current!);
             clearInterval(elapsedTimerRef.current!);
           }
@@ -927,9 +919,9 @@ export const PreviewScreen = () => {
 
             {/* STATUS TEXT */}
 
-            <h2 className="text-[#0a1a2e] font-bold text-[16px] mb-1 text-center" style={{ fontFamily: 'Georgia, serif' }}>Publishing</h2>
+            <h2 className="text-[#0a1a2e] font-bold text-[16px] mb-1 text-center" style={{ fontFamily: 'Georgia, serif' }}>{progressPercent >= 100 ? 'Generation Completed' : 'Publishing'}</h2>
 
-            <p className="text-[#a0c4dc] text-[10px] font-medium mb-3 text-center">Processing newspaper layout</p>
+            <p className="text-[#a0c4dc] text-[10px] font-medium mb-3 text-center">{progressPercent >= 100 ? 'Generation Completed' : (liveStage || generation.stage || 'Processing newspaper layout')}</p>
 
             <div className="text-[#cc2222] font-bold text-[28px] mb-6 tracking-tight drop-shadow-sm transition-all duration-300 transform scale-105">{progressPercent}%</div>
 

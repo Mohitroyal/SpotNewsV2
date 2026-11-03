@@ -1095,9 +1095,19 @@ class RenderService:
 
             {custom_border_css}
 
-            .article-content, .paragraph {{
+            .article-content, .paragraph, .nc-text-region-box p, #compositor-canvas p {{
 
-                text-align: left !important;
+                text-align: justify !important;
+
+                text-justify: inter-word !important;
+
+                text-align-last: left !important;
+
+                letter-spacing: -0.15px !important;
+
+                margin-bottom: 4px !important;
+
+                line-height: 1.25 !important;
 
             }}
 
@@ -1389,13 +1399,33 @@ class RenderService:
 
                     const img = new Image();
 
-                    img.onload = () => resolve({ width: img.naturalWidth || 800, height: img.naturalHeight || 600 });
+                    const timer = setTimeout(() => {
 
-                    img.onerror = () => resolve({ width: 800, height: 600 });
+                        resolve({ width: img.naturalWidth || 800, height: img.naturalHeight || 600 });
+
+                    }, 4000);
+
+                    img.onload = () => {
+
+                        clearTimeout(timer);
+
+                        resolve({ width: img.naturalWidth || 800, height: img.naturalHeight || 600 });
+
+                    };
+
+                    img.onerror = () => {
+
+                        clearTimeout(timer);
+
+                        resolve({ width: 800, height: 600 });
+
+                    };
 
                     img.src = url;
 
                     if (img.complete && img.naturalWidth) {
+
+                        clearTimeout(timer);
 
                         resolve({ width: img.naturalWidth, height: img.naturalHeight });
 
@@ -1563,27 +1593,7 @@ class RenderService:
 
                     }
 
-                    const isDoublePatternB = (urls.length === 2) && (
-
-                        rawLayout.includes('patternc') ||
-
-                        rawLayout.includes('patternb') ||
-
-                        rawLayout.includes('patterna') ||
-
-                        rawLayout.includes('double') ||
-
-                        rawLayout.includes('two') ||
-
-                        rawLayout.includes('dual') ||
-
-                        rawLayout === "default" ||
-
-                        rawLayout === "" ||
-
-                        rawLayout === "auto"
-
-                    );
+                    const isDoublePatternB = (urls.length === 2) && !rawLayout.includes('patternd');
 
                     const isTriplePatternB = isPatternB && urls.length >= 3;
 
@@ -2050,7 +2060,7 @@ class RenderService:
 
                 
 
-                const G = 24; // Column gap in pixels
+                const G = 14; // Column gap in pixels
 
                 const W_col = (W_canvas - (N - 1) * G) / N;
 
@@ -2208,13 +2218,13 @@ class RenderService:
 
                     return {
 
-                        x: obs.x - 8,
+                        x: obs.x - 2,
 
-                        y: obs.y - 8,
+                        y: obs.y - 2,
 
-                        w: obs.w + 16,
+                        w: obs.w + 4,
 
-                        h: obs.h + 16
+                        h: obs.h + 2
 
                     };
 
@@ -2224,7 +2234,7 @@ class RenderService:
 
                 const rawLayoutStr = String(data.image_layout || "default").toLowerCase().replace(/[^a-z]/g, "");
 
-                if (urls.length === 2 && !rawLayoutStr.includes('patternd') && (rawLayoutStr.includes('patternc') || rawLayoutStr.includes('patterna') || rawLayoutStr.includes('patternb') || rawLayoutStr === 'default' || rawLayoutStr === '')) {
+                if (urls.length === 2 && !rawLayoutStr.includes('patternd')) {
 
                     let maxH = 0;
 
@@ -2242,13 +2252,13 @@ class RenderService:
 
                         inflatedObstacles.push({
 
-                            x: -12,
+                            x: -4,
 
-                            y: -12,
+                            y: -4,
 
-                            w: W_canvas + 24,
+                            w: W_canvas + 8,
 
-                            h: maxH + 24
+                            h: maxH + 2
 
                         });
 
@@ -2536,7 +2546,7 @@ class RenderService:
 
                         intervals.forEach(int => {
 
-                            const h = int.yEnd - int.yStart;
+                            const h = Math.floor(int.yEnd - int.yStart);
 
                             if (h < 24 || int.w < 40) return;
 
@@ -2678,6 +2688,14 @@ class RenderService:
 
                     p.style.textAlign = 'justify';
 
+                    p.style.textJustify = 'inter-word';
+
+                    p.style.textAlignLast = 'left';
+
+                    p.style.letterSpacing = '-0.15px';
+
+                    p.style.wordSpacing = 'normal';
+
                     p.style.wordBreak = 'break-word';
 
                     p.style.overflowWrap = 'break-word';
@@ -2696,7 +2714,7 @@ class RenderService:
 
                         } else {
 
-                            if (activeRegion.rBox.scrollHeight > activeRegion.height) {
+                            if (activeRegion.rBox.scrollHeight > Math.round(activeRegion.height) + 2) {
 
                                 return false; // Overflowed the final column in search mode
 
@@ -2712,7 +2730,7 @@ class RenderService:
 
                     
 
-                    if (activeRegion.rBox.scrollHeight > activeRegion.height) {
+                    if (activeRegion.rBox.scrollHeight > Math.round(activeRegion.height) + 2) {
 
                         activeRegion.rBox.removeChild(p);
 
@@ -2736,7 +2754,7 @@ class RenderService:
 
                             testP.innerText = words.slice(0, midW).join(' ');
 
-                            if (activeRegion.rBox.scrollHeight <= activeRegion.height) {
+                            if (activeRegion.rBox.scrollHeight <= Math.round(activeRegion.height) + 2) {
 
                                 fitCount = midW;
 
@@ -2782,7 +2800,7 @@ class RenderService:
 
                                 testCharP.innerText = chars.slice(0, cIdx + 1).join('');
 
-                                if (activeRegion.rBox.scrollHeight > activeRegion.height) break;
+                                if (activeRegion.rBox.scrollHeight > Math.round(activeRegion.height) + 2) break;
 
                             }
 
@@ -3092,7 +3110,7 @@ class RenderService:
 
                             <div style="font-weight: 800; font-size: 15px; text-transform: uppercase; color: ${sumHeadingColor}; margin-bottom: 8px; letter-spacing: 0.5px;">${sumTitle}</div>
 
-                            <div style="font-size: 14px; line-height: 1.6; color: ${sumTextColor}; text-align: justify;">${data.summary}</div>
+                            <div style="font-size: 14px; line-height: 1.6; color: ${sumTextColor}; text-align: left; text-justify: none;">${data.summary}</div>
 
                         </div>
 
@@ -3176,7 +3194,7 @@ class RenderService:
 
                 const N = resolveColumns(data.layout_columns, totalChars);
 
-                const W_col = (W_canvas - (N - 1) * 24) / N;
+                const W_col = (W_canvas - (N - 1) * 14) / N;
 
                 const canvasTop = canvas.getBoundingClientRect().top + window.scrollY;
 
@@ -3218,7 +3236,7 @@ class RenderService:
 
                     for (let c = 0; c < N; c++) {
 
-                        const L_c = c * (W_col + 24);
+                        const L_c = c * (W_col + 14);
 
                         const R_c = L_c + W_col;
 
@@ -3240,9 +3258,9 @@ class RenderService:
 
                 const estFontSize = Math.sqrt(Math.max(100000, N * W_col * H_avail - blockedArea) / (totalChars * 0.54));
 
-                const maxFontSize = (urls.length > 2 && totalChars < 2500) ? 23.0 : 21.0;
+                const maxFontSize = (totalChars > 2200) ? 16.5 : (totalChars > 1300 ? 18.0 : (totalChars > 800 ? 19.0 : 20.5));
 
-                const conf = { fontSize: Math.min(maxFontSize, estFontSize), lineHeight: 1.28, paraMargin: 8, imgMaxPct: 0.58, padding: 32 };
+                const conf = { fontSize: Math.min(maxFontSize, estFontSize), lineHeight: 1.25, paraMargin: 4, imgMaxPct: 0.58, padding: 32 };
 
 
 

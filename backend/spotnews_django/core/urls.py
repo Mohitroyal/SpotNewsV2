@@ -14,7 +14,7 @@ from .daily_newspaper_views import (
     serve_edition_pdf
 )
 
-from .clipping_views import create_clipping, list_clippings, upload_image
+from .clipping_views import create_clipping, list_clippings, upload_image, get_clipping_status
 from .reporter_payment_views import (
     get_payment_config,
     create_payment_order,
@@ -75,6 +75,8 @@ urlpatterns = [
     # Fast-API style Individual Clipping Generation Endpoints
     path('v1/generate', create_clipping, name='create_clipping'),
     path('v1/generate/', list_clippings, name='list_clippings'),
+    path('v1/generate/<str:clipping_id>', get_clipping_status, name='get_clipping_status'),
+    path('v1/generate/<str:clipping_id>/', get_clipping_status),
     path('v1/uploads/image', upload_image, name='upload_image'),
 
     # Push Notification Endpoints (FCM HTTP v1)

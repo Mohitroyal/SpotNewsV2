@@ -605,105 +605,93 @@ export const generationService = {
 
 
   async getById(id: string): Promise<ApiResponse<Generation>> {
-
+    // 1. Try dedicated Backend Status API endpoint directly (uncached ground truth)
     try {
-
-      const { data: clip, error } = await publicClient
-
-        .from("clippings")
-
-        .select("*")
-
-        .eq("id", id)
-
-        .maybeSingle();
-
-
-
-      if (!error && clip) {
-
-        return {
-
-          success: true,
-
-          data: {
-
-            id: clip.id,
-
-            userId: clip.user_id,
-
-            png_url: clip.png_url,
-
-            pngUrl: clip.png_url,
-
-            pdf_url: clip.pdf_url,
-
-            pdfUrl: clip.pdf_url,
-
-            mp4_url: clip.mp4_url || clip.custom_layout?.mp4_url,
-
-            mp4Url: clip.mp4_url || clip.custom_layout?.mp4_url,
-
-            stage: clip.custom_layout?.stage,
-
-            progress: clip.png_url ? 100 : (clip.custom_layout?.progress ?? 0),
-
-            error: clip.custom_layout?.error,
-
-            message: clip.custom_layout?.error,
-
-            headline: clip.headline,
-
-            articleContent: clip.article_content,
-
-            custom_layout: clip.custom_layout,
-
-            config: {
-
-              headline: clip.headline,
-
-              articleContent: clip.article_content,
-
-              imageUrls: clip.image_urls || (clip.image_url ? [clip.image_url] : []),
-
-              videoUrl: clip.mp4_url || clip.custom_layout?.mp4_url || clip.custom_layout?.videoUrl,
-
-              reporterName: clip.custom_layout?.reporterName,
-
-              language: clip.language || "en",
-
-              tone: clip.tone || "formal",
-
-              templateId: clip.template_id || "classic-split",
-
-              publicationName: clip.publication_name || "Spot News 24x7",
-
-              publicationDate: new Date(clip.created_at).toLocaleDateString(),
-
-              layoutColumns: clip.layout_columns || 1
-
-            },
-
-            status: clip.status as any,
-
-            createdAt: clip.created_at,
-
-          },
-
-          message: "Generation retrieved successfully"
-
-        };
-
+      const endpoints = [
+        `https://spotnewsv2.onrender.com/api/v1/generate/${id}`,
+        `https://spotnewsv2.onrender.com/v1/generate/${id}`
+      ];
+      for (const endpoint of endpoints) {
+        try {
+          const fetchRes = await fetch(endpoint, {
+            headers: {
+              'Cache-Control': 'no-cache, no-store, must-revalidate',
+              'Pragma': 'no-cache',
+            }
+          });
+          if (fetchRes.ok) {
+            const resJson = await fetchRes.json();
+            const genData = resJson.data || resJson;
+            if (genData?.id) {
+              return {
+                success: true,
+                data: genData as Generation,
+                message: resJson.message || "Generation retrieved successfully"
+              };
+            }
+          }
+        } catch {}
       }
-
     } catch {}
 
+    // 2. Direct Supabase Query as resilient fallback
+    try {
+      const { data: clip, error } = await publicClient
+        .from("clippings")
+        .select("*")
+        .eq("id", id)
+        .maybeSingle();
 
+      if (!error && clip) {
+        const hasPng = Boolean(clip.png_url && clip.png_url.trim().length > 0);
+        const isFailed = clip.status === 'failed' || Boolean(clip.custom_layout?.error);
+        const genStatus = isFailed ? 'failed' : (hasPng ? 'completed' : (clip.custom_layout?.generation_status || (['processing', 'rendering'].includes(clip.status) ? 'processing' : 'completed')));
+        const progress = hasPng ? 100 : (clip.custom_layout?.progress ?? (genStatus === 'completed' ? 100 : 15));
+        const stage = hasPng ? 'Generation Completed' : (clip.custom_layout?.stage || 'Processing newspaper layout');
+
+        return {
+          success: true,
+          data: {
+            id: clip.id,
+            userId: clip.user_id,
+            png_url: clip.png_url,
+            pngUrl: clip.png_url,
+            pdf_url: clip.pdf_url,
+            pdfUrl: clip.pdf_url,
+            mp4_url: clip.mp4_url || clip.custom_layout?.mp4_url,
+            mp4Url: clip.mp4_url || clip.custom_layout?.mp4_url,
+            stage: stage,
+            progress: progress,
+            error: clip.custom_layout?.error,
+            message: clip.custom_layout?.error,
+            headline: clip.headline,
+            articleContent: clip.article_content,
+            custom_layout: clip.custom_layout,
+            config: {
+              headline: clip.headline,
+              articleContent: clip.article_content,
+              imageUrls: clip.image_urls || (clip.image_url ? [clip.image_url] : []),
+              videoUrl: clip.mp4_url || clip.custom_layout?.mp4_url || clip.custom_layout?.videoUrl,
+              reporterName: clip.custom_layout?.reporterName,
+              language: clip.language || "en",
+              tone: clip.tone || "formal",
+              templateId: clip.template_id || "classic-split",
+              publicationName: clip.publication_name || "Spot News 24x7",
+              publicationDate: new Date(clip.created_at).toLocaleDateString(),
+              layoutColumns: clip.layout_columns || 1
+            },
+            status: genStatus as any,
+            approval_status: clip.status,
+            is_posted: Boolean(clip.is_posted),
+            createdAt: clip.created_at,
+          },
+          message: "Generation retrieved successfully"
+        };
+      }
+    } catch {}
 
     const res = await api.get<ApiResponse<Generation>>(`/api/v1/generate/${id}`);
-
     return res.data;
-
   },
 
 
