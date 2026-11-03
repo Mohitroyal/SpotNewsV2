@@ -7,6 +7,7 @@ import { Filesystem, Directory } from "@capacitor/filesystem";
 import { Share } from "@capacitor/share";
 import { Clipboard } from "@capacitor/clipboard";
 import { supabase } from "@/lib/supabase";
+import { newsLink, shareCaption } from "./links";
 
 export type Channel = "whatsapp" | "instagram" | "facebook" | "x" | "other";
 
@@ -25,11 +26,37 @@ const TargetShare = registerPlugin<TargetSharePlugin>("TargetShare");
 
 /** Render an off-screen card element (ReporterCard) to a JPEG data URL at its real size (1080 px wide). */
 export async function nodeToImage(node: HTMLElement) {
-  await document.fonts.ready;
-  return toJpeg(node, { quality: 0.93, pixelRatio: 1, cacheBust: true, style: { left: "0", position: "static" } });
+  try {
+    await Promise.race([
+      document.fonts?.ready ?? Promise.resolve(),
+      new Promise((r) => setTimeout(r, 400)),
+    ]);
+  } catch {}
+  return toJpeg(node, {
+    quality: 0.9,
+    pixelRatio: 1,
+    cacheBust: false,
+    style: { left: "0", position: "static" },
+  });
 }
 
+const uriCache: Record<string, string> = {};
+
 async function saveToCache(dataUrl: string, name: string) {
+  if (uriCache[dataUrl]) {
+    try {
+      const stat = await Filesystem.stat({
+        directory: Directory.Cache,
+        path: name,
+      });
+      if (stat && stat.size > 0) {
+        return uriCache[dataUrl];
+      }
+    } catch {
+      delete uriCache[dataUrl];
+    }
+  }
+
   let base64 = "";
   if (dataUrl.startsWith("http://") || dataUrl.startsWith("https://")) {
     try {
@@ -43,9 +70,12 @@ async function saveToCache(dataUrl: string, name: string) {
           directory: Directory.Cache,
           path: name,
         });
+        uriCache[dataUrl] = uriResult.uri;
         return uriResult.uri;
       } catch {
-        return dlResult.path || "";
+        const rPath = dlResult.path || "";
+        uriCache[dataUrl] = rPath;
+        return rPath;
       }
     } catch (dlErr) {
       console.warn("downloadFile failed, fallback to fetch blob:", dlErr);
@@ -71,15 +101,16 @@ async function saveToCache(dataUrl: string, name: string) {
     directory: Directory.Cache,
   });
 
+  let finalUri = writeRes.uri;
   try {
     const uriResult = await Filesystem.getUri({
       directory: Directory.Cache,
       path: name,
     });
-    return uriResult.uri;
-  } catch {
-    return writeRes.uri;
-  }
+    finalUri = uriResult.uri;
+  } catch {}
+  uriCache[dataUrl] = finalUri;
+  return finalUri;
 }
 
 export async function shareImage(o: {
@@ -130,8 +161,12 @@ export async function shareImage(o: {
     return;
   }
 
+  const isPng = o.dataUrl?.includes(".png") || o.dataUrl?.startsWith("data:image/png");
+  const ext = isPng ? "png" : "jpg";
+  const fileName = `rti_${o.kind}_${o.postId || "post"}.${ext}`;
+
   const uri = o.dataUrl
-    ? await saveToCache(o.dataUrl, `rti_${o.kind}_${Date.now()}.jpg`)
+    ? await saveToCache(o.dataUrl, fileName)
     : undefined;
 
   // Instagram ignores captions → copy the caption + link so the reporter can paste it
@@ -141,13 +176,15 @@ export async function shareImage(o: {
     } catch {}
   }
 
+  const mimeType = uri ? (isPng ? "image/png" : "image/jpeg") : "text/plain";
+
   if (o.channel !== "other") {
     try {
       await TargetShare.share({
         package: PACKAGES[o.channel],
         fileUri: uri,
         text: o.caption,
-        mime: uri ? "image/jpeg" : "text/plain",
+        mime: mimeType,
       });
       return;
     } catch {
@@ -341,3 +378,60 @@ export async function shareVideo(o: {
     dialogTitle: "వీడియో షేర్ చేయండి",
   });
 }
+
+/**
+ * Direct share of an approved clipping without showing any intermediary modal sheet.
+ * Shares media directly via native system share drawer.
+ */
+export async function directShareClipping(options: {
+  id: string | number;
+  headline?: string;
+  clippingUrl?: string;
+  videoUrl?: string;
+  reporterSlug?: string;
+  reporterId?: string;
+  status?: string;
+  is_posted?: boolean;
+}) {
+  // Enforce approval check if status / is_posted flags are present
+  if (options.status && options.status !== "approved" && !options.is_posted) {
+    alert("ఈ వార్తా క్లిప్పింగ్ జిల్లా అడ్మిన్ ఆమోదం తెలిపిన తర్వాతే షేర్ చేయవచ్చు.\n(Sharing is available only after Admin Approval).");
+    return;
+  }
+
+  const headline = options.headline || "Spot News 24x7 - తాజా వార్తలు";
+  const link = newsLink(options.id, options.reporterSlug);
+  const caption = shareCaption(headline, link);
+
+  // 1. Direct video share
+  if (options.videoUrl) {
+    await shareVideo({
+      videoUrl: options.videoUrl,
+      caption,
+      channel: "other",
+      postId: options.id,
+      reporterId: options.reporterId,
+    });
+    return;
+  }
+
+  // 2. Direct clipping image share
+  if (options.clippingUrl) {
+    await shareImage({
+      dataUrl: options.clippingUrl,
+      caption,
+      channel: "other",
+      kind: "clipping",
+      postId: options.id,
+      reporterId: options.reporterId,
+    });
+    return;
+  }
+
+  // 3. Fallback: text + deep link
+  await Share.share({
+    text: caption,
+    dialogTitle: "షేర్ చేయండి",
+  });
+}
+

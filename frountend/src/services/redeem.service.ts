@@ -1,4 +1,13 @@
-import { supabase } from '@/lib/supabase';
+export interface TopReporter {
+  rank: number;
+  reporter_id: string;
+  name: string;
+  avatar_url?: string;
+  email?: string;
+  eligible_count: number;
+}
+
+import { supabase, publicClient } from '@/lib/supabase';
 
 export interface RedeemRequest {
   id: string;
@@ -29,12 +38,32 @@ export interface CreateRedeemPayload {
 
 export const redeemService = {
   /**
+   * Fetch top 10 reporters for 'week' or 'month' ranked by accepted and feed-published clippings.
+   */
+  async fetchTopReporters(period: 'week' | 'month' = 'week'): Promise<TopReporter[]> {
+    try {
+      const { data, error } = await publicClient.rpc('get_top_reporters_rpc', {
+        p_period: period,
+      });
+      if (error) {
+        console.error('[RedeemService] Error fetching top reporters:', error);
+        return [];
+      }
+      return (data || []) as TopReporter[];
+    } catch (e) {
+      console.error('[RedeemService] Exception fetching top reporters:', e);
+      return [];
+    }
+  },
+
+
+  /**
    * Fetch all redemption requests submitted by a specific user.
    */
   async fetchUserRedeems(userId: string): Promise<RedeemRequest[]> {
     if (!userId) return [];
     try {
-      const { data, error } = await supabase
+      const { data, error } = await publicClient
         .from('redeem_requests')
         .select('*')
         .eq('user_id', userId)
@@ -59,7 +88,7 @@ export const redeemService = {
   async getUserDeductedCoins(userId: string): Promise<number> {
     if (!userId) return 0;
     try {
-      const { data, error } = await supabase
+      const { data, error } = await publicClient
         .from('redeem_requests')
         .select('coins_redeemed, status')
         .eq('user_id', userId)
@@ -81,6 +110,29 @@ export const redeemService = {
         return { success: false, error: 'Minimum 500 coins required to redeem.' };
       }
 
+      // 1. Authoritative Backend Validation via SECURITY DEFINER RPC
+      try {
+        const { data: rpcData, error: rpcErr } = await publicClient.rpc('submit_redeem_request_rpc', {
+          p_user_id: payload.userId,
+          p_coins: payload.coins,
+          p_amount_inr: payload.amountInr,
+          p_type: payload.type,
+          p_target_account: payload.targetAccount.trim(),
+          p_user_email: payload.userEmail || null,
+          p_user_name: payload.userName || null,
+          p_user_phone: payload.userPhone || null,
+        });
+
+        if (!rpcErr && rpcData) {
+          if (!rpcData.success) {
+            return { success: false, error: rpcData.error || 'Insufficient eligible coin balance.' };
+          }
+          return { success: true, data: rpcData.data as RedeemRequest };
+        }
+      } catch (rpcEx) {
+        console.warn('[RedeemService] RPC submit exception, fallback to direct insert:', rpcEx);
+      }
+
       const row = {
         user_id: payload.userId,
         user_email: payload.userEmail || null,
@@ -93,7 +145,7 @@ export const redeemService = {
         status: 'pending',
       };
 
-      const { data, error } = await supabase
+      const { data, error } = await publicClient
         .from('redeem_requests')
         .insert(row)
         .select()
@@ -126,7 +178,7 @@ export const redeemService = {
    */
   async fetchAllRedeemRequests(): Promise<RedeemRequest[]> {
     try {
-      const { data, error } = await supabase
+      const { data, error } = await publicClient
         .from('redeem_requests')
         .select('*')
         .order('created_at', { ascending: false });

@@ -1,3 +1,4 @@
+import { getAutoApproveReportersConfig } from '@/services/admin.service';
 import { useState, useEffect, useRef } from 'react';
 import { useAuthStore, saveReporterPhoto, saveReporterName, isAdminUser, isSuperAdminUser, getEffectiveReporterPhoto } from '@/store';
 import { authService } from '@/services/auth.service';
@@ -185,20 +186,34 @@ export const LoginScreen = ({ defaultTab: initialTabProp }: { defaultTab?: 'logi
         }
 
         try {
-          const { data: profile } = await supabase
-            .from('profiles')
-            .select('role')
-            .eq('id', userObj.id)
-            .single();
-          if (profile?.role) {
-            userObj.role = profile.role;
+          let profile: any = null;
+          if (userObj.id) {
+            const { data } = await supabase
+              .from('profiles')
+              .select('role, plan, district, state')
+              .eq('id', userObj.id)
+              .maybeSingle();
+            if (data) profile = data;
+          }
+          if (!profile && email) {
+            const { data } = await supabase
+              .from('profiles')
+              .select('role, plan, district, state')
+              .ilike('email', email.trim())
+              .maybeSingle();
+            if (data) profile = data;
+          }
+          if (profile?.role) userObj.role = profile.role;
+          if (profile?.plan) userObj.plan = profile.plan;
+          if (profile?.district) {
+            (userObj as any).district = profile.district;
+            useAuthStore.getState().setDistrict(profile.district);
+          }
+          if (profile?.state) {
+            (userObj as any).state = profile.state;
+            useAuthStore.getState().setUserState(profile.state);
           }
         } catch {}
-
-        if (isSuperAdminUser(userObj) || isSuperAdminUser(email)) {
-          userObj.role = 'superadmin';
-          userObj.plan = 'pro';
-        }
 
         const finalPhoto = getEffectiveReporterPhoto(email, [
           (userObj as any)?.avatarUrl,
@@ -351,19 +366,20 @@ export const LoginScreen = ({ defaultTab: initialTabProp }: { defaultTab?: 'logi
         try {
           const { data: profile } = await supabase
             .from('profiles')
-            .select('role')
+            .select('role, plan, district, state')
             .eq('id', userObj.id)
-            .single();
-          if (profile?.role) {
-            userObj.role = profile.role;
+            .maybeSingle();
+          if (profile?.role) userObj.role = profile.role;
+          if (profile?.plan) userObj.plan = profile.plan;
+          if (profile?.district) {
+            (userObj as any).district = profile.district;
+            useAuthStore.getState().setDistrict(profile.district);
+          }
+          if (profile?.state) {
+            (userObj as any).state = profile.state;
+            useAuthStore.getState().setUserState(profile.state);
           }
         } catch {}
-
-        userObj.phone_number = formattedPhone;
-        if (cleanDigits === '7668886666' || cleanDigits === '9346843889' || isSuperAdminUser(userObj) || isSuperAdminUser(formattedPhone)) {
-          userObj.role = 'superadmin';
-          userObj.plan = 'pro';
-        }
 
         const userEmail = (userObj.email || '').toLowerCase().trim();
         const finalPhoto = getEffectiveReporterPhoto(userEmail, [
@@ -434,7 +450,10 @@ export const LoginScreen = ({ defaultTab: initialTabProp }: { defaultTab?: 'logi
       }
 
       let actualRefNo = 'SNP-REF-' + Math.floor(100000 + Math.random() * 900000);
-      
+      const isAutoApprove = await getAutoApproveReportersConfig();
+      const initialStatus = isAutoApprove ? 'approved' : 'pending';
+      const reporterId = isAutoApprove ? ('RTI-REP-' + Math.floor(100000 + Math.random() * 900000)) : null;
+
       const { error: insertError } = await supabase.from('reporter_applications').insert([
         {
           name: applyForm.name.trim(),
@@ -442,11 +461,33 @@ export const LoginScreen = ({ defaultTab: initialTabProp }: { defaultTab?: 'logi
           phone: rawPhone,
           aadhar_card: applyForm.aadhar,
           press_id: applyForm.pressId,
-          status: 'pending',
+          status: initialStatus,
+          reporter_id: reporterId,
           state: applyForm.state,
-          district: applyForm.district
+          district: applyForm.district,
+          ...(isAutoApprove ? { approval_date: new Date().toISOString() } : {})
         }
       ]);
+
+      if (isAutoApprove) {
+        try {
+          await supabase
+            .from('profiles')
+            .update({
+              role: 'reporter',
+              state: applyForm.state,
+              district: applyForm.district
+            })
+            .eq('email', cleanEmail);
+
+          await supabase
+            .from('users')
+            .update({ role: 'reporter' })
+            .eq('email', cleanEmail);
+        } catch (updateErr) {
+          console.warn('Auto-approve profile update error:', updateErr);
+        }
+      }
 
       if (insertError) {
         const errMsg = insertError.message || '';
@@ -490,7 +531,11 @@ export const LoginScreen = ({ defaultTab: initialTabProp }: { defaultTab?: 'logi
       try { reporterApprovalService.saveMockApplication(appData); } catch (e) {}
 
       setSubmittedRefNo(actualRefNo);
-      setSuccessMsg('Your application has been submitted to the superadmin for approval.');
+      if (isAutoApprove) {
+        setSuccessMsg('🎉 Your reporter application has been automatically approved! You can now log in immediately.');
+      } else {
+        setSuccessMsg('Your application has been submitted to the superadmin for approval.');
+      }
       setApplyForm({ name: '', email: '', phone: '', aadhar: '', pressId: '', state: '', district: '', photo: '' });
     } catch (err: any) {
       setError(err.message || 'Failed to submit application.');
@@ -519,24 +564,45 @@ export const LoginScreen = ({ defaultTab: initialTabProp }: { defaultTab?: 'logi
           const userObj = { ...sessionData.session.user } as any;
           const googleEmail = (userObj?.email || '').toLowerCase().trim();
 
-          // 1. Check if Admin / Superadmin
-          if (isAdminUser(userObj) || isSuperAdminUser(userObj) || googleEmail === 'mohithroyal16450@gmail.com') {
-            try {
-              const { data: profile } = await supabase
+          // 1. Fetch full profile ground-truth directly from profiles table
+          try {
+            let profile: any = null;
+            if (userObj.id) {
+              const { data } = await supabase
                 .from('profiles')
-                .select('role')
+                .select('role, plan, district, state')
                 .eq('id', userObj.id)
-                .single();
-              if (profile?.role) {
-                userObj.role = profile.role;
-              }
-            } catch {}
-
-            if (isSuperAdminUser(userObj) || isSuperAdminUser(googleEmail)) {
-              userObj.role = 'superadmin';
-              userObj.plan = 'pro';
+                .maybeSingle();
+              if (data) profile = data;
             }
+            if (!profile && googleEmail) {
+              const { data } = await supabase
+                .from('profiles')
+                .select('role, plan, district, state')
+                .ilike('email', googleEmail)
+                .maybeSingle();
+              if (data) profile = data;
+            }
+            if (profile?.role) userObj.role = profile.role;
+            if (profile?.plan) userObj.plan = profile.plan;
+            if (profile?.district) {
+              (userObj as any).district = profile.district;
+              useAuthStore.getState().setDistrict(profile.district);
+            }
+            if (profile?.state) {
+              (userObj as any).state = profile.state;
+              useAuthStore.getState().setUserState(profile.state);
+            }
+          } catch {}
 
+          // 2. Check if Admin / Superadmin
+          if (
+            isAdminUser(userObj) ||
+            isSuperAdminUser(userObj) ||
+            userObj.role === 'admin' ||
+            userObj.role === 'superadmin' ||
+            googleEmail === 'mohithroyal16450@gmail.com'
+          ) {
             const finalPhoto = getEffectiveReporterPhoto(googleEmail, [
               userObj?.avatarUrl,
               userObj?.user_metadata?.avatar_url,
@@ -632,11 +698,6 @@ export const LoginScreen = ({ defaultTab: initialTabProp }: { defaultTab?: 'logi
               userObj.role = profile.role;
             }
           } catch {}
-
-          if (isSuperAdminUser(userObj) || isSuperAdminUser(googleEmail)) {
-            userObj.role = 'superadmin';
-            userObj.plan = 'pro';
-          }
 
           const finalPhoto = getEffectiveReporterPhoto(googleEmail, [
             userObj?.avatarUrl,

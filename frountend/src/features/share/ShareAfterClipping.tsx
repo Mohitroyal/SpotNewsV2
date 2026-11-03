@@ -27,9 +27,11 @@ export function ShareAfterClipping(props: {
   const link = newsLink(post.id, reporter.slug);
   const isVideo = Boolean(post.videoUrl);
 
-  // If it's a video clipping, default to the clipping video tab so they can immediately share the video
-  const [tab, setTab] = useState<Tab>(isVideo ? "clipping" : "square");
-  const [images, setImages] = useState<Partial<Record<Tab, string>>>({});
+  // Default to clipping tab so the generated clipping is immediately visible and shareable
+  const [tab, setTab] = useState<Tab>("clipping");
+  const [images, setImages] = useState<Partial<Record<Tab, string>>>(() => ({
+    clipping: post.clippingUrl || "",
+  }));
   const [videoThumb, setVideoThumb] = useState<string>("");
   const [busy, setBusy] = useState(false);
   const [statusMsg, setStatusMsg] = useState("");
@@ -50,39 +52,53 @@ export function ShareAfterClipping(props: {
   // build images / capture video frame
   useEffect(() => {
     let cancelled = false;
+
+    // 1. Immediately ensure clipping is populated so user never waits
+    if (post.clippingUrl) {
+      setImages((prev) => ({ ...prev, clipping: post.clippingUrl }));
+    }
+
+    // 2. Video thumbnail capture in background
+    if (post.videoUrl) {
+      captureVideoFrame(post.videoUrl)
+        .then((frame) => {
+          if (frame && !cancelled) setVideoThumb(frame);
+        })
+        .catch((e) => console.warn("Could not extract frame from video:", e));
+    }
+
+    // 3. Render offscreen Reporter Card and Story Card independently without blocking clipping
     (async () => {
       try {
-        // If it's a video clipping, extract a frame for the square/story cards
-        if (post.videoUrl) {
+        await new Promise((r) => setTimeout(r, 250)); // let the QR inside the cards render
+        if (cancelled) return;
+
+        if (squareRef.current) {
           try {
-            const frame = await captureVideoFrame(post.videoUrl);
-            if (frame && !cancelled) {
-              setVideoThumb(frame);
+            const square = await nodeToImage(squareRef.current);
+            if (!cancelled && square) {
+              setImages((prev) => ({ ...prev, square }));
             }
-          } catch (e) {
-            console.warn("Could not extract frame from video:", e);
+          } catch (err) {
+            console.warn("Square card generation skipped:", err);
           }
         }
 
-        const clipping = post.clippingUrl || "";
-
-        if (cancelled) return;
-        await new Promise((r) => setTimeout(r, 350)); // let the QR inside the cards render
-        let square = "";
-        let story = "";
-        if (squareRef.current) {
-          square = await nodeToImage(squareRef.current);
-        }
         if (storyRef.current) {
-          story = await nodeToImage(storyRef.current);
-        }
-        if (!cancelled) {
-          setImages({ clipping, square, story });
+          try {
+            const story = await nodeToImage(storyRef.current);
+            if (!cancelled && story) {
+              setImages((prev) => ({ ...prev, story }));
+            }
+          } catch (err) {
+            console.warn("Story card generation skipped:", err);
+          }
         }
       } catch (err) {
-        console.error("Failed to render share cards:", err);
+        console.error("Failed to render background share cards:", err);
       }
     })();
+
     return () => {
       cancelled = true;
     };
@@ -113,7 +129,7 @@ export function ShareAfterClipping(props: {
     }
 
     // 2. Image share (clipping image / reporter card / story card)
-    const dataUrl = images[tab] || (tab === "clipping" ? post.clippingUrl : undefined);
+    const dataUrl = tab === "clipping" ? (post.clippingUrl || images.clipping) : images[tab];
     if (!dataUrl) {
       alert("కార్డ్ ఇంకా సిద్ధమవుతోంది, దయచేసి ఒక్క క్షణం ఆగండి");
       return;
@@ -143,6 +159,8 @@ export function ShareAfterClipping(props: {
     ["square", "🪪 రిపోర్టర్ కార్డ్"],
     ["story", "📱 స్టేటస్ (9:16)"],
   ];
+
+  const currentPreviewImage = tab === "clipping" ? (post.clippingUrl || images.clipping) : images[tab];
 
   return (
     <div className="ss-backdrop" style={{ zIndex: 100005 }} onClick={props.onClose}>
@@ -181,8 +199,8 @@ export function ShareAfterClipping(props: {
                 MP4 వీడియో
               </div>
             </div>
-          ) : images[tab] ? (
-            <img src={images[tab]} alt="" />
+          ) : currentPreviewImage ? (
+            <img src={currentPreviewImage} alt="Clipping preview" className="w-full h-full object-contain" />
           ) : (
             <div className="ss-wait">తయారవుతోంది…</div>
           )}

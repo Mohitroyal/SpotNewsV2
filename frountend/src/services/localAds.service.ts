@@ -106,6 +106,9 @@ export const localAdsService = {
         throw new Error('Failed to generate media URL for advertisement.');
       }
 
+      // Check if auto-approval for ads is active (defaults to false)
+      const isAutoApprove = await this.getAutoApproveAdsConfig().catch(() => false);
+
       const insertData = {
         reporter_id: payload.reporter_id,
         reporter_name: payload.reporter_name,
@@ -120,7 +123,9 @@ export const localAdsService = {
         cta_type: payload.cta_type || 'call',
         cta_value: payload.cta_value || '',
         amount_inr: 0,
-        status: 'pending',
+        status: isAutoApprove ? 'accepted_payment_pending' : 'pending',
+        approval_type: isAutoApprove ? 'auto' : 'manual',
+        approved_at: isAutoApprove ? new Date().toISOString() : null,
       };
 
       const { data, error } = await supabase
@@ -214,6 +219,8 @@ export const localAdsService = {
           status: 'accepted_payment_pending',
           amount_inr: cleanAmount,
           rejection_reason: null,
+          approval_type: 'manual',
+          approved_at: new Date().toISOString(),
         })
         .eq('id', adId);
 
@@ -353,6 +360,64 @@ export const localAdsService = {
     } catch (err: any) {
       console.error('[LocalAds] Failed to submit UPI payment for ad:', err);
       return { success: false, error: err.message || 'Failed to submit UPI payment verification.' };
+    }
+  },
+
+  /**
+   * Get Auto-Approve Ads configuration (persisted in app_config & localStorage).
+   * Defaults to false if no setting exists.
+   */
+  async getAutoApproveAdsConfig(): Promise<boolean> {
+    try {
+      const { data, error } = await supabase.rpc('get_auto_approve_ads_rpc');
+      if (!error && typeof data === 'boolean') {
+        try { localStorage.setItem('spotnews_auto_approve_ads', String(data)); } catch {}
+        return data;
+      }
+    } catch {}
+
+    try {
+      const { data } = await supabase
+        .from('app_config')
+        .select('config_value')
+        .eq('config_key', 'auto_approve_ads')
+        .maybeSingle();
+      if (data?.config_value !== undefined) {
+        const val = data.config_value === 'true';
+        try { localStorage.setItem('spotnews_auto_approve_ads', String(val)); } catch {}
+        return val;
+      }
+    } catch {}
+
+    try {
+      return localStorage.getItem('spotnews_auto_approve_ads') === 'true';
+    } catch {
+      return false;
+    }
+  },
+
+  /**
+   * Set Auto-Approve Ads configuration (persisted in app_config & localStorage).
+   */
+  async setAutoApproveAdsConfig(enabled: boolean): Promise<boolean> {
+    try {
+      localStorage.setItem('spotnews_auto_approve_ads', String(enabled));
+    } catch {}
+
+    try {
+      const { error } = await supabase.rpc('set_auto_approve_ads_rpc', { p_enabled: enabled });
+      if (!error) return true;
+    } catch {}
+
+    try {
+      await supabase.from('app_config').upsert({
+        config_key: 'auto_approve_ads',
+        config_value: enabled ? 'true' : 'false',
+      });
+      return true;
+    } catch (err) {
+      console.warn('[LocalAds] Failed to persist auto_approve_ads config:', err);
+      return false;
     }
   },
 };

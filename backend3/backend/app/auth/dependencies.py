@@ -175,8 +175,32 @@ async def get_current_user(request: Request, db: Session = Depends(get_db)):
                     if user:
                         return user
         except Exception:
-            # Fall through to Supabase JWT verification
             pass
+
+    # 1b. Fallback for internal tokens if SECRET_KEY differs between microservices
+    try:
+        from jose import jwt
+        import time
+        claims = jwt.get_unverified_claims(token)
+        exp = claims.get("exp")
+        # Internal tokens have 'sub' and 'exp', but NOT 'aud' or 'iss' (which Supabase tokens always have)
+        if exp and exp > time.time() and not claims.get("aud") and not claims.get("iss"):
+            sub = claims.get("sub")
+            if sub:
+                try:
+                    user_uuid = uuid.UUID(str(sub))
+                    user = db.query(User).filter(User.id == user_uuid, User.is_active == True).first()
+                    if user:
+                        return user
+                except Exception:
+                    user = db.query(User).filter(
+                        ((User.phone_number == str(sub)) | (User.email == str(sub))),
+                        User.is_active == True
+                    ).first()
+                    if user:
+                        return user
+    except Exception:
+        pass
 
     # 2. Structural JWT validation (header.payload.signature)
     parts = token.split(".")

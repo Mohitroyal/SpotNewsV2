@@ -23,6 +23,8 @@ export interface LocalAd {
   cta_value?: string;
   amount_inr: number;
   status: LocalAdStatus;
+  approval_type?: 'manual' | 'auto';
+  approved_at?: string;
   rejection_reason?: string;
   razorpay_order_id?: string;
   razorpay_payment_id?: string;

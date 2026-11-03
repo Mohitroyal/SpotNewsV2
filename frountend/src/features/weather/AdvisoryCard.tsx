@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Share } from "@capacitor/share";
 import type { AdvisoryRow } from "./types";
 import "./weather.css";
 import type { WeatherData } from "@/services/weatherService";
@@ -95,13 +96,17 @@ export function AdvisoryCard({
           `${a.icon} ${en ? a.title_en : a.title_te}\n• ${(en ? a.actions_en : a.actions_te).slice(0, 3).join("\n• ")}`
       );
     const text = `${en ? r.headline_en : r.headline_te}\n\n${lines.join("\n\n")}\n\n— RTI Express Spot News 24x7`;
-    if (navigator.share) {
-      try {
-        await navigator.share({ text });
-      } catch {}
-    } else {
-      await navigator.clipboard.writeText(text);
-      alert("Advisory copied to clipboard!");
+    try {
+      await Share.share({ text, title: en ? "Weather & Health Advisory" : "వాతావరణ ఆరోగ్య సూచనలు" });
+    } catch {
+      if (navigator.share) {
+        try {
+          await navigator.share({ text });
+        } catch {}
+      } else {
+        await navigator.clipboard.writeText(text);
+        alert(en ? "Advisory copied to clipboard!" : "సమాచారం కాపీ అయింది!");
+      }
     }
   };
 

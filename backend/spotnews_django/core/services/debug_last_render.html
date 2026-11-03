@@ -2,436 +2,2552 @@
 <html lang="te">
 <head>
     <meta charset="UTF-8">
-    <title>విశాఖపట్నంలో భారీ వర్షాలు - ప్రజలు అప్రమత్తంగా ఉండాలి</title>
     <style>
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Noto+Sans+Telugu:wght@400;600;700;800&family=Noto+Serif+Telugu:wght@400;600;700;800&display=swap');
-        
-        * {
-            box-sizing: border-box;
-            -webkit-font-smoothing: antialiased !important;
-            -moz-osx-font-smoothing: grayscale !important;
-            text-rendering: optimizeLegibility !important;
-        }
+        @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;900&family=Old+Standard+TT:ital,wght@0,400;0,700;1,400&family=Noto+Sans:wght@400;700&display=swap');
+
         body {
+            background-color: #FFFFFF;
+            color: #1a1a1a;
+            font-family: 'Old Standard TT', serif;
             margin: 0;
-            padding: 0;
-            background: #F0F2F5;
-            display: flex;
-            justify-content: center;
-            align-items: flex-start;
+            padding: 40px;
+            width: 1120px;
         }
+
         .newspaper-container {
-            width: 540px;
+            border: 1px solid #ddd;
+            padding: 20px;
             background: #FFFFFF;
-            margin: 0 auto;
-            overflow: hidden;
-            display: flex;
-            flex-direction: column;
-            box-shadow: 0 4px 20px rgba(0,0,0,0.08);
-            font-family: 'Gautami', 'Noto Sans Telugu', 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
-            position: relative;
+            box-shadow: 0 0 20px rgba(0,0,0,0.05);
         }
-        .hero-image-wrapper {
-            position: relative;
-            width: 100%;
-            height: 480px;
-            background: #111827;
-            overflow: hidden;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-        }
-        .hero-img {
-            width: 100%;
-            height: 100%;
-            object-fit: cover;
-            object-position: center center;
-            display: block;
-        }
-        .image-overlay {
-            position: absolute;
-            bottom: 0;
-            left: 0;
-            right: 0;
-            min-height: 70px;
-            background: linear-gradient(to top, rgba(0,0,0,0.92) 0%, rgba(0,0,0,0.60) 65%, rgba(0,0,0,0) 100%);
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            padding: 12px 16px;
-            box-sizing: border-box;
-            z-index: 2;
-        }
-        .reporter-badge {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            flex: 1;
-            min-width: 0;
-        }
-        .reporter-avatar {
-            width: 44px;
-            height: 44px;
-            border-radius: 50%;
-            border: 2px solid #FFFFFF;
-            object-fit: cover;
-            display: block;
-            box-shadow: 0 2px 6px rgba(0,0,0,0.4);
-            background: #333333;
-            flex-shrink: 0;
-        }
-        .reporter-avatar-fallback {
-            width: 44px;
-            height: 44px;
-            border-radius: 50%;
-            border: 2px solid #FFFFFF;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            background: linear-gradient(135deg, #1d70b8, #0f3d68);
-            color: #FFFFFF;
-            font-size: 18px;
-            font-weight: 700;
-            box-shadow: 0 2px 6px rgba(0,0,0,0.4);
-            flex-shrink: 0;
-        }
-        .reporter-meta {
-            display: flex;
-            flex-direction: column;
-            justify-content: center;
-            overflow: hidden;
-            gap: 2px;
-        }
-        .reporter-name {
-            font-size: 15px;
-            font-weight: 700;
-            color: #FFFFFF;
-            font-family: 'Noto Sans Telugu', 'Inter', sans-serif;
-            line-height: 1.2;
-            text-shadow: 0 1px 3px rgba(0,0,0,0.8);
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-        }
-        .reporter-date-time {
-            font-size: 11px;
-            font-weight: 500;
-            color: rgba(255, 255, 255, 0.88);
-            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            line-height: 1.2;
-            text-shadow: 0 1px 2px rgba(0,0,0,0.8);
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-            letter-spacing: 0.2px;
-        }
-        .channel-logo-badge {
-            display: flex;
-            align-items: center;
-            justify-content: flex-end;
-            height: 44px;
-            max-width: 160px;
-            flex-shrink: 0;
-            margin-left: 12px;
-        }
-        .channel-logo-badge svg {
-            height: 42px;
-            width: 120px;
-            max-width: 150px;
-            display: block;
-            filter: drop-shadow(0 2px 5px rgba(0,0,0,0.7));
-        }
-        .channel-logo-badge img {
-            max-height: 42px;
-            max-width: 150px;
-            width: auto;
-            height: auto;
-            object-fit: contain;
-            display: block;
-            border-radius: 3px;
-            filter: drop-shadow(0 2px 5px rgba(0,0,0,0.7));
-        }
-        .channel-logo-badge .overlay-logo-text {
-            font-size: 14px;
-            font-weight: 800;
-            color: #FFFFFF;
+
+        .masthead {
+            font-family: 'Playfair Display', serif;
+            font-size: 60px;
+            font-weight: 900;
             text-transform: uppercase;
-            letter-spacing: 0.8px;
-            padding: 5px 10px;
-            background: rgba(0, 0, 0, 0.65);
-            border: 1px solid rgba(255, 255, 255, 0.35);
-            border-radius: 5px;
-            text-shadow: 0 1px 3px rgba(0,0,0,0.8);
-            box-shadow: 0 2px 6px rgba(0,0,0,0.4);
-            white-space: nowrap;
-        }
-        .article-content {
-            padding: 18px 16px 22px 16px;
-            background: #FFFFFF;
-            width: 100%;
-            box-sizing: border-box;
-        }
-        
-        .article-subheadline {
-            font-size: 18.5px;
-            font-weight: 700;
-            color: #37474F;
-            line-height: 1.35;
-            margin: 0 0 12px 0;
-            font-family: 'Gautami Bold', 'Gautami', 'Noto Sans Telugu', 'Inter', sans-serif;
-            text-align: left;
-        }
-        .article-headline {
-            font-size: 25px;
-            font-weight: 700;
-            color: #263238;
-            line-height: 1.25;
-            margin: 0 0 10px 0;
-            letter-spacing: -0.2px;
-            font-family: 'Gautami Bold', 'Gautami', 'Noto Sans Telugu', 'Inter', sans-serif;
-            text-align: left;
-        }
-        .article-body {
-            font-size: 18px;
-            line-height: 1.45;
-            color: #37474F;
-            font-weight: 400;
             margin: 0;
-            font-family: 'Gautami', 'Noto Sans Telugu', 'Inter', sans-serif;
-            text-align: justify;
-            text-justify: inter-word;
+            letter-spacing: -1px;
+            text-align: center;
         }
-        .article-body p {
-            margin: 0 0 8px 0;
-            word-break: break-word;
-            text-align: justify;
-            text-justify: inter-word;
-        }
-        .article-body p:last-child {
-            margin-bottom: 0;
-        }
-        .footer-banner {
-            width: 100%;
-            background: #111111;
-            padding: 8px 14px;
+
+        .meta-info {
             display: flex;
-            align-items: center;
             justify-content: space-between;
-            box-sizing: border-box;
-            gap: 8px;
+            border-top: 1px solid #333;
+            border-bottom: 1px solid #333;
+            padding: 3px 0;
+            font-size: 14px;
+            font-weight: bold;
+            margin-top: 5px;
         }
-        .footer-banner-text {
-            color: #FFFFFF;
-            font-size: 11px;
-            font-weight: 600;
-            font-family: 'Inter', 'Noto Sans Telugu', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            letter-spacing: 0.2px;
-            line-height: 1.2;
-            white-space: nowrap;
+
+        .headline {
+            font-family: 'Playfair Display', serif;
+            font-size: 40px;
+            line-height: 1.1;
+            margin: 0;
+            text-align: left;
         }
-        .footer-reporters-text {
-            color: #E2E8F0;
-            font-size: 10px;
-            font-weight: 700;
-            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            letter-spacing: 0.3px;
-            white-space: nowrap;
-            flex-shrink: 0;
+
+        .subheadline {
+            font-size: 17px;
+            font-style: italic;
+            color: #555;
+            margin: 0;
+        }
+
+        .paragraph {
+            margin-bottom: 8px;
+            line-height: 1.45;
+            font-size: 17px;
+        }
+
+        .byline {
+            font-weight: bold;
             text-transform: uppercase;
+            margin: 0;
+            font-size: 13px;
         }
     </style>
 
+
             
+
             <style id="local-fonts-enforcer">
+
                 
+
                 @font-face {
+
                     font-family: 'Noto Sans Telugu'; font-style: normal; font-weight: 400;
-                    src: url('file://c:/Users/MOHIT/Desktop/Spotnewsv2/Spotnewsv2/backend/spotnews_django/core/static/fonts/NotoSansTelugu-Regular.ttf') format('truetype');
+
+                    src: url('file://C:/Users/MOHIT/Desktop/Spotnewsv2/Spotnewsv2/backend/spotnews_django/core/static/fonts/NotoSansTelugu-Regular.ttf') format('truetype');
+
                 }
+
                 @font-face {
+
                     font-family: 'Noto Sans Telugu'; font-style: normal; font-weight: 700;
-                    src: url('file://c:/Users/MOHIT/Desktop/Spotnewsv2/Spotnewsv2/backend/spotnews_django/core/static/fonts/NotoSansTelugu-Bold.ttf') format('truetype');
+
+                    src: url('file://C:/Users/MOHIT/Desktop/Spotnewsv2/Spotnewsv2/backend/spotnews_django/core/static/fonts/NotoSansTelugu-Bold.ttf') format('truetype');
+
                 }
+
                 
+
                 @font-face {
+
                     font-family: 'Noto Serif Telugu'; font-style: normal; font-weight: 400;
-                    src: url('file://c:/Users/MOHIT/Desktop/Spotnewsv2/Spotnewsv2/backend/spotnews_django/core/static/fonts/NotoSerifTelugu-Regular.ttf') format('truetype');
+
+                    src: url('file://C:/Users/MOHIT/Desktop/Spotnewsv2/Spotnewsv2/backend/spotnews_django/core/static/fonts/NotoSerifTelugu-Regular.ttf') format('truetype');
+
                 }
+
                 @font-face {
+
                     font-family: 'Noto Serif Telugu'; font-style: normal; font-weight: 700;
-                    src: url('file://c:/Users/MOHIT/Desktop/Spotnewsv2/Spotnewsv2/backend/spotnews_django/core/static/fonts/NotoSerifTelugu-Bold.ttf') format('truetype');
+
+                    src: url('file://C:/Users/MOHIT/Desktop/Spotnewsv2/Spotnewsv2/backend/spotnews_django/core/static/fonts/NotoSerifTelugu-Bold.ttf') format('truetype');
+
                 }
+
                 
+
             </style>
+
             
+
             <style id="indic-font-enforcer">
+
                 /* High-DPI font smoothing & crisp text rendering */
+
                 html, body, .newspaper-container, div, p, span, h1, h2, h3, h4 {
+
                     -webkit-font-smoothing: antialiased !important;
+
                     -moz-osx-font-smoothing: grayscale !important;
+
                     text-rendering: optimizeLegibility !important;
+
                 }
+
                 /* Force Indic font first, fallback to Latin */
+
                 .headline, .subheadline, .subtitle, h1, h2, h3, .article-content p, .paragraph, .nc-text-region-box p, .dateline, .image-caption, .nc-image-caption, .byline-section, .byline, .nc-absolute-summary, .nc-absolute-summary h4, .nc-absolute-summary p, .nc-absolute-summary ul, .nc-absolute-summary li {
+
                     font-family: 'Gautami Bold', 'Gautami', 'Noto Serif Telugu', 'Noto Sans Telugu', 'Playfair Display', 'Merriweather', serif !important;
+
                 }
+
             </style>
+
             
 </head>
 <body>
-    <div class="newspaper-container">
-        <!-- Top Section: Video Layout (with Dedicated Header Bar) OR Hero Image OR No-Image Layout -->
+    <div class="newspaper-container" style="position: relative;">
+        <!-- Reporter Info Badge (Top Left Corner) -->
         
-        
-        <!-- Dedicated Top Header Bar for Video Clipping: Logo, Time, Date, Reporter Name -->
-        <div class="video-header-bar" style="width: 100%; min-height: 72px; background: #111827; display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; box-sizing: border-box; border-bottom: 3px solid #CC2222;">
-            <div class="reporter-badge">
-                
-                    <div class="reporter-avatar-fallback">
-                        M
-                    </div>
-                
-                <div class="reporter-meta">
-                    <span class="reporter-name">Mohithroyal Pokkala</span>
-                    <span class="reporter-date-time">22 October 2026 | 09:44 PM</span>
+
+        <!-- Fixed Header Area: 140px -->
+        <div class="header-block" style="height: 140px; overflow: hidden; border-bottom: 4px double #333; margin-bottom: 10px; box-sizing: border-box;">
+            <header style="margin: 0; padding: 0; border: none;">
+                <h1 class="masthead">THE DAILY CHRONICLE</h1>
+                <div class="meta-info" style="margin-top: 5px;">
+                    <span>VOL. CLXII... No. 56,234</span>
+                    <span></span>
+                    <span>PRICE TWO CENTS</span>
                 </div>
-            </div>
-
-            <div class="channel-logo-badge">
-                
-                
-                    <span class="overlay-logo-text">RTI EXPRESS</span>
-                
-            </div>
+            </header>
         </div>
 
-        <div class="hero-image-wrapper" style="position: relative; width: 100%; height: 420px; background: #111827; overflow: hidden; display: flex; align-items: center; justify-content: center;">
-            
-            <img class="hero-img" src="https://picsum.photos/600/400" alt="Hero Image" style="width: 100%; height: 100%; object-fit: cover;" />
-        </div>
-        
-
-        <!-- Middle Article Content Section -->
-        <div class="article-content">
-            <h1 class="article-headline">విశాఖపట్నంలో భారీ వర్షాలు - ప్రజలు అప్రమత్తంగా ఉండాలి</h1>
-            
-            
-            <div class="article-subheadline">తీరం దాటిన తీవ్ర వాయుగుండం</div>
-            
-            <div class="article-body">
-                
-                    
-                        <p>విశాఖపట్నం నగరంలో గత రాత్రి నుండి ఎడతెరిపి లేకుండా భారీ వర్షాలు కురుస్తున్నాయి.</p>
-                    
-                
-            </div>
+        <!-- Fixed Headline Area: 120px -->
+        <div class="headline-block" style="height: 120px; overflow: hidden; margin-bottom: 10px; box-sizing: border-box;">
+            <h2 class="headline" style="margin: 0 0 5px 0; font-size: 40px; line-height: 1.1;">మహిళా కబడ్డీ పోటీల్లో సందడి చేసిన పొంగులేటి మాదురమ్మ...</h2>
+            <p class="subheadline" style="margin: 0 0 5px 0; font-size: 16px;"></p>
+            <div class="byline" style="margin: 0;">By </div>
         </div>
 
-        <!-- Bottom Footer Banner -->
-        <div class="footer-banner">
-            
-            <span class="footer-banner-text">RTI EXPRESS – India's First Breaking News App.</span>
-            <span class="footer-reporters-text">WANTED REPORTERS: 7668886666</span>
-        </div>
+        <div id="compositor-canvas"></div>
     </div>
 
-    <script>
-        function applyDynamicWidth() {
-            const heroImg = document.querySelector('.hero-img');
-            if (!heroImg) return;
-            const naturalW = heroImg.naturalWidth;
-            const naturalH = heroImg.naturalHeight;
-            if (naturalH > 0 && naturalW > 0) {
-                const aspectRatio = naturalW / naturalH;
-                const baseHeight = 480;
-                const defaultWidth = 540;
-                const defaultAspect = defaultWidth / baseHeight; // 1.125
-                
-                // When image width increases beyond the default limit width ratio (1.125):
-                // Instead of chopping the original image, increase the width of the clipping dynamically
-                if (aspectRatio > defaultAspect) {
-                    const dynamicWidth = Math.max(defaultWidth, Math.round(baseHeight * aspectRatio));
-                    const container = document.querySelector('.newspaper-container');
-                    if (container) {
-                        container.style.setProperty('width', dynamicWidth + 'px', 'important');
-                        container.style.setProperty('max-width', dynamicWidth + 'px', 'important');
-                        container.style.setProperty('min-width', dynamicWidth + 'px', 'important');
-                    }
-                    const wrapper = document.querySelector('.hero-image-wrapper');
-                    if (wrapper) {
-                        wrapper.style.setProperty('height', baseHeight + 'px', 'important');
-                    }
-                }
-            }
-        }
-
-        // Run immediately if ready
-        if (document.readyState === 'loading') {
-            document.addEventListener('DOMContentLoaded', applyDynamicWidth);
-        } else {
-            applyDynamicWidth();
-        }
-
-        window.addEventListener('load', () => {
-            applyDynamicWidth();
-            window.__LAYOUT_DONE__ = true;
-        });
-
-        // Readiness notifier for Playwright screenshot capture
-        function signalWhenReady() {
-            const images = Array.from(document.querySelectorAll('img'));
-            const markReady = () => {
-                applyDynamicWidth();
-                window.__LAYOUT_DONE__ = true;
-            };
-
-            if (images.length === 0) {
-                markReady();
-                return;
-            }
-
-            let finished = 0;
-            const total = images.length;
-            const checkDone = () => {
-                finished++;
-                if (finished >= total) {
-                    markReady();
-                }
-            };
-
-            images.forEach(img => {
-                if (img.complete) {
-                    checkDone();
-                } else {
-                    img.addEventListener('load', checkDone, { once: true });
-                    img.addEventListener('error', checkDone, { once: true });
-                }
-            });
-
-            // 3-second safety net timeout
-            setTimeout(markReady, 3000);
-        }
-
-        signalWhenReady();
-    </script>
 
         <style id="dynamic-theme-override">
+
             :root {
+
                 --primary-color: #1d70b8;
+
                 --border-color: #111111;
+
             }
+
             .headline-section, .headline-block {
+
                 
+
             }
+
             .headline {
+
                 color: #111111 !important;
+
                 text-shadow: 0 1px 0 rgba(0,0,0,0.08);
+
             }
+
             
+
             .article-content, .paragraph {
+
                 text-align: left !important;
+
             }
+
         </style>
+
         
-</body>
+<script type="application/json" id="newspaper-data">
+
+{"headline": "\u0c2e\u0c39\u0c3f\u0c33\u0c3e \u0c15\u0c2c\u0c21\u0c4d\u0c21\u0c40 \u0c2a\u0c4b\u0c1f\u0c40\u0c32\u0c4d\u0c32\u0c4b \u0c38\u0c02\u0c26\u0c21\u0c3f \u0c1a\u0c47\u0c38\u0c3f\u0c28 \u0c2a\u0c4a\u0c02\u0c17\u0c41\u0c32\u0c47\u0c1f\u0c3f \u0c2e\u0c3e\u0c26\u0c41\u0c30\u0c2e\u0c4d\u0c2e...", "subheadline": "", "publication_name": "", "publication_date": "Saturday, October 31, 2026", "volume": "CXIV", "edition": "27", "location": "Global Edition", "language": "te", "language_name": "Telugu", "byline": "", "dateline": "", "template_id": "classic", "logo_url": "", "primary_color": "#000000", "accent_color": "#333333", "border_color": "#000000", "layout_columns": 3, "sections": ["\u0c38\u0c24\u0c4d\u0c24\u0c41\u0c2a\u0c32\u0c4d\u0c32\u0c3f \u0c06\u0c30\u0c4d \u0c38\u0c40 / \u0c05\u0c15\u0c4d\u0c1f\u0c4b\u0c2c\u0c30\u0c4d 30(\u0c06\u0c30\u0c4d\u0c1f\u0c40\u0c10 \u0c0e\u0c15\u0c4d\u0c38\u0c4d \u0c2a\u0c4d\u0c30\u0c46\u0c38\u0c4d \u0c28\u0c4d\u0c2f\u0c42\u0c38\u0c4d): \u0c16\u0c2e\u0c4d\u0c2e\u0c02 \u0c1c\u0c3f\u0c32\u0c4d\u0c32\u0c3e \u0c38\u0c24\u0c4d\u0c24\u0c41\u0c2a\u0c32\u0c4d\u0c32\u0c3f \u0c2a\u0c1f\u0c4d\u0c1f\u0c23\u0c02\u0c32\u0c4b\u0c28\u0c3f \u0c1c\u0c46 \u0c21\u0c3f \u0c38\u0c3f \u0c1b\u0c48\u0c32\u0c4d\u0c21\u0c4d\u0c30\u0c28\u0c4d \u0c2e\u0c41\u0c35\u0c4d\u0c35\u0c3e \u0c35\u0c3f\u0c1c\u0c2f\u0c4d \u0c2c\u0c3e\u0c2c\u0c41 \u0c06\u0c27\u0c4d\u0c35\u0c30\u0c4d\u0c2f\u0c02\u0c32\u0c4b \u0c30\u0c3e\u0c37\u0c4d\u0c1f\u0c4d\u0c30 73\u0c35 \u0c38\u0c40\u0c28\u0c3f\u0c2f\u0c30\u0c4d \u0c2e\u0c39\u0c3f\u0c33\u0c3e \u0c15\u0c2c\u0c21\u0c4d\u0c21\u0c40 \u0c2a\u0c4b\u0c1f\u0c40\u0c32\u0c41 \u0c2e\u0c41\u0c17\u0c3f\u0c02\u0c2a\u0c41 \u0c15\u0c3e\u0c30\u0c4d\u0c2f\u0c15\u0c4d\u0c30\u0c2e\u0c02\u0c32\u0c4b \u0c30\u0c3e\u0c37\u0c4d\u0c1f\u0c4d\u0c30 \u0c30\u0c46\u0c35\u0c46\u0c28\u0c4d\u0c2f\u0c42 \u0c36\u0c3e\u0c16 \u0c2e\u0c02\u0c24\u0c4d\u0c30\u0c3f \u0c2a\u0c4a\u0c02\u0c17\u0c41\u0c32\u0c47\u0c1f\u0c3f \u0c36\u0c4d\u0c30\u0c40\u0c28\u0c3f\u0c35\u0c3e\u0c38\u0c4d \u0c30\u0c46\u0c21\u0c4d\u0c21\u0c3f \u0c26\u0c02\u0c2a\u0c24\u0c41\u0c32\u0c41 \u0c39\u0c3e\u0c1c\u0c30\u0c2f\u0c4d\u0c2f\u0c3e\u0c30\u0c41. \u0c08 \u0c38\u0c02\u0c26\u0c30\u0c4d\u0c2d\u0c02\u0c17\u0c3e \u0c0e\u0c02\u0c24\u0c4b \u0c09\u0c24\u0c4d\u0c38\u0c3e\u0c39\u0c02\u0c17\u0c3e \u0c1c\u0c30\u0c41\u0c17\u0c41\u0c24\u0c41\u0c28\u0c4d\u0c28 \u0c15\u0c2c\u0c21\u0c4d\u0c21\u0c40 \u0c15\u0c4d\u0c30\u0c40\u0c21\u0c3e \u0c2e\u0c48\u0c26\u0c3e\u0c28\u0c02\u0c32\u0c4b \u0c30\u0c3e\u0c37\u0c4d\u0c1f\u0c4d\u0c30 \u0c30\u0c46\u0c35\u0c46\u0c28\u0c4d\u0c2f\u0c42 \u0c36\u0c3e\u0c16 \u0c2e\u0c02\u0c24\u0c4d\u0c30\u0c3f \u0c2a\u0c4a\u0c02\u0c17\u0c41\u0c32\u0c47\u0c1f\u0c3f \u0c36\u0c4d\u0c30\u0c40\u0c28\u0c3f\u0c35\u0c3e\u0c38\u0c4d \u0c30\u0c46\u0c21\u0c4d\u0c21\u0c3f \u0c38\u0c24\u0c40\u0c2e\u0c23\u0c3f \u0c2e\u0c3e\u0c26\u0c41\u0c30\u0c2e\u0c4d\u0c2e \u0c15\u0c2c\u0c21\u0c4d\u0c21\u0c40 \u0c15\u0c4d\u0c30\u0c40\u0c21\u0c3e \u0c2e\u0c48\u0c26\u0c3e\u0c28\u0c02\u0c32\u0c4b \u0c15\u0c42\u0c24 \u0c2a\u0c46\u0c21\u0c41\u0c24\u0c42 \u0c15\u0c4a\u0c02\u0c24\u0c38\u0c47\u0c2a\u0c41 \u0c15\u0c4d\u0c30\u0c40\u0c21\u0c3e\u0c15\u0c3e\u0c30\u0c41\u0c32\u0c28\u0c41 \u0c09\u0c24\u0c4d\u0c24\u0c47\u0c1c\u0c2a\u0c30\u0c3f\u0c1a\u0c3e\u0c30\u0c41. \u0c2a\u0c4a\u0c02\u0c17\u0c41\u0c32\u0c47\u0c1f\u0c3f \u0c2e\u0c3e\u0c26\u0c41\u0c30\u0c2e\u0c4d\u0c2e \u0c15\u0c2c\u0c21\u0c4d\u0c21\u0c40 \u0c15\u0c4d\u0c30\u0c40\u0c21\u0c3e \u0c2e\u0c48\u0c26\u0c3e\u0c28\u0c02\u0c32\u0c4b \u0c26\u0c3f\u0c17\u0c21\u0c02\u0c24\u0c4b \u0c05\u0c02\u0c26\u0c30\u0c3f \u0c15\u0c4d\u0c30\u0c40\u0c21\u0c3e\u0c15\u0c3e\u0c30\u0c41\u0c32\u0c32\u0c4b \u0c09\u0c24\u0c4d\u0c24\u0c47\u0c1c\u0c02 \u0c28\u0c46\u0c32\u0c15\u0c4a\u0c02\u0c26\u0c3f. \u0c08 \u0c35\u0c3f\u0c27\u0c02\u0c17\u0c3e \u0c15\u0c4d\u0c30\u0c40\u0c21\u0c3e \u0c2e\u0c48\u0c26\u0c3e\u0c28\u0c02\u0c32\u0c4b \u0c30\u0c3e\u0c37\u0c4d\u0c1f\u0c4d\u0c30 \u0c30\u0c46\u0c35\u0c46\u0c28\u0c4d\u0c2f\u0c42 \u0c36\u0c3e\u0c16 \u0c2e\u0c02\u0c24\u0c4d\u0c30\u0c3f \u0c2a\u0c4a\u0c02\u0c17\u0c41\u0c32\u0c47\u0c1f\u0c3f \u0c26\u0c02\u0c2a\u0c24\u0c41\u0c32\u0c41 \u0c2a\u0c3e\u0c32\u0c4d\u0c17\u0c4a\u0c28\u0c3f \u0c2c\u0c39\u0c41\u0c2e\u0c24\u0c41\u0c32\u0c41 \u0c05\u0c02\u0c26\u0c3f\u0c02\u0c1a\u0c3f \u0c15\u0c4d\u0c30\u0c40\u0c21\u0c3e \u0c38\u0c4d\u0c2b\u0c42\u0c30\u0c4d\u0c24\u0c3f\u0c24\u0c4b \u0c30\u0c3e\u0c37\u0c4d\u0c1f\u0c4d\u0c30\u0c3e\u0c28\u0c3f\u0c15\u0c3f \u0c2e\u0c02\u0c1a\u0c3f \u0c2a\u0c47\u0c30\u0c41 \u0c35\u0c1a\u0c4d\u0c1a\u0c47 \u0c35\u0c3f\u0c27\u0c02\u0c17\u0c3e \u0c15\u0c4d\u0c30\u0c40\u0c21\u0c3e\u0c15\u0c3e\u0c30\u0c41\u0c32\u0c41 \u0c24\u0c2e \u0c2f\u0c4a\u0c15\u0c4d\u0c15 \u0c38\u0c4d\u0c15\u0c3f\u0c32\u0c4d \u0c28\u0c3f \u0c2e\u0c46\u0c30\u0c41\u0c17\u0c41\u0c2a\u0c30\u0c41\u0c1a\u0c41\u0c15\u0c4b\u0c35\u0c3e\u0c32\u0c28\u0c3f \u0c15\u0c4b\u0c30\u0c41\u0c24\u0c42 \u0c05\u0c2d\u0c3f\u0c28\u0c02\u0c26\u0c3f\u0c02\u0c1a\u0c3e\u0c30\u0c41."], "image_urls": ["data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==", "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=="], "image_captions": ["", ""], "image_layout": "default", "heading_bg": "", "summary": "\u0c38\u0c24\u0c4d\u0c24\u0c41\u0c2a\u0c32\u0c4d\u0c32\u0c3f \u0c06\u0c30\u0c4d \u0c38\u0c40 / \u0c05\u0c15\u0c4d\u0c1f\u0c4b\u0c2c\u0c30\u0c4d 30(\u0c06\u0c30\u0c4d\u0c1f\u0c40\u0c10 \u0c0e\u0c15\u0c4d\u0c38\u0c4d \u0c2a\u0c4d\u0c30\u0c46\u0c38\u0c4d \u0c28\u0c4d\u0c2f\u0c42\u0c38\u0c4d): \u0c16\u0c2e\u0c4d\u0c2e\u0c02 \u0c1c\u0c3f\u0c32\u0c4d\u0c32\u0c3e \u0c38\u0c24\u0c4d\u0c24\u0c41\u0c2a\u0c32\u0c4d\u0c32\u0c3f \u0c2a\u0c1f\u0c4d\u0c1f\u0c23\u0c02\u0c32\u0c4b\u0c28\u0c3f \u0c1c\u0c46 \u0c21\u0c3f \u0c38\u0c3f \u0c1b\u0c48\u0c32\u0c4d\u0c21\u0c4d\u0c30\u0c28\u0c4d \u0c2e\u0c41\u0c35\u0c4d\u0c35\u0c3e \u0c35\u0c3f\u0c1c\u0c2f\u0c4d \u0c2c\u0c3e\u0c2c\u0c41 \u0c06\u0c27\u0c4d\u0c35\u0c30\u0c4d\u0c2f\u0c02\u0c32\u0c4b \u0c30\u0c3e\u0c37\u0c4d\u0c1f\u0c4d\u0c30 73\u0c35 \u0c38\u0c40\u0c28\u0c3f\u0c2f\u0c30\u0c4d \u0c2e\u0c39\u0c3f\u0c33\u0c3e \u0c15\u0c2c\u0c21\u0c4d\u0c21\u0c40 \u0c2a\u0c4b\u0c1f\u0c40\u0c32\u0c41 \u0c2e\u0c41\u0c17\u0c3f\u0c02\u0c2a\u0c41 \u0c15\u0c3e\u0c30\u0c4d\u0c2f\u0c15\u0c4d\u0c30\u0c2e\u0c02\u0c32\u0c4b \u0c30\u0c3e\u0c37\u0c4d\u0c1f\u0c4d\u0c30 \u0c30\u0c46\u0c35\u0c46\u0c28\u0c4d\u0c2f\u0c42 \u0c36\u0c3e\u0c16 \u0c2e\u0c02\u0c24\u0c4d\u0c30\u0c3f \u0c2a\u0c4a\u0c02\u0c17\u0c41\u0c32\u0c47\u0c1f\u0c3f \u0c36\u0c4d\u0c30\u0c40\u0c28\u0c3f\u0c35\u0c3e\u0c38\u0c4d \u0c30\u0c46\u0c21\u0c4d\u0c21\u0c3f \u0c26\u0c02\u0c2a\u0c24\u0c41\u0c32\u0c41 \u0c39\u0c3e\u0c1c\u0c30\u0c2f\u0c4d\u0c2f\u0c3e\u0c30\u0c41.", "bullet_points": ["\u0c38\u0c24\u0c4d\u0c24\u0c41\u0c2a\u0c32\u0c4d\u0c32\u0c3f \u0c06\u0c30\u0c4d \u0c38\u0c40 / \u0c05\u0c15\u0c4d\u0c1f\u0c4b\u0c2c\u0c30\u0c4d 30(\u0c06\u0c30\u0c4d\u0c1f\u0c40\u0c10 \u0c0e\u0c15\u0c4d\u0c38\u0c4d \u0c2a\u0c4d\u0c30\u0c46\u0c38\u0c4d \u0c28\u0c4d\u0c2f\u0c42\u0c38\u0c4d): \u0c16\u0c2e\u0c4d\u0c2e\u0c02 \u0c1c\u0c3f\u0c32\u0c4d\u0c32\u0c3e \u0c38\u0c24\u0c4d\u0c24\u0c41\u0c2a\u0c32\u0c4d\u0c32\u0c3f \u0c2a\u0c1f\u0c4d\u0c1f\u0c23\u0c02\u0c32\u0c4b\u0c28\u0c3f \u0c1c\u0c46 \u0c21\u0c3f \u0c38\u0c3f \u0c1b\u0c48\u0c32\u0c4d\u0c21\u0c4d\u0c30\u0c28\u0c4d \u0c2e\u0c41\u0c35\u0c4d\u0c35\u0c3e...", "\u0c08 \u0c38\u0c02\u0c26\u0c30\u0c4d\u0c2d\u0c02\u0c17\u0c3e \u0c0e\u0c02\u0c24\u0c4b \u0c09\u0c24\u0c4d\u0c38\u0c3e\u0c39\u0c02\u0c17\u0c3e \u0c1c\u0c30\u0c41\u0c17\u0c41\u0c24\u0c41\u0c28\u0c4d\u0c28 \u0c15\u0c2c\u0c21\u0c4d\u0c21\u0c40 \u0c15\u0c4d\u0c30\u0c40\u0c21\u0c3e \u0c2e\u0c48\u0c26\u0c3e\u0c28\u0c02\u0c32\u0c4b \u0c30\u0c3e\u0c37\u0c4d\u0c1f\u0c4d\u0c30 \u0c30\u0c46\u0c35\u0c46\u0c28\u0c4d\u0c2f\u0c42 \u0c36\u0c3e\u0c16 \u0c2e\u0c02\u0c24\u0c4d\u0c30\u0c3f \u0c2a\u0c4a\u0c02\u0c17\u0c41\u0c32\u0c47\u0c1f\u0c3f \u0c36\u0c4d\u0c30\u0c40\u0c28\u0c3f\u0c35\u0c3e\u0c38\u0c4d \u0c30\u0c46\u0c21\u0c4d\u0c21\u0c3f \u0c38\u0c24\u0c40\u0c2e\u0c23\u0c3f...", "\u0c2a\u0c4a\u0c02\u0c17\u0c41\u0c32\u0c47\u0c1f\u0c3f \u0c2e\u0c3e\u0c26\u0c41\u0c30\u0c2e\u0c4d\u0c2e \u0c15\u0c2c\u0c21\u0c4d\u0c21\u0c40 \u0c15\u0c4d\u0c30\u0c40\u0c21\u0c3e \u0c2e\u0c48\u0c26\u0c3e\u0c28\u0c02\u0c32\u0c4b \u0c26\u0c3f\u0c17\u0c21\u0c02\u0c24\u0c4b \u0c05\u0c02\u0c26\u0c30\u0c3f \u0c15\u0c4d\u0c30\u0c40\u0c21\u0c3e\u0c15\u0c3e\u0c30\u0c41\u0c32\u0c32\u0c4b \u0c09\u0c24\u0c4d\u0c24\u0c47\u0c1c\u0c02 \u0c28\u0c46\u0c32\u0c15\u0c4a\u0c02\u0c26\u0c3f.", "\u0c08 \u0c35\u0c3f\u0c27\u0c02\u0c17\u0c3e \u0c15\u0c4d\u0c30\u0c40\u0c21\u0c3e \u0c2e\u0c48\u0c26\u0c3e\u0c28\u0c02\u0c32\u0c4b \u0c30\u0c3e\u0c37\u0c4d\u0c1f\u0c4d\u0c30 \u0c30\u0c46\u0c35\u0c46\u0c28\u0c4d\u0c2f\u0c42 \u0c36\u0c3e\u0c16 \u0c2e\u0c02\u0c24\u0c4d\u0c30\u0c3f \u0c2a\u0c4a\u0c02\u0c17\u0c41\u0c32\u0c47\u0c1f\u0c3f \u0c26\u0c02\u0c2a\u0c24\u0c41\u0c32\u0c41 \u0c2a\u0c3e\u0c32\u0c4d\u0c17\u0c4a\u0c28\u0c3f \u0c2c\u0c39\u0c41\u0c2e\u0c24\u0c41\u0c32\u0c41 \u0c05\u0c02\u0c26\u0c3f\u0c02\u0c1a\u0c3f \u0c15\u0c4d\u0c30\u0c40\u0c21\u0c3e \u0c38\u0c4d\u0c2b\u0c42\u0c30\u0c4d\u0c24\u0c3f\u0c24\u0c4b..."], "summary_bg": "", "bullet_bg": ""}
+
+</script>
+
+
+        <script>
+
+        // ── window.onerror: Report JS errors with exact file/line/column ────
+
+        window.onerror = function(msg, src, line, col, err) {
+
+            console.error(
+
+                'JS ERROR:', msg,
+
+                'FILE:', src,
+
+                'LINE:', line,
+
+                'COLUMN:', col
+
+            );
+
+            if (!window.__LAYOUT_DONE__) {
+
+                window.__LAYOUT_DONE__ = true;
+
+            }
+
+            return false;
+
+        };
+
+        
+
+        async function startCompositorLayout() {
+
+            try {
+
+                const dataEl = document.getElementById('newspaper-data');
+
+                if (dataEl) {
+
+                    window.NEWSPAPER_DATA = JSON.parse(dataEl.textContent);
+
+                }
+
+            } catch (e) {
+
+                console.error('[LAYOUT] JSON Parse Error:', e);
+
+            }
+
+            const data = window.NEWSPAPER_DATA;
+
+            if (!data) {
+
+                console.error('[LAYOUT] No data found.');
+
+                window.__LAYOUT_DONE__ = true;
+
+                return;
+
+            }
+
+
+
+            const container = document.querySelector('.newspaper-container');
+
+            if (!container) {
+
+                window.__LAYOUT_DONE__ = true;
+
+                return;
+
+            }
+
+
+
+            const totalChars = (data.sections || []).reduce((s, p) => s + p.length, 0);
+
+            console.log('[LAYOUT] Article length:', totalChars, 'chars,', (data.sections||[]).length, 'sections');
+
+
+
+            // waitReady utility with timeout
+
+            async function waitReady() {
+
+                const WAIT_TIMEOUT = 800;
+
+                try {
+
+                    await Promise.race([
+
+                        document.fonts ? document.fonts.ready : Promise.resolve(),
+
+                        new Promise(r => setTimeout(r, WAIT_TIMEOUT))
+
+                    ]);
+
+                } catch(e) {}
+
+
+
+                const imgPromises = Array.from(document.images).map(img => {
+
+                    if (img.complete || !img.src || !img.src.startsWith('http')) return Promise.resolve();
+
+                    return Promise.race([
+
+                        new Promise(r => {
+
+                            img.onload = r;
+
+                            img.onerror = r;
+
+                        }),
+
+                        new Promise(r => setTimeout(r, WAIT_TIMEOUT))
+
+                    ]);
+
+                });
+
+                await Promise.all(imgPromises);
+
+            }
+
+
+
+            const TARGET_MAX_HEIGHT = 1600;
+
+            const urls = data.image_urls || [];
+
+            const captions = data.image_captions || [];
+
+            const imgCount = urls.length;
+
+            
+
+            let aspectRatios = [];
+
+            let orientations = [];
+
+
+
+            // getImageDimensions utility
+
+            async function getImageDimensions(url) {
+
+                if (!url) return { width: 800, height: 600 };
+
+                const existingImg = Array.from(document.images).find(img => img.src === url || img.getAttribute('src') === url);
+
+                if (existingImg && existingImg.naturalWidth && existingImg.naturalHeight) {
+
+                    return { width: existingImg.naturalWidth, height: existingImg.naturalHeight };
+
+                }
+
+                return new Promise((resolve) => {
+
+                    const img = new Image();
+
+                    img.onload = () => resolve({ width: img.naturalWidth || 800, height: img.naturalHeight || 600 });
+
+                    img.onerror = () => resolve({ width: 800, height: 600 });
+
+                    img.src = url;
+
+                    if (img.complete && img.naturalWidth) {
+
+                        resolve({ width: img.naturalWidth, height: img.naturalHeight });
+
+                    }
+
+                });
+
+            }
+
+
+
+            // Ensure we have a compositor-canvas element
+
+            let canvas = document.getElementById('compositor-canvas');
+
+            if (!canvas) {
+
+                canvas = document.createElement('div');
+
+                canvas.id = 'compositor-canvas';
+
+                container.appendChild(canvas);
+
+            }
+
+            canvas.style.position = 'relative';
+
+            canvas.style.width = '100%';
+
+            canvas.style.boxSizing = 'border-box';
+
+
+
+            let langStr = (data.language || data.language_name || 'en').toLowerCase();
+
+            let langKey = 'en';
+
+            if (langStr.includes('telugu') || langStr === 'te') langKey = 'te';
+
+            else if (langStr.includes('hindi') || langStr === 'hi') langKey = 'hi';
+
+            else if (langStr.includes('kannada') || langStr === 'kn') langKey = 'kn';
+
+            else if (langStr.includes('tamil') || langStr === 'ta') langKey = 'ta';
+
+            else if (langStr.includes('malayalam') || langStr === 'ml') langKey = 'ml';
+
+
+
+            let sumLabels = { 'te': 'సారాంశం', 'hi': 'सारांश', 'kn': 'ಸಾರಾಂಶ', 'ta': 'சுருக்கம்', 'ml': 'സംഗ్రహం', 'en': 'SUMMARY' };
+
+            let bulLabels = { 'te': 'ముఖ్య అంశాలు', 'hi': 'मुख्य बिंदु', 'kn': 'ಪ್ರಮುಖ ಮುಖ್ಯಾంశాలు', 'ta': 'முக்கிய அம்சங்கள்', 'ml': 'ప్రధాన వివరాలు', 'en': 'KEY TAKEAWAYS' };
+
+
+
+            let sumTitle = sumLabels[langKey] || 'SUMMARY';
+
+            let bulTitle = bulLabels[langKey] || 'KEY TAKEAWAYS';
+
+
+
+            function resolveColumns(colVal, charLen) {
+
+                const s = String(colVal === undefined || colVal === null ? "auto" : colVal).toLowerCase().trim();
+
+                const p = parseInt(s);
+
+                if (!isNaN(p) && p >= 1 && p <= 4 && s !== "0" && s !== "auto") {
+
+                    return p;
+
+                }
+
+                const rawLayout = String(data.image_layout || "default").toLowerCase().replace(/[^a-z]/g, "");
+
+                if (rawLayout.includes('patternd')) {
+
+                    return 3;
+
+                }
+
+                const isSingleSideLayout = (urls.length === 1) && (rawLayout.includes('patterna') || (!rawLayout.includes('patternb') && !rawLayout.includes('patternd') && !rawLayout.includes('single') && !rawLayout.includes('hero') && !rawLayout.includes('patternc') && !rawLayout.includes('patterng')));
+
+                if (isSingleSideLayout) {
+
+                    return 2;
+
+                }
+
+                if (charLen < 800) {
+
+                    return 2;
+
+                }
+
+                return 3;
+
+            }
+
+
+
+            function getObstacles(W_canvas, S_img, imgHeightPx, H_canvas) {
+
+                H_canvas = H_canvas || 1200;
+
+                const TARGET_MAX_HEIGHT = H_canvas;
+
+                const obstacles = [];
+
+                const templateIdStr = String(data.template_id || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+
+                const logoIdStr = String(data.logo_id || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+
+                const rawLayout = String(data.image_layout || "default").toLowerCase().replace(/[^a-z]/g, "");
+
+                const showSummaryFlag = data.show_summary === true || String(data.show_summary).toLowerCase() === "true";
+
+                const isCustom = (templateIdStr.includes("custom") || logoIdStr.includes("custom")) && showSummaryFlag;
+
+                const showSummary = isCustom && data.show_summary !== false && String(data.show_summary).toLowerCase() !== "false";
+
+
+
+                if (urls.length > 0) {
+
+                    const aspect0 = (aspectRatios && aspectRatios.length > 0 && aspectRatios[0]) ? aspectRatios[0] : 1.33;
+
+                    let S_scale = S_img;
+
+                    let gap = 60;
+
+                    // Dynamically rescale images based on text content size to prevent overflowing short articles
+
+                    if (totalChars > 0 && totalChars < 3000) {
+
+                        const scaleFactor = Math.max(0.5, 1.0 - (3000 - totalChars) / 3500);
+
+                        S_scale = S_img * scaleFactor;
+
+                        gap = 30;
+
+                    }
+
+                    // Bulletproof pattern matching: handles "Pattern B", "pattern_b", "patternB", etc.
+
+                    let h0 = Math.round(0.58 * W_canvas);
+
+                    const isArticleStyle = rawLayout.includes('articlestyle');
+
+                    let isPatternB = rawLayout.includes('patternb') || rawLayout.includes('patterna') || rawLayout.includes('patternd') || rawLayout.includes('patternc') || rawLayout.includes('patterne') || rawLayout.includes('double') || isArticleStyle || isCustom;
+
+                    const isSinglePatternC = !isCustom && rawLayout.includes('patternc') && urls.length === 1;
+
+                    const isSinglePatternA = !isCustom && rawLayout.includes('patterna') && urls.length === 1;
+
+                    if (isSinglePatternC || isSinglePatternA) {
+
+                        isPatternB = false;
+
+                    }
+
+                    if (isCustom || rawLayout === "default" || rawLayout === "" || rawLayout === "auto") {
+
+                        isPatternB = true;
+
+                    }
+
+                    const isDoublePatternB = (urls.length === 2) && (
+
+                        rawLayout.includes('patternc') ||
+
+                        rawLayout.includes('patternb') ||
+
+                        rawLayout.includes('patterna') ||
+
+                        rawLayout.includes('double') ||
+
+                        rawLayout.includes('two') ||
+
+                        rawLayout.includes('dual') ||
+
+                        rawLayout === "default" ||
+
+                        rawLayout === "" ||
+
+                        rawLayout === "auto"
+
+                    );
+
+                    const isTriplePatternB = isPatternB && urls.length >= 3;
+
+
+
+                    const isSingleLeft75 = (urls.length === 1) && (rawLayout.includes('patterng') || rawLayout.includes('left75') || rawLayout.includes('pattern75') || rawLayout.includes('75left') || rawLayout.includes('75'));
+                    
+                    if (isSingleLeft75) {
+                        // Single image: Left side covering ~58% width, dynamic height based on text content
+                        let w0 = Math.round(W_canvas * 0.58);
+                        let cap0 = String(captions[0] || '').trim();
+                        let capAllowance0 = cap0 ? Math.ceil(cap0.length / Math.max(1, Math.floor(w0 / 6.5))) * 15 + 8 : 0;
+                        
+                        if (totalChars <= 1400) {
+                            // Short/medium articles: image covers full height of right column
+                            h0 = Math.max(200, H_canvas - capAllowance0);
+                        } else {
+                            // Longer articles: image covers ~72% height, remaining text flows below
+                            h0 = Math.max(300, Math.round(H_canvas * 0.72));
+                        }
+                        
+                        obstacles.push({
+                            url: urls[0],
+                            caption: captions[0] || '',
+                            x: 0,
+                            y: 0,
+                            w: w0,
+                            h: Math.round(h0 + capAllowance0),
+                            imgH: Math.round(h0),
+                            isCentered: false,
+                            visW: w0,
+                            objectFit: 'contain',
+                            objectPosition: 'center center'
+                        });
+                    } else if (rawLayout.includes('patterng')) {
+                        // Pattern G ALWAYS forces a horizontal gallery of ALL images at the top!
+                        let count = urls.length;
+                        if (count > 0) {
+                            let gap = 16;
+                            let w = (W_canvas - (gap * (count - 1))) / count;
+                            
+                            // Balance their heights so they align nicely (using maximum height)
+                            let maxH = 0;
+                            for (let i = 0; i < count; i++) {
+                                let asp = aspectRatios[i] || 1.0;
+                                let thisH = w / asp;
+                                if (thisH > maxH) maxH = thisH;
+                            }
+                            
+                            // Cap height to prevent insanely tall images if they are vertical
+                            if (maxH > W_canvas * 0.75) maxH = W_canvas * 0.75;
+                            
+                            for (let i = 0; i < count; i++) {
+                                obstacles.push({ url: urls[i], caption: captions[i] || '', x: Math.round(i * (w + gap)), y: 0, w: Math.round(w), h: Math.round(maxH), imgH: Math.round(maxH), objectFit: 'contain', objectPosition: 'center center' });
+                            }
+                        }
+                    } else if (rawLayout.includes('patternd') || rawLayout.includes('doubleb') || rawLayout.includes('doubled')) {
+                        // Pattern D: 2 images in staggered diagonal newspaper layout
+                        // PHOTO 1: Top-Left (Column 0)
+                        // PHOTO 2: Bottom-Right (Column 2)
+                        let N_layout_cols = 3;
+                        let grid_gap = 24;
+                        let single_col_w = Math.round((W_canvas - (N_layout_cols - 1) * grid_gap) / N_layout_cols);
+                        
+                        let w0 = single_col_w;
+                        let dynamicH0 = Math.round(w0 / aspect0);
+                        let maxH0 = Math.round(Math.min(dynamicH0, Math.max(220, single_col_w * 0.82)));
+                        let h0 = Math.max(160, maxH0);
+                        let cap0 = String(captions[0] || '').trim();
+                        let capAllowance0 = cap0 ? Math.ceil(cap0.length / Math.max(1, Math.floor(w0 / 6.5))) * 15 + 8 : 0;
+                        let totalH0 = Math.round(h0 + capAllowance0);
+                        
+                        obstacles.push({
+                            url: urls[0],
+                            caption: captions[0] || '',
+                            x: 0,
+                            y: 0,
+                            w: Math.round(w0),
+                            h: Math.round(totalH0),
+                            imgH: Math.round(h0),
+                            isCentered: false,
+                            visW: Math.round(w0),
+                            objectFit: 'contain',
+                            objectPosition: 'center center'
+                        });
+
+                        if (urls.length > 1) {
+                            let aspect1 = aspectRatios[1] || 1.0;
+                            let w1 = single_col_w;
+                            let dynamicH1 = Math.round(w1 / aspect1);
+                            let maxH1 = Math.round(Math.min(dynamicH1, Math.max(220, single_col_w * 0.82)));
+                            let h1 = Math.max(160, maxH1);
+                            let cap1 = String(captions[1] || '').trim();
+                            let capAllowance1 = cap1 ? Math.ceil(cap1.length / Math.max(1, Math.floor(w1 / 6.5))) * 15 + 8 : 0;
+                            let totalH1 = Math.round(h1 + capAllowance1);
+                            let x1 = Math.round(W_canvas - w1);
+                            let y1 = Math.max(0, Math.round(H_canvas - totalH1));
+                            
+                            obstacles.push({
+                                url: urls[1],
+                                caption: captions[1] || '',
+                                x: Math.round(x1),
+                                y: Math.round(y1),
+                                w: Math.round(w1),
+                                h: Math.round(totalH1),
+                                imgH: Math.round(h1),
+                                isCentered: false,
+                                visW: Math.round(w1),
+                                objectFit: 'contain',
+                                objectPosition: 'center center'
+                            });
+                        }
+                    } else if (isTriplePatternB) {
+                        let w0 = W_canvas;
+                        let dynamicH0 = Math.round(w0 / aspect0);
+                        let maxAllowedH0 = Math.round(Math.max(H_canvas, 1200) * 0.40);
+                        let h0 = Math.min(dynamicH0, maxAllowedH0);
+                        let visW0 = (dynamicH0 > maxAllowedH0) ? Math.round(maxAllowedH0 * aspect0) : W_canvas;
+                        let x0 = Math.round((W_canvas - visW0) / 2);
+                        
+                        let gap = 16;
+                        let availW = W_canvas - gap;
+                        let a1 = (aspectRatios && aspectRatios.length > 1 && aspectRatios[1]) ? aspectRatios[1] : 1.0;
+                        let a2 = (aspectRatios && aspectRatios.length > 2 && aspectRatios[2]) ? aspectRatios[2] : 1.0;
+                        
+                        let H_bot = Math.round(availW / (a1 + a2));
+                        let w1 = Math.round(availW * (a1 / (a1 + a2)));
+                        let w2 = availW - w1;
+                        let sharedH = Math.min(H_bot, Math.round(Math.max(H_canvas, 1200) * 0.35));
+                        sharedH = Math.max(sharedH, 150);
+                        
+                        let cap0 = String(captions[0] || '').trim();
+                        let capAllowance0 = cap0 ? Math.ceil(cap0.length / Math.max(1, Math.floor(visW0 / 6.5))) * 15 + 8 : 0;
+                        
+                        obstacles.push({ url: urls[0], caption: captions[0] || '', x: x0, y: 0, w: Math.round(visW0), h: Math.round(h0 + capAllowance0), imgH: Math.round(h0), isCentered: true, visW: Math.round(visW0), objectFit: 'cover', objectPosition: 'center center' });
+                        
+                        let yBottom = Math.round(h0 + capAllowance0 + gap);
+                        obstacles.push({ url: urls[1], caption: captions[1] || '', x: 0, y: yBottom, w: Math.round(w1), h: Math.round(sharedH), imgH: Math.round(sharedH), isCentered: false, visW: Math.round(w1), objectFit: 'cover', objectPosition: 'center center' });
+                        obstacles.push({ url: urls[2], caption: captions[2] || '', x: Math.round(w1 + gap), y: yBottom, w: Math.round(w2), h: Math.round(sharedH), imgH: Math.round(sharedH), isCentered: false, visW: Math.round(w2), objectFit: 'cover', objectPosition: 'center center' });
+                    } else if (isDoublePatternB) {
+                        let a0 = aspect0 || 1.0;
+                        let a1 = (aspectRatios && aspectRatios.length > 1 && aspectRatios[1]) ? aspectRatios[1] : 1.0;
+                        let gap = 10;
+                        let availW = W_canvas - gap;
+                        
+                        // Exact uncropped height needed if both images scale by their natural aspect ratio
+                        let H_calc = Math.round(availW / (a0 + a1));
+                        
+                        // In newspaper layout, top photos should be balanced with content (370px - 440px max)
+                        // Never allow images to balloon to 700-800px and crush article text down to 11px!
+                        let maxAllowedH = 430;
+                        if (totalChars > 1600) {
+                            maxAllowedH = 370;
+                        } else if (totalChars > 1000) {
+                            maxAllowedH = 410;
+                        } else if (totalChars > 600) {
+                            maxAllowedH = 440;
+                        } else {
+                            maxAllowedH = 490;
+                        }
+                        
+                        let sharedH = Math.min(H_calc, maxAllowedH);
+                        sharedH = Math.max(sharedH, 180);
+                        
+                        // Proportional widths ensuring full canvas coverage with 0 side gaps
+                        let ratio0 = a0 / (a0 + a1);
+                        let w_img0 = Math.round(availW * ratio0);
+                        let w_img1 = availW - w_img0;
+                        
+                        let startX0 = 0;
+                        let startX1 = w_img0 + gap;
+                        
+                        const isTwoImageEnglishPlaceholder = (c) => {
+                            if (!c) return false;
+                            const s = String(c).toLowerCase().trim().replace(/[.\s]+$/, '');
+                            return s === 'photo capturing the key moment of the event' || 
+                                   s === 'additional perspective on the recent development';
+                        };
+
+                        let cap0 = String(captions[0] || '').trim();
+                        if (isTwoImageEnglishPlaceholder(cap0)) {
+                            cap0 = '';
+                        }
+                        let capAllowance0 = cap0 ? Math.ceil(cap0.length / Math.max(1, Math.floor(w_img0 / 6.5))) * 15 + 8 : 0;
+                        
+                        let cap1 = String(captions[1] || '').trim();
+                        if (isTwoImageEnglishPlaceholder(cap1)) {
+                            cap1 = '';
+                        }
+                        let capAllowance1 = cap1 ? Math.ceil(cap1.length / Math.max(1, Math.floor(w_img1 / 6.5))) * 15 + 8 : 0;
+                        
+                        let maxCapAllowance = Math.max(capAllowance0, capAllowance1);
+                        let totalSharedH = Math.round(sharedH + maxCapAllowance);
+                        
+                        // When natural height fits within maxAllowedH, contain keeps 100% natural aspect.
+                        // When images are tall/portrait (H_calc > maxAllowedH), cover ensures full box coverage with 0 white gaps.
+                        const fitMode = (H_calc <= maxAllowedH + 20) ? 'contain' : 'cover';
+                        
+                        obstacles.push({
+                            url: urls[0],
+                            caption: cap0,
+                            x: startX0,
+                            y: 0,
+                            w: Math.round(w_img0),
+                            h: Math.round(totalSharedH),
+                            imgH: Math.round(sharedH),
+                            isCentered: false,
+                            visW: Math.round(w_img0),
+                            objectFit: fitMode,
+                            objectPosition: 'center center'
+                        });
+                        
+                        obstacles.push({
+                            url: urls[1],
+                            caption: cap1,
+                            x: startX1,
+                            y: 0,
+                            w: Math.round(w_img1),
+                            h: Math.round(totalSharedH),
+                            imgH: Math.round(sharedH),
+                            isCentered: false,
+                            visW: Math.round(w_img1),
+                            objectFit: fitMode,
+                            objectPosition: 'center center'
+                        });
+                    } else if (urls.length === 1 || rawLayout.includes('patternb') || rawLayout.includes('patternd') || rawLayout.includes('single') || rawLayout.includes('hero') || isSinglePatternC || rawLayout.includes('patternc')) {
+                        let dynamicH = Math.round(W_canvas / aspect0);
+                        let maxHeroH = (totalChars > 1500) ? 420 : (totalChars > 1000 ? 460 : (totalChars > 600 ? 520 : 620));
+                        let maxAllowedH = Math.min(maxHeroH, Math.round(Math.max(H_canvas, 1200) * 0.50));
+                        h0 = Math.min(dynamicH, maxAllowedH);
+                        let w0 = Math.round(h0 * aspect0);
+                        if (w0 > W_canvas) {
+                            w0 = W_canvas;
+                            h0 = Math.round(w0 / aspect0);
+                        }
+                        let imgX = Math.round((W_canvas - w0) / 2);
+                        let imgY = 0;
+                        let isPatternB_centered = true;
+                        
+                        let cap0 = String(captions[0] || '').trim();
+                        let capAllowance0 = cap0 ? Math.ceil(cap0.length / Math.max(1, Math.floor((isPatternB_centered ? w0 : w0) / 6.5))) * 15 + 8 : 0;
+                        
+                        obstacles.push({
+                            url: urls[0],
+                            caption: captions[0] || '',
+                            x: imgX,
+                            y: imgY,
+                            w: Math.round(w0),
+                            h: Math.round(h0 + capAllowance0),
+                            imgH: Math.round(h0),
+                            isCentered: isPatternB_centered,
+                            visW: Math.round(w0),
+                            objectFit: 'contain',
+                            objectPosition: 'center center'
+                        });
+                    } else if (isSinglePatternA || rawLayout.includes('patterna')) {
+                        let N_layout_cols = resolveColumns(data.layout_columns, totalChars);
+                        let grid_gap = 24;
+                        let single_col_w = Math.round((W_canvas - (N_layout_cols - 1) * grid_gap) / N_layout_cols);
+                        let side_w = (N_layout_cols >= 3) ? single_col_w : Math.round((W_canvas - grid_gap) * 0.48);
+                        let w0 = side_w;
+                        let dynamicH = Math.round(w0 / aspect0);
+                        let maxAllowedH = Math.round(Math.max(H_canvas, 1200) * 0.55);
+                        let h0 = Math.min(dynamicH, maxAllowedH);
+                        if (dynamicH > maxAllowedH) {
+                            w0 = Math.round(h0 * aspect0);
+                        }
+                        let imgVisW = w0;
+                        let imgX = 0; // Left side
+                        let isPatternB_centered = false;
+                        
+                        let cap0 = String(captions[0] || '').trim();
+                        let capAllowance0 = cap0 ? Math.ceil(cap0.length / Math.max(1, Math.floor((isPatternB_centered ? imgVisW : w0) / 6.5))) * 15 + 8 : 0;
+                        
+                        obstacles.push({
+                            url: urls[0],
+                            caption: captions[0] || '',
+                            x: imgX,
+                            y: 0,
+                            w: Math.round(w0),
+                            h: Math.round(h0 + capAllowance0),
+                            imgH: Math.round(h0),
+                            isCentered: isPatternB_centered,
+                            visW: Math.round(imgVisW),
+                            objectFit: 'contain',
+                            objectPosition: 'center center'
+                        });
+                    } else {
+                        // Default / Custom with 1 image: Right side side-by-side with text
+                        let N_layout_cols = resolveColumns(data.layout_columns, totalChars);
+                        let grid_gap = 24;
+                        let single_col_w = Math.round((W_canvas - (N_layout_cols - 1) * grid_gap) / N_layout_cols);
+                        let side_w = (N_layout_cols >= 3) ? single_col_w : Math.round((W_canvas - grid_gap) * 0.48);
+                        let w0 = side_w;
+                        let dynamicH = Math.round(w0 / aspect0);
+                        let maxAllowedH = Math.round(Math.max(H_canvas, 1200) * 0.55);
+                        h0 = Math.min(dynamicH, maxAllowedH);
+                        if (dynamicH > maxAllowedH) {
+                            w0 = Math.round(h0 * aspect0);
+                        }
+                        let imgVisW = w0;
+                        let imgX = Math.round(W_canvas - w0);
+                        let isPatternB_centered = false;
+                        
+                        let cap0 = String(captions[0] || '').trim();
+                        let capAllowance0 = cap0 ? Math.ceil(cap0.length / Math.max(1, Math.floor((isPatternB_centered ? imgVisW : w0) / 6.5))) * 15 + 8 : 0;
+                        
+                        obstacles.push({
+                            url: urls[0],
+                            caption: captions[0] || '',
+                            x: imgX,
+                            y: 0,
+                            w: Math.round(w0),
+                            h: Math.round(h0 + capAllowance0),
+                            imgH: Math.round(h0),
+                            isCentered: isPatternB_centered,
+                            visW: Math.round(imgVisW),
+                            objectFit: 'contain',
+                            objectPosition: 'center center'
+                        });
+                    }
+
+                    if (urls.length > 1 && !isDoublePatternB && !isTriplePatternB && !rawLayout.includes('patternd') && !rawLayout.includes('patterng')) {
+
+                        const aspect1 = aspectRatios[1] || 1.0;
+
+                        let w1 = W_canvas * Math.max(0.40, Math.min(0.58, 0.48 * S_scale));
+
+                        let h1 = w1 / aspect1;
+
+                        h1 = Math.min(h1, imgHeightPx * (urls.length > 2 && totalChars < 2500 ? 0.75 : 1.0));
+
+                        let gap = 60;
+
+                        let y1 = h0 + gap; // Spacing below Hero
+
+                        let x1 = W_canvas - w1; // Align secondary image on right side below Hero
+
+                        
+
+                        obstacles.push({
+
+                            url: urls[1],
+
+                            caption: captions[1] || '',
+
+                            x: Math.round(x1),
+
+                            y: Math.round(y1),
+
+                            w: Math.round(w1),
+
+                            h: Math.round(h1),
+
+                            imgH: Math.round(h1),
+
+                            objectFit: 'contain',
+
+                            objectPosition: 'center center'
+
+                        });
+
+                    }
+
+
+
+                    if (urls.length > 2 && !isDoublePatternB && !isTriplePatternB && !rawLayout.includes('patternd') && !rawLayout.includes('patterng')) {
+
+                        const aspect2 = aspectRatios[2] || 1.0;
+
+                        let w2 = W_canvas * Math.max(0.40, Math.min(0.58, 0.48 * S_scale));
+
+                        let h2 = w2 / aspect2;
+
+                        h2 = Math.min(h2, imgHeightPx * (urls.length > 2 && totalChars < 2500 ? 0.75 : 1.0));
+
+                        let y2 = H_canvas - h2;
+
+                        
+
+                        obstacles.push({
+
+                            url: urls[2],
+
+                            caption: captions[2] || '',
+
+                            x: Math.round(W_canvas - w2), // Align bottom-right
+
+                            y: Math.round(y2),
+
+                            w: Math.round(w2),
+
+                            h: Math.round(h2),
+
+                            imgH: Math.round(h2),
+
+                            objectFit: 'contain',
+
+                            objectPosition: 'center center'
+
+                        });
+
+                    }
+
+                }
+
+                if (isCustom && (data.summary || (data.bullet_points && data.bullet_points.length > 0)) && data.show_summary !== false && String(data.show_summary).toLowerCase() !== "false") {
+
+                    let maxImgY = 0;
+
+                    obstacles.forEach(o => {
+
+                        if (o.type !== 'summary_bullets') {
+
+                            maxImgY = Math.max(maxImgY, o.y + o.h);
+
+                        }
+
+                    });
+
+                    // Position summary box cleanly below top image & text column area
+
+                    let summaryY = Math.max(maxImgY, 350) + 16;
+
+                    obstacles.push({
+
+                        type: 'summary_bullets',
+
+                        x: 0,
+
+                        y: Math.round(summaryY),
+
+                        w: W_canvas,
+
+                        h: 260
+
+                    });
+
+                }
+
+                return obstacles;
+
+            }
+
+
+
+            function runLayoutPass(conf, S, H_layout, isFinal) {
+
+                // Clear the compositor canvas
+
+                canvas.innerHTML = '';
+
+                
+
+                // Get canvas width
+
+                const W_canvas = canvas.offsetWidth || 1060;
+
+                
+
+                // Calculate columns
+
+                let N = resolveColumns(data.layout_columns, totalChars);
+
+                
+
+                const G = 24; // Column gap in pixels
+
+                const W_col = (W_canvas - (N - 1) * G) / N;
+
+                
+
+                const H_canvas = H_layout;
+
+                
+
+                // Calculate image dimensions and create absolute obstacles
+
+                const imgHeightPx = Math.round(0.58 * W_canvas);
+
+                let S_img = S || 1.0;
+
+                const obstacles = getObstacles(W_canvas, S_img, imgHeightPx, H_canvas);
+
+
+
+                // Render summary box early to measure its exact dynamic height from DOM
+
+                const sumObs = obstacles.find(o => o.type === 'summary_bullets');
+
+                if (sumObs) {
+
+                    const measuredH = renderSummaryBulletsBox(sumObs.y);
+
+                    if (measuredH > 0) {
+
+                        sumObs.h = measuredH;
+
+                    }
+
+                }
+
+
+
+                // Render absolute images onto canvas if it's the final pass
+
+                if (isFinal) {
+
+                    obstacles.forEach(obs => {
+
+                        if (obs.type === 'summary_bullets') {
+
+                            // Already rendered above during dynamic height measurement
+
+                            return;
+
+                        }
+
+                        const imgEl = document.createElement('div');
+
+                        imgEl.className = 'nc-absolute-image';
+
+                        imgEl.style.position = 'absolute';
+
+                        imgEl.style.left = `${obs.x}px`;
+
+                        imgEl.style.top = `${obs.y}px`;
+
+                        imgEl.style.width = `${obs.w}px`;
+
+                        imgEl.style.height = 'auto';
+
+                        imgEl.style.boxSizing = 'border-box';
+
+                        imgEl.style.border = 'none';
+
+                        imgEl.style.padding = '0';
+
+                        imgEl.style.background = 'var(--bg-color, #FFFFFF)';
+
+                        imgEl.style.zIndex = '5';
+
+                        
+
+                        let cleanCap = obs.caption;
+
+                        if (typeof cleanCap === 'object' && cleanCap !== null) {
+
+                            cleanCap = cleanCap.caption || cleanCap.text || cleanCap.title || '';
+
+                        }
+
+                        let capStr = String(cleanCap || '').trim();
+
+                        if (capStr === '[object Object]') capStr = '';
+
+
+
+                        let captionHeight = 0;
+
+                        if (capStr) {
+
+                            const wrapW = obs.isCentered ? obs.visW : obs.w;
+
+                            const charsPerLine = Math.max(1, Math.floor(wrapW / 6.5));
+
+                            const lines = Math.ceil(capStr.length / charsPerLine);
+
+                            captionHeight = lines * 15;
+
+                        }
+
+                        const imgH = obs.imgH || (obs.h - (captionHeight ? captionHeight + 8 : 0));
+
+                        
+
+                        let captionHtml = capStr ? `<div class="image-caption nc-image-caption" style="font-size: 11px; font-style: italic; color: #444; margin-top: 4px; line-height: 1.3; width: 100%; text-align: center; word-wrap: break-word;">${capStr}</div>` : '';
+
+                        if (obs.isCentered) {
+
+                            const isFullBleed = (obs.visW >= obs.w);
+
+                            imgEl.style.display = 'flex';
+
+                            imgEl.style.flexDirection = 'column';
+
+                            imgEl.style.alignItems = 'center';
+
+                            imgEl.style.border = 'none';
+
+                            imgEl.style.background = 'transparent';
+
+                            imgEl.style.padding = '0';
+
+                            
+
+                            const innerStyle = isFullBleed 
+
+                                ? `width: ${obs.visW}px; display: flex; flex-direction: column; align-items: center; box-sizing: border-box;`
+
+                                : `width: ${obs.visW}px; border: none; padding: 0; background: var(--bg-color, #FFFFFF); display: flex; flex-direction: column; align-items: center; box-sizing: border-box;`;
+
+
+
+                            imgEl.innerHTML = '<div style="' + innerStyle + '"><img src="' + obs.url + '" style="width: 100%; height: ' + imgH + 'px; max-height: none !important; object-fit: ' + (obs.objectFit || 'contain') + '; object-position: ' + (obs.objectPosition || 'center center') + '; display: block;" />' + captionHtml + '</div>';
+
+                        } else {
+
+                            imgEl.innerHTML = '<img src="' + obs.url + '" style="width: 100%; height: ' + imgH + 'px; max-height: none !important; object-fit: ' + (obs.objectFit || 'contain') + '; object-position: ' + (obs.objectPosition || 'center center') + '; display: block;" />' + captionHtml;
+
+                        }
+
+                        canvas.appendChild(imgEl);
+
+                    });
+
+                }
+
+                
+
+                let inflatedObstacles = obstacles.map(obs => {
+
+                    return {
+
+                        x: obs.x - 8,
+
+                        y: obs.y - 8,
+
+                        w: obs.w + 16,
+
+                        h: obs.h + 16
+
+                    };
+
+                });
+
+                
+
+                const rawLayoutStr = String(data.image_layout || "default").toLowerCase().replace(/[^a-z]/g, "");
+
+                if (urls.length === 2 && !rawLayoutStr.includes('patternd') && (rawLayoutStr.includes('patternc') || rawLayoutStr.includes('patterna') || rawLayoutStr.includes('patternb') || rawLayoutStr === 'default' || rawLayoutStr === '')) {
+
+                    let maxH = 0;
+
+                    obstacles.forEach(o => {
+
+                        if (o.y === 0 && o.h > maxH && o.type !== 'summary_bullets') {
+
+                            maxH = o.h;
+
+                        }
+
+                    });
+
+                    if (maxH > 0) {
+
+                        inflatedObstacles.push({
+
+                            x: -12,
+
+                            y: -12,
+
+                            w: W_canvas + 24,
+
+                            h: maxH + 24
+
+                        });
+
+                    }
+
+                }
+
+
+
+                // Flow layout function
+
+                const regions = [];
+
+                const rawLayoutStrPass = String(data.image_layout || "default").toLowerCase().replace(/[^a-z]/g, "");
+
+                const isSingleLeft75Pass = (urls.length === 1) && (rawLayoutStrPass.includes('patterng') || rawLayoutStrPass.includes('left75') || rawLayoutStrPass.includes('pattern75') || rawLayoutStrPass.includes('75left') || rawLayoutStrPass.includes('75'));
+
+
+
+                if (isSingleLeft75Pass && obstacles.length > 0) {
+
+                    const obs0 = obstacles[0];
+
+                    const G_side = 24;
+
+                    const rightX = obs0.w + G_side;
+
+                    const rightW = W_canvas - rightX;
+
+                    const rightH = obs0.h;
+
+                    
+
+                    // 1. Right Column next to the 75% left image
+
+                    const colRight = document.createElement('div');
+
+                    colRight.className = 'nc-column col-right';
+
+                    colRight.style.position = 'absolute';
+
+                    colRight.style.left = `${rightX}px`;
+
+                    colRight.style.top = '0px';
+
+                    colRight.style.width = `${rightW}px`;
+
+                    
+
+                    const rBoxRight = document.createElement('div');
+
+                    rBoxRight.className = 'nc-text-region-box';
+
+                    rBoxRight.style.position = 'absolute';
+
+                    rBoxRight.style.left = '0px';
+
+                    rBoxRight.style.top = '0px';
+
+                    rBoxRight.style.width = `${rightW}px`;
+
+                    rBoxRight.style.height = `${rightH}px`;
+
+                    rBoxRight.style.boxSizing = 'border-box';
+
+                    rBoxRight.style.overflow = 'hidden';
+
+                    colRight.appendChild(rBoxRight);
+
+                    canvas.appendChild(colRight);
+
+                    regions.push({ rBox: rBoxRight, height: rightH, y: 0, col: 0 });
+
+                    
+
+                    // 2. Full-Width Bottom Section spanning across under the image (only when canvas height allows)
+
+                    const botY = obs0.h + 16;
+
+                    const botH = Math.max(0, H_canvas - botY);
+
+                    
+
+                    if (botH > 25) {
+
+                        const colBot = document.createElement('div');
+
+                        colBot.className = 'nc-column col-bottom';
+
+                        colBot.style.position = 'absolute';
+
+                        colBot.style.left = '0px';
+
+                        colBot.style.top = `${botY}px`;
+
+                        colBot.style.width = `${W_canvas}px`;
+
+                        
+
+                        const rBoxBot = document.createElement('div');
+
+                        rBoxBot.className = 'nc-text-region-box';
+
+                        rBoxBot.style.position = 'absolute';
+
+                        rBoxBot.style.left = '0px';
+
+                        rBoxBot.style.top = '0px';
+
+                        rBoxBot.style.width = `${W_canvas}px`;
+
+                        rBoxBot.style.height = `${botH}px`;
+
+                        rBoxBot.style.boxSizing = 'border-box';
+
+                        rBoxBot.style.overflow = 'hidden';
+
+                        colBot.appendChild(rBoxBot);
+
+                        canvas.appendChild(colBot);
+
+                        regions.push({ rBox: rBoxBot, height: botH, y: botY, col: 1 });
+
+                    }
+
+                } else {
+
+                    for (let c = 0; c < N; c++) {
+
+                        const L_c = c * (W_col + G);
+
+                        const R_c = L_c + W_col;
+
+                        
+
+                        let intervals = [{ yStart: 0, yEnd: H_canvas, xOffset: 0, w: W_col }];
+
+                        
+
+                        inflatedObstacles.forEach(obs => {
+
+                            const xOverlapStart = Math.max(L_c, obs.x);
+
+                            const xOverlapEnd = Math.min(R_c, obs.x + obs.w);
+
+                            if (xOverlapStart >= xOverlapEnd) return;
+
+                            
+
+                            const yOverlapStart = Math.max(0, obs.y);
+
+                            const yOverlapEnd = Math.min(H_canvas, obs.y + obs.h);
+
+                            if (yOverlapStart >= yOverlapEnd) return;
+
+                            
+
+                            const nextIntervals = [];
+
+                            intervals.forEach(int => {
+
+                                const yIntersectStart = Math.max(int.yStart, yOverlapStart);
+
+                                const yIntersectEnd = Math.min(int.yEnd, yOverlapEnd);
+
+                                
+
+                                if (yIntersectStart >= yIntersectEnd) {
+
+                                    nextIntervals.push(int);
+
+                                    return;
+
+                                }
+
+                                
+
+                                if (int.yStart < yIntersectStart) {
+
+                                    nextIntervals.push({
+
+                                        yStart: int.yStart,
+
+                                        yEnd: yIntersectStart,
+
+                                        xOffset: int.xOffset,
+
+                                        w: int.w
+
+                                    });
+
+                                }
+
+                                
+
+                                const intStart = int.xOffset;
+
+                                const intEnd = int.xOffset + int.w;
+
+                                
+
+                                const obsStart = obs.x - L_c;
+
+                                const obsEnd = obs.x + obs.w - L_c;
+
+                                
+
+                                // Left piece
+
+                                if (intStart < obsStart) {
+
+                                    const wRem = Math.min(intEnd, obsStart) - intStart;
+
+                                    if (wRem >= 40) {
+
+                                        nextIntervals.push({
+
+                                            yStart: yIntersectStart,
+
+                                            yEnd: yIntersectEnd,
+
+                                            xOffset: intStart,
+
+                                            w: wRem
+
+                                        });
+
+                                    }
+
+                                }
+
+                                
+
+                                // Right piece
+
+                                if (intEnd > obsEnd) {
+
+                                    const newStart = Math.max(intStart, obsEnd);
+
+                                    const wRem = intEnd - newStart;
+
+                                    if (wRem >= 40) {
+
+                                        nextIntervals.push({
+
+                                            yStart: yIntersectStart,
+
+                                            yEnd: yIntersectEnd,
+
+                                            xOffset: newStart,
+
+                                            w: wRem
+
+                                        });
+
+                                    }
+
+                                }
+
+                                
+
+                                if (int.yEnd > yIntersectEnd) {
+
+                                    nextIntervals.push({
+
+                                        yStart: yIntersectEnd,
+
+                                        yEnd: int.yEnd,
+
+                                        xOffset: int.xOffset,
+
+                                        w: int.w
+
+                                    });
+
+                                }
+
+                            });
+
+                            intervals = nextIntervals;
+
+                        });
+
+                        
+
+                        intervals.forEach(int => {
+
+                            const h = int.yEnd - int.yStart;
+
+                            if (h < 24 || int.w < 40) return;
+
+                            
+
+                            const rBox = document.createElement('div');
+
+                            rBox.className = 'nc-text-region-box';
+
+                            rBox.style.position = 'absolute';
+
+                            rBox.style.left = `${int.xOffset}px`;
+
+                            rBox.style.top = `${int.yStart}px`;
+
+                            rBox.style.width = `${int.w}px`;
+
+                            rBox.style.height = `${h}px`;
+
+                            rBox.style.boxSizing = 'border-box';
+
+                            rBox.style.overflow = 'hidden';
+
+                            
+
+                            const colDiv = canvas.querySelector(`.col-${c}`) || document.createElement('div');
+
+                            if (!canvas.contains(colDiv)) {
+
+                                colDiv.className = `nc-column col-${c}`;
+
+                                colDiv.style.position = 'absolute';
+
+                                colDiv.style.left = `${L_c}px`;
+
+                                colDiv.style.top = '0px';
+
+                                colDiv.style.width = `${W_col}px`;
+
+                                canvas.appendChild(colDiv);
+
+                            }
+
+                            colDiv.appendChild(rBox);
+
+                            
+
+                            regions.push({ rBox, height: h, y: int.yStart, col: c });
+
+                        });
+
+                    }
+
+                }
+
+                
+
+                // Strict multi-column newspaper reading flow:
+
+                // Column by column (Column 0 -> Column 1 -> Column 2), and top-to-bottom within each column.
+
+                regions.sort((a, b) => {
+
+                    if (a.col !== b.col) {
+
+                        return a.col - b.col;
+
+                    }
+
+                    return a.y - b.y;
+
+                });
+
+                
+
+                let paragraphs = [];
+
+                for (const sec of (data.sections || [])) {
+
+                    const cleanSec = String(sec || '').replace(/[\u00a0\u200b]/g, ' ').replace(/\s+/g, ' ').trim();
+
+                    if (cleanSec) {
+
+                        paragraphs.push(cleanSec);
+
+                    }
+
+                }
+
+                if (paragraphs.length === 0) {
+
+                    const rawFb = String(data.article_text || data.article_content || data.raw_content || '').replace(/[\u00a0\u200b]/g, ' ').replace(/\s+/g, ' ').trim();
+
+                    if (rawFb) {
+
+                        paragraphs.push(rawFb);
+
+                    } else {
+
+                        paragraphs.push("భోగాపురం మండలంలో వైఎస్ఆర్ కాంగ్రెస్ పార్టీ అధినేత వైఎస్ జగన్ మోహన్ రెడ్డి పర్యటనకు ప్రజల నుండి విశేష స్పందన లభించింది. పర్యటన పొడవునా వేలాదిగా తరలివచ్చిన ప్రజలు మరియు కార్యకర్తలు ఆయనకు ఘన స్వాగతం పలికారు.");
+
+                    }
+
+                }
+
+
+
+                if (paragraphs.length > 0 && data.dateline) {
+
+                    paragraphs[0] = ((data.template_id === 'classic') ? `[${data.dateline}] — ` : `${data.dateline} — `) + paragraphs[0];
+
+                }
+
+                
+
+                let pIdx = 0;
+
+                let currentRegionIdx = 0;
+
+                let activeRegion = regions[currentRegionIdx];
+
+                
+
+                while (activeRegion && pIdx < paragraphs.length) {
+
+                    let text = paragraphs[pIdx];
+
+                    const p = document.createElement('p');
+
+                    p.innerText = text;
+
+                    p.style.fontSize = `${conf.fontSize}px`;
+
+                    p.style.lineHeight = conf.lineHeight;
+
+                    p.style.marginBottom = `${conf.paraMargin}px`;
+
+                    p.style.marginTop = '0';
+
+                    p.style.textAlign = 'justify';
+
+                    p.style.wordBreak = 'break-word';
+
+                    p.style.overflowWrap = 'break-word';
+
+                    activeRegion.rBox.appendChild(p);
+
+                    
+
+                    if (currentRegionIdx === regions.length - 1) {
+
+                        if (isFinal) {
+
+                            pIdx++;
+
+                            continue;
+
+                        } else {
+
+                            if (activeRegion.rBox.scrollHeight > activeRegion.height) {
+
+                                return false; // Overflowed the final column in search mode
+
+                            }
+
+                            pIdx++;
+
+                            continue;
+
+                        }
+
+                    }
+
+                    
+
+                    if (activeRegion.rBox.scrollHeight > activeRegion.height) {
+
+                        activeRegion.rBox.removeChild(p);
+
+                        const words = text.split(/\s+/);
+
+                        const testP = p.cloneNode();
+
+                        activeRegion.rBox.appendChild(testP);
+
+                        
+
+                        let lowW = 0;
+
+                        let highW = words.length;
+
+                        let fitCount = 0;
+
+                        while (lowW <= highW) {
+
+                            let midW = Math.floor((lowW + highW) / 2);
+
+                            testP.innerText = words.slice(0, midW).join(' ');
+
+                            if (activeRegion.rBox.scrollHeight <= activeRegion.height) {
+
+                                fitCount = midW;
+
+                                lowW = midW + 1;
+
+                            } else {
+
+                                highW = midW - 1;
+
+                            }
+
+                        }
+
+                        let wIdx = fitCount;
+
+                        activeRegion.rBox.removeChild(testP);
+
+                        if (wIdx > 0) {
+
+                            const fitP = p.cloneNode();
+
+                            fitP.innerText = words.slice(0, wIdx).join(' ');
+
+                            activeRegion.rBox.appendChild(fitP);
+
+                            const rem = words.slice(wIdx).join(' ');
+
+                            if (rem.trim().length > 0) paragraphs.splice(pIdx, 1, rem); else pIdx++;
+
+                        } else {
+
+                            // If not even 1 word fits, force break word by characters
+
+                            const chars = text.split('');
+
+                            let cIdx = 0;
+
+                            const testCharP = p.cloneNode();
+
+                            activeRegion.rBox.appendChild(testCharP);
+
+                            for (; cIdx < chars.length; cIdx++) {
+
+                                testCharP.innerText = chars.slice(0, cIdx + 1).join('');
+
+                                if (activeRegion.rBox.scrollHeight > activeRegion.height) break;
+
+                            }
+
+                            activeRegion.rBox.removeChild(testCharP);
+
+                            if (cIdx > 0) {
+
+                                const fitP = p.cloneNode();
+
+                                fitP.innerText = chars.slice(0, cIdx).join('');
+
+                                activeRegion.rBox.appendChild(fitP);
+
+                                const rem = chars.slice(cIdx).join('');
+
+                                if (rem.trim().length > 0) paragraphs.splice(pIdx, 1, rem); else pIdx++;
+
+                            } else {
+
+                                // 0 chars fit in this small region: do NOT drop paragraph, preserve for next region
+
+                            }
+
+                        }
+
+                        currentRegionIdx++;
+
+                        activeRegion = regions[currentRegionIdx];
+
+                    } else pIdx++;
+
+                }
+
+                
+
+                if (regions.length === 0 || pIdx < paragraphs.length) {
+
+                    return false; // Did not fit all paragraphs
+
+                }
+
+                
+
+                // Third image is now handled as an absolute obstacle at bottom-right
+
+                
+
+                if (isFinal) {
+
+                    if (isSingleLeft75Pass && obstacles.length > 0) {
+
+                        const rBoxRight = regions[0] ? regions[0].rBox : null;
+
+                        const rBoxBot = regions[1] ? regions[1].rBox : null;
+
+                        const hasBottomText = rBoxBot && rBoxBot.lastElementChild && rBoxBot.innerText.trim() !== '';
+
+                        
+
+                        if (rBoxRight && !hasBottomText) {
+
+                            // All text fits cleanly in the right column! Align image height exactly to the right column
+
+                            const textBottomY = rBoxRight.scrollHeight;
+
+                            if (textBottomY > 120) {
+
+                                const imgDomEl = canvas.querySelector('.nc-absolute-image');
+
+                                if (imgDomEl) {
+
+                                    let capEl = imgDomEl.querySelector('.nc-image-caption');
+
+                                    let capH = capEl ? capEl.offsetHeight + 4 : 0;
+
+                                    let targetImgH = Math.max(100, textBottomY - capH);
+
+                                    let imgTag = imgDomEl.querySelector('img');
+
+                                    if (imgTag) {
+
+                                        imgTag.style.height = `${targetImgH}px`;
+
+                                    }
+
+                                    imgDomEl.style.height = `${textBottomY}px`;
+
+                                    obstacles[0].h = textBottomY;
+
+                                }
+
+                            }
+
+                        }
+
+                    }
+
+
+
+                    let maxY = 0;
+
+                    regions.forEach(r => {
+
+                        if (r.rBox.lastElementChild && r.rBox.innerText.trim() !== '') {
+
+                            const contentHeight = r.rBox.scrollHeight;
+
+                            r.rBox.style.height = `${contentHeight}px`;
+
+                            r.rBox.style.overflow = 'visible';
+
+                            maxY = Math.max(maxY, r.y + contentHeight);
+
+                        } else {
+
+                            r.rBox.style.height = '0px';
+
+                        }
+
+                    });
+
+                    obstacles.forEach(img => maxY = Math.max(maxY, img.y + img.h));
+
+                    
+
+                    canvas.style.height = `${Math.max(maxY, 150)}px`;
+
+                    
+
+                    // Force zero whitespace below the canvas
+
+                    const innerBorder = document.querySelector('.inner-border');
+
+                    if (innerBorder) {
+
+                        innerBorder.style.flex = 'none';
+
+                        innerBorder.style.height = 'auto';
+
+                    }
+
+                    const container = document.querySelector('.newspaper-container');
+
+                    if (container) {
+
+                        container.style.height = 'auto';
+
+                        container.style.minHeight = '0px';
+
+                    }
+
+                    
+
+                    window.__IMAGE_LAYOUT_LOGS__ = {
+
+                        image_count: imgCount,
+
+                        image_orientations: orientations.join(', '),
+
+                        selected_layout: 'Region-Based Newspaper Page Compositor (Binary Search Balanced)',
+
+                        final_dimensions: obstacles.map(obs => `${obs.w}x${obs.h}px`).join(', ')
+
+                    };
+
+                }
+
+                return true;
+
+            }
+
+
+
+            function renderSummaryBulletsBox(yTop) {
+
+                const templateIdStr = String(data.template_id || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+
+                const logoIdStr = String(data.logo_id || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+
+                const rawLayout = String(data.image_layout || "default").toLowerCase().replace(/[^a-z]/g, "");
+
+                const showSummaryFlag = data.show_summary === true || String(data.show_summary).toLowerCase() === "true";
+
+                const isCustom = (templateIdStr.includes("custom") || logoIdStr.includes("custom")) && showSummaryFlag;
+
+                const showSummary = isCustom && data.show_summary !== false && String(data.show_summary).toLowerCase() !== "false";
+
+                if (!showSummary) {
+
+                    return 0;
+
+                }
+
+                if ((!data.summary || !String(data.summary).trim()) && (!data.bullet_points || data.bullet_points.length === 0)) {
+
+                    return 0;
+
+                }
+
+                const containerEl = document.createElement('div');
+
+                containerEl.className = 'nc-absolute-summary';
+
+                containerEl.style.position = 'absolute';
+
+                containerEl.style.left = '0px';
+
+                containerEl.style.top = `${yTop}px`;
+
+                containerEl.style.width = '100%';
+
+                containerEl.style.boxSizing = 'border-box';
+
+                containerEl.style.display = 'flex';
+
+                containerEl.style.flexDirection = 'row';
+
+                containerEl.style.gap = '24px';
+
+                containerEl.style.zIndex = '5';
+
+                containerEl.style.fontFamily = 'var(--primary-font, "Playfair Display", serif)';
+
+                
+
+                let langStr = (data.language || data.language_name || 'en').toLowerCase();
+
+                let langKey = 'en';
+
+                if (langStr.includes('telugu') || langStr === 'te') langKey = 'te';
+
+                else if (langStr.includes('hindi') || langStr === 'hi') langKey = 'hi';
+
+                else if (langStr.includes('kannada') || langStr === 'kn') langKey = 'kn';
+
+                else if (langStr.includes('tamil') || langStr === 'ta') langKey = 'ta';
+
+                else if (langStr.includes('malayalam') || langStr === 'ml') langKey = 'ml';
+
+
+
+                let sumLabels = { 'te': 'సారాంశం', 'hi': 'सारांश', 'kn': 'ಸಾರಾಂಶ', 'ta': 'சுരുக்கம்', 'ml': 'സംഗ్రహం', 'en': 'SUMMARY' };
+
+                let bulLabels = { 'te': 'ముఖ్య అంశాలు', 'hi': 'मुख्य बिंदु', 'kn': 'ಪ್ರಮುಖ ముఖ్యాంಶలు', 'ta': 'முக்கிய அம்சங்கள்', 'ml': 'പ്രధాన വിവരాలు', 'en': 'KEY TAKEAWAYS' };
+
+
+
+                let sumTitle = sumLabels[langKey] || 'SUMMARY';
+
+                let bulTitle = bulLabels[langKey] || 'KEY TAKEAWAYS';
+
+
+
+                let bpHtml = (data.bullet_points || []).slice(0, 4).map(bp => `<li style="margin-bottom: 6px;">${bp}</li>`).join('');
+
+                
+
+                let sumBg = data.summary_bg || '#FFF4CC';
+
+                let bulBg = data.bullet_bg || '#00A79D';
+
+                let sumHeadingColor = '#B28600';
+
+                let sumTextColor = '#333333';
+
+                let bulHeadingColor = '#CCF2F0';
+
+                let bulTextColor = '#FFFFFF';
+
+                let listStyle = 'disc';
+
+                let sumBorder = '#FFE066';
+
+                let bulBorder = '#008C83';
+
+                
+
+                if (data.template_id === 'custom') {
+
+                    sumBg = '#F8E71C';
+
+                    bulBg = '#00B7C6';
+
+                    sumHeadingColor = '#000000';
+
+                    sumTextColor = '#000000';
+
+                    bulHeadingColor = '#FFFFFF';
+
+                    listStyle = '"✦  "';
+
+                    sumBorder = 'transparent';
+
+                    bulBorder = 'transparent';
+
+                }
+
+                
+
+                let summaryBoxHtml = '';
+
+                if (data.summary && String(data.summary).trim()) {
+
+                    summaryBoxHtml = `
+
+                        <div style="flex: 1; background-color: ${sumBg}; padding: 20px; border-radius: 12px; border: 1px solid ${sumBorder}; display: flex; flex-direction: column; justify-content: flex-start;">
+
+                            <div style="font-weight: 800; font-size: 15px; text-transform: uppercase; color: ${sumHeadingColor}; margin-bottom: 8px; letter-spacing: 0.5px;">${sumTitle}</div>
+
+                            <div style="font-size: 14px; line-height: 1.6; color: ${sumTextColor}; text-align: justify;">${data.summary}</div>
+
+                        </div>
+
+                    `;
+
+                }
+
+
+
+                let bulletBoxHtml = '';
+
+                if (data.bullet_points && data.bullet_points.length > 0) {
+
+                    bulletBoxHtml = `
+
+                        <div style="flex: 1; background-color: ${bulBg}; padding: 20px; border-radius: 12px; border: 1px solid ${bulBorder}; display: flex; flex-direction: column; justify-content: flex-start; color: ${bulTextColor};">
+
+                            <div style="font-weight: 800; font-size: 15px; text-transform: uppercase; color: ${bulHeadingColor}; margin-bottom: 8px; letter-spacing: 0.5px;">${bulTitle}</div>
+
+                            <ul style="margin: 0; padding-left: 20px; font-size: 14px; line-height: 1.6; list-style-type: ${listStyle};">
+
+                                ${bpHtml}
+
+                            </ul>
+
+                        </div>
+
+                    `;
+
+                }
+
+
+
+                containerEl.innerHTML = summaryBoxHtml + bulletBoxHtml;
+
+                canvas.appendChild(containerEl);
+
+                return containerEl.offsetHeight || 180;
+
+            }
+
+
+
+            async function executeLayout() {
+
+                const dims = await Promise.all(urls.map(url => getImageDimensions(url)));
+
+                aspectRatios = dims.map(d => (d.width && d.height) ? (d.width / d.height) : 1.0);
+
+                await waitReady();
+
+                
+
+                // Force headline to fit on a single line
+
+                const hl = document.querySelector('.headline');
+
+                if (hl) {
+
+                    hl.style.whiteSpace = 'normal';
+
+                    hl.style.wordBreak = 'break-word';
+
+                    hl.style.display = 'block';
+
+                    hl.style.width = '100%';
+
+                }
+
+
+
+                // Dynamic scaling factor S based on character count
+
+                let S = 1.0 - (totalChars - 1400) / 3000;
+
+                S = Math.max(0.75, Math.min(1.25, S));
+
+
+
+                const W_canvas = canvas.offsetWidth || 1060;
+
+                const N = resolveColumns(data.layout_columns, totalChars);
+
+                const W_col = (W_canvas - (N - 1) * 24) / N;
+
+                const canvasTop = canvas.getBoundingClientRect().top + window.scrollY;
+
+                const H_avail = Math.max(1200, TARGET_MAX_HEIGHT - canvasTop - 60);
+
+                
+
+                const imgHeightPx = Math.round(0.58 * W_canvas);
+
+                let S_img = S || 1.0;
+
+                const obstacles = getObstacles(W_canvas, S_img, imgHeightPx, H_avail);
+
+                
+
+                let maxObstacleY = 0;
+
+                // Only consider fixed top obstacles (at y=0) for the page height floor limit
+
+                obstacles.forEach(obs => {
+
+                    if (obs.y === 0 && obs.type !== 'summary_bullets') {
+
+                        maxObstacleY = Math.max(maxObstacleY, obs.y + obs.h);
+
+                    }
+
+                });
+
+                
+
+                // Available width for columns: N * W_col.
+
+                // But images block some of the columns. Let's compute the available area for text.
+
+                let blockedArea = 0;
+
+                obstacles.forEach(obs => {
+
+                    for (let c = 0; c < N; c++) {
+
+                        const L_c = c * (W_col + 24);
+
+                        const R_c = L_c + W_col;
+
+                        const xOverlapStart = Math.max(L_c, obs.x);
+
+                        const xOverlapEnd = Math.min(R_c, obs.x + obs.w);
+
+                        if (xOverlapStart < xOverlapEnd) {
+
+                            blockedArea += (xOverlapEnd - xOverlapStart) * obs.h;
+
+                        }
+
+                    }
+
+                });
+
+                
+
+                const estFontSize = Math.sqrt(Math.max(100000, N * W_col * H_avail - blockedArea) / (totalChars * 0.54));
+
+                const maxFontSize = (urls.length > 2 && totalChars < 2500) ? 23.0 : 21.0;
+
+                const conf = { fontSize: Math.min(maxFontSize, estFontSize), lineHeight: 1.28, paraMargin: 8, imgMaxPct: 0.58, padding: 32 };
+
+
+
+                // Step 1: Find best font size that fits 100% of text within H_avail
+
+                let targetFs = Math.min(maxFontSize, estFontSize);
+
+                let foundFit = false;
+
+                
+
+                for (let fs = targetFs; fs >= 11.0; fs -= 0.5) {
+
+                    conf.fontSize = fs;
+
+                    if (runLayoutPass(conf, S, H_avail, false)) {
+
+                        foundFit = true;
+
+                        targetFs = fs;
+
+                        break;
+
+                    }
+
+                }
+
+
+
+                const rawLayoutStr = String(data.image_layout || "default").toLowerCase().replace(/[^a-z]/g, "");
+
+                const isSingleLeft75Layout = (urls.length === 1) && (rawLayoutStr.includes('patterng') || rawLayoutStr.includes('left75') || rawLayoutStr.includes('pattern75') || rawLayoutStr.includes('75left') || rawLayoutStr.includes('75'));
+
+                let low = isSingleLeft75Layout ? Math.max(200, Math.round(totalChars * 0.42)) : Math.max(300, Math.round(maxObstacleY + 30));
+
+                let high = H_avail;
+
+                let H_best = high;
+
+
+
+                if (foundFit) {
+
+                    // Binary search for minimum height at targetFs
+
+                    conf.fontSize = targetFs;
+
+                    H_best = high;
+
+                    for (let step = 0; step < 10; step++) {
+
+                        const mid = Math.round((low + high) / 2);
+
+                        if (runLayoutPass(conf, S, mid, false)) {
+
+                            H_best = mid;
+
+                            high = mid - 1;
+
+                        } else {
+
+                            low = mid + 1;
+
+                        }
+
+                    }
+
+                } else {
+
+                    // Content is exceptionally long: fix fontSize at 11.0px and expand height until it fits
+
+                    conf.fontSize = 11.0;
+
+                    low = H_avail;
+
+                    high = H_avail + 6000;
+
+                    H_best = high;
+
+                    for (let step = 0; step < 12; step++) {
+
+                        const mid = Math.round((low + high) / 2);
+
+                        if (runLayoutPass(conf, S, mid, false)) {
+
+                            H_best = mid;
+
+                            high = mid - 1;
+
+                        } else {
+
+                            low = mid + 1;
+
+                        }
+
+                    }
+
+                }
+
+                
+
+                // Final render pass with H_best (plus 4px margin for safe line wrapping rounding variations)
+
+                runLayoutPass(conf, S, H_best + 4, true);
+
+
+
+                // Wait for all canvas images to finish downloading/rendering
+
+                const canvasImgs = Array.from(canvas.querySelectorAll('img'));
+
+                await Promise.all(canvasImgs.map(img => {
+
+                    if (img.complete && img.naturalWidth > 0) return Promise.resolve();
+
+                    return new Promise(resolve => {
+
+                        img.onload = resolve;
+
+                        img.onerror = resolve;
+
+                        setTimeout(resolve, 2500);
+
+                    });
+
+                }));
+
+                
+
+                let st = document.getElementById('nc-layout-style');
+
+                if (!st) { st = document.createElement('style'); st.id = 'nc-layout-style'; document.head.appendChild(st); }
+
+                st.innerHTML = `
+
+                    * { -webkit-font-smoothing: antialiased !important; }
+
+                    body { margin: 0 !important; padding: 0 !important; }
+
+                    .newspaper-container { height: auto !important; min-height: unset !important; padding-bottom: 0px !important; margin-bottom: 0px !important; }
+
+                `;
+
+                
+
+                // Precision shrink-wrap canvas exactly to the lowest content pixel
+
+                let rBoxBottoms = [];
+
+                document.querySelectorAll('.nc-text-region-box p, .nc-absolute-image, .nc-image-caption').forEach(el => {
+
+                    let rect = el.getBoundingClientRect();
+
+                    if (rect.height > 0 && rect.bottom > 0) {
+
+                        rBoxBottoms.push(rect.bottom);
+
+                    }
+
+                });
+
+                
+
+                let contentMaxY = rBoxBottoms.length > 0 ? Math.max(...rBoxBottoms) : 0;
+
+                console.log("[LAYOUT DEBUG] contentMaxY: " + contentMaxY);
+
+                if (contentMaxY > 0) {
+
+                    let canvasRect = canvas.getBoundingClientRect();
+
+                    let actualContentHeight = contentMaxY - canvasRect.top;
+
+                    
+
+                    actualContentHeight += 2;
+
+                    
+
+                    // CUSTOM TEMPLATE ENHANCEMENT: Thick border + RTI Footer
+
+                    const rawLayout = String(data.image_layout || "default").toLowerCase().replace(/[^a-z]/g, "");
+
+                    if (data.template_id === 'custom' && rawLayout.includes('patterng')) {
+
+                        const customBorderColor = data.border_color || '#F8E71C';
+
+                        
+
+                        // Apply thick border to the container
+
+                        st.innerHTML += `
+
+                            .newspaper-container { 
+
+                                border: 15px solid ${customBorderColor} !important; 
+
+                                padding-bottom: 15px !important;
+
+                            }
+
+                        `;
+
+                        
+
+                        // Build the RTI footer
+
+                        const footerEl = document.createElement('div');
+
+                        footerEl.className = 'rti-custom-footer';
+
+                        footerEl.style.position = 'relative';
+
+                        footerEl.style.marginTop = '15px';
+
+                        footerEl.style.width = '100%';
+
+                        footerEl.style.height = '60px';
+
+                        footerEl.style.backgroundColor = customBorderColor;
+
+                        footerEl.style.display = 'flex';
+
+                        footerEl.style.justifyContent = 'space-between';
+
+                        footerEl.style.alignItems = 'center';
+
+                        footerEl.style.padding = '0 30px';
+
+                        footerEl.style.boxSizing = 'border-box';
+
+                        footerEl.style.zIndex = '100';
+
+                        
+
+                        // We use the logo_url if provided, else plain text logo
+
+                        let logoHtml = '';
+
+                        if (data.logo_url) {
+
+                            logoHtml = `<img src="${data.logo_url}" style="height: 40px; object-fit: contain;">`;
+
+                        } else {
+
+                            logoHtml = `<h2 style="margin:0; color:#111; font-family:'Playfair Display',serif; font-size: 30px; font-weight:900;">RTI EXPRESS</h2>`;
+
+                        }
+
+                        
+
+                        footerEl.innerHTML = `
+
+                            <div>${logoHtml}</div>
+
+                            <div style="color: #111; font-size: 14px; font-family: sans-serif; text-align: right; font-weight: bold;">
+
+                                https://www.rtiexpress.com/clip/${data.id || ''}<br>
+
+                                ${data.location || 'Local Edition'} (${data.publication_date || ''})
+
+                            </div>
+
+                        `;
+
+                        
+
+                        // Append directly to container below canvas
+
+                        container.appendChild(footerEl);
+
+                    }
+
+                    
+
+                    canvas.style.height = actualContentHeight + 'px';
+
+                    canvas.style.minHeight = actualContentHeight + 'px';
+
+                    canvas.style.maxHeight = actualContentHeight + 'px';
+
+                    canvas.setAttribute('data-computed-height', actualContentHeight);
+
+                }
+
+                
+
+                window.__LAYOUT_DONE__ = true;
+
+            }
+
+
+
+            setTimeout(() => { if (!window.__LAYOUT_DONE__) { console.warn("[LAYOUT TIMEOUT FORCED DONE]"); window.__LAYOUT_DONE__ = true; } }, 4000);
+
+            executeLayout().then(() => {
+
+                window.__LAYOUT_DONE__ = true;
+
+            }).catch(err => {
+
+                console.error("[LAYOUT FATAL ERROR]", err && err.stack ? err.stack : err);
+
+                window.__LAYOUT_DONE__ = true;
+
+            });
+
+        }
+
+        if (document.readyState === 'loading') {
+
+            document.addEventListener('DOMContentLoaded', startCompositorLayout);
+
+        } else {
+
+            startCompositorLayout();
+
+        }
+
+        </script>
+
+        </body>
 </html>

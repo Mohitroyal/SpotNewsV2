@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Newspaper, RefreshCw, X, Send, Share2, ChevronDown, ChevronRight } from 'lucide-react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useNavigate, useSearchParams, useParams } from 'react-router-dom';
 import locationMapPinIcon from '@/assets/location_map_pin.png';
 import { useAuthStore, useUIStore } from '@/store';
 import { supabase } from '@/lib/supabase';
@@ -12,7 +12,7 @@ import type { LocalAd } from '@/types/localAds';
 import { AdvisoryCard } from '@/features/weather/AdvisoryCard';
 import { useAdvisory } from '@/features/weather/useAdvisory';
 import { useWeather, getWeatherInfo } from '@/services/weatherService';
-import { ShareAfterClipping } from '@/features/share/ShareAfterClipping';
+import { directShareClipping } from '@/features/share';
 
 interface Comment {
   id: string;
@@ -26,25 +26,43 @@ interface Comment {
 export const FeedScreen: React.FC = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const targetClipId = searchParams.get('clipId') || searchParams.get('id');
+  const { id: paramClipId } = useParams();
+  const targetClipId = paramClipId || searchParams.get('clipId') || searchParams.get('id');
   const { user } = useAuthStore();
   const district = useAuthStore((state) => state.district) || '';
   const userState = useAuthStore((state) => state.userState) || '';
-  const isFullScreenFeed = useUIStore((state) => state.isFullScreenFeed);
   const setIsFullScreenFeed = useUIStore((state) => state.setIsFullScreenFeed);
-  const [clippings, setClippings] = useState<any[]>([]);
+  const [clippings, setClippings] = useState<any[]>(() => {
+    try {
+      const cached = localStorage.getItem('spotnews_feed_cache');
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    } catch {}
+    return [];
+  });
   const [localAds, setLocalAds] = useState<LocalAd[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState<boolean>(() => {
+    try {
+      const cached = localStorage.getItem('spotnews_feed_cache');
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        if (Array.isArray(parsed) && parsed.length > 0) return false;
+      }
+    } catch {}
+    return true;
+  });
   const [activeDetailIndex, setActiveDetailIndex] = useState<number | null>(null);
 
-  // Automatically toggle full-screen mode to hide the bottom railbar during full page preview
+  // Sync full-screen mode: true only when activeDetailIndex is set
   useEffect(() => {
-    if (activeDetailIndex !== null) {
-      setIsFullScreenFeed(true);
-    }
+    setIsFullScreenFeed(activeDetailIndex !== null);
   }, [activeDetailIndex, setIsFullScreenFeed]);
 
+  // Always reset full-screen feed on mount and unmount
   useEffect(() => {
+    setIsFullScreenFeed(false);
     return () => {
       setIsFullScreenFeed(false);
     };
@@ -78,84 +96,96 @@ export const FeedScreen: React.FC = () => {
   const [commentText, setCommentText] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const commentInputRef = useRef<HTMLInputElement>(null);
-  // Share drawer state
-  const [shareSheetOpen, setShareSheetOpen] = useState<any | null>(null);
-
-  const handleShareClick = (clip: any) => {
-    setShareSheetOpen(clip);
+  const handleShareClick = async (clip: any) => {
+    if (!clip?.id) return;
+    try {
+      await directShareClipping({
+        id: clip.id,
+        headline: clip.headline || clip.title || 'Spot News Update',
+        clippingUrl:
+          clip.png_url ||
+          clip.pngUrl ||
+          clip.custom_layout?.png_url ||
+          clip.custom_layout?.pngUrl ||
+          clip.clipping_url ||
+          clip.image_url ||
+          clip.preview_url ||
+          '',
+        videoUrl: clip.mp4_url || clip.video_url || clip.custom_layout?.mp4_url || undefined,
+        reporterSlug: (
+          clip.reporter_name ||
+          clip.custom_layout?.reporter_name ||
+          clip.custom_layout?.reporterName ||
+          clip.author_name ||
+          'reporter'
+        )
+          .toLowerCase()
+          .replace(/\s+/g, '-'),
+        reporterId: clip.user_id,
+        status: clip.status,
+        is_posted: clip.is_posted,
+      });
+    } catch (err: any) {
+      console.error('Direct share error:', err);
+    }
   };
 
   const fetchFeed = async () => {
-    setLoading(true);
+    // Only set loading if we don't have any cached clippings displayed
+    if (clippings.length === 0) {
+      setLoading(true);
+    }
+
+    // Safety timeout: ensure loading spinner is NEVER stuck past 6 seconds
+    const timeoutTimer = setTimeout(() => {
+      setLoading(false);
+    }, 6000);
+
     try {
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-      const todayISO = today.toISOString();
+      const FEED_COLUMNS = 'id, headline, article_content, png_url, mp4_url, image_url, image_urls, likes_count, views_count, comments_count, created_at, district, state, user_id, status, is_posted, custom_layout';
 
       let query = supabase
         .from('clippings')
-        .select('*')
-        .eq('is_posted', true)
-        .eq('status', 'approved')
-        .gte('created_at', todayISO)
-        .order('created_at', { ascending: false });
+        .select(FEED_COLUMNS)
+        .or('is_posted.eq.true,status.eq.approved')
+        .neq('status', 'rejected')
+        .not('png_url', 'is', null)
+        .order('created_at', { ascending: false })
+        .limit(50);
 
       if (userState && userState !== 'All' && userState !== 'Both states') {
-        query = query.eq('state', userState);
+        query = query.or(`state.eq.${userState},state.eq.All,state.eq.Both states,state.is.null`);
       }
       if (district && district !== 'All districts' && district !== 'All' && district !== 'All Regions') {
-        query = query.eq('district', district);
+        query = query.or(`district.eq.${district},district.eq.All,district.is.null`);
       }
 
       const { data, error } = await query;
       if (error) throw error;
 
-      // Only display clippings that are posted AND explicitly approved by admin
-      let postedClippings = (data || []).filter(
-        (c) => c.is_posted === true && c.status === 'approved'
-      );
+      const isApprovedFeedClip = (c: any) =>
+        (c.is_posted === true || ['approved', 'auto_approved', 'published', 'completed'].includes(c.status)) &&
+        c.status !== 'rejected';
 
-      // If no clippings posted today specifically, fall back to recent published news
+      let postedClippings = (data || []).filter(isApprovedFeedClip);
+
+      // If user's specific district has no news yet, fallback to latest news across all regions
       if (postedClippings.length === 0) {
-        let fallbackQuery = supabase
+        const { data: allData } = await supabase
           .from('clippings')
-          .select('*')
-          .eq('is_posted', true)
-          .eq('status', 'approved')
+          .select(FEED_COLUMNS)
+          .or('is_posted.eq.true,status.eq.approved')
+          .neq('status', 'rejected')
+          .not('png_url', 'is', null)
           .order('created_at', { ascending: false })
-          .limit(30);
+          .limit(50);
 
-        if (userState && userState !== 'All' && userState !== 'Both states') {
-          fallbackQuery = fallbackQuery.eq('state', userState);
-        }
-        if (district && district !== 'All districts' && district !== 'All' && district !== 'All Regions') {
-          fallbackQuery = fallbackQuery.eq('district', district);
-        }
-
-        const { data: fallbackData } = await fallbackQuery;
-        postedClippings = (fallbackData || []).filter(
-          (c) => c.is_posted === true && c.status === 'approved'
-        );
-
-        // If district-filtered query has no clippings, fetch latest across all regions
-        if (postedClippings.length === 0) {
-          const { data: allData } = await supabase
-            .from('clippings')
-            .select('*')
-            .eq('is_posted', true)
-            .eq('status', 'approved')
-            .order('created_at', { ascending: false })
-            .limit(30);
-
-          postedClippings = (allData || []).filter(
-            (c) => c.is_posted === true && c.status === 'approved'
-          );
-        }
+        postedClippings = (allData || []).filter(isApprovedFeedClip);
       }
 
       // Deep link support: If clipId query param is present, prioritize or fetch that clipping
       const urlParams = new URLSearchParams(window.location.search);
-      const targetClip = urlParams.get('clipId') || urlParams.get('id') || searchParams.get('clipId') || searchParams.get('id');
+      const targetClip = paramClipId || urlParams.get('clipId') || urlParams.get('id') || searchParams.get('clipId') || searchParams.get('id');
       if (targetClip) {
         const found = postedClippings.find((c) => String(c.id) === String(targetClip));
         if (found) {
@@ -166,7 +196,7 @@ export const FeedScreen: React.FC = () => {
           try {
             const { data: directClip } = await supabase
               .from('clippings')
-              .select('*')
+              .select(FEED_COLUMNS)
               .eq('id', targetClip)
               .eq('is_posted', true)
               .eq('status', 'approved')
@@ -182,10 +212,21 @@ export const FeedScreen: React.FC = () => {
         }
       }
 
-      setClippings(postedClippings);
+      if (postedClippings.length > 0) {
+        setClippings(postedClippings);
+        try {
+          localStorage.setItem('spotnews_feed_cache', JSON.stringify(postedClippings));
+        } catch {}
+      } else {
+        setClippings([]);
+        try {
+          localStorage.removeItem('spotnews_feed_cache');
+        } catch {}
+      }
     } catch (err) {
       console.error('Failed to fetch feed', err);
     } finally {
+      clearTimeout(timeoutTimer);
       setLoading(false);
     }
   };
@@ -366,8 +407,8 @@ export const FeedScreen: React.FC = () => {
   }, [targetClipId]);
 
   return (
-    <div className={`flex flex-col h-[100dvh] bg-black ${!isFullScreenFeed ? 'pb-[60px]' : ''}`}>
-      {!isFullScreenFeed && (
+    <div className={`flex flex-col h-[100dvh] bg-black ${activeDetailIndex === null ? 'pb-[60px]' : ''}`}>
+      {activeDetailIndex === null && (
         <div className="flex-shrink-0 bg-[#F4F8FC] border-b border-[#D8E4F2] px-3.5 pt-3 pb-3 space-y-2.5">
           {/* ── Top Card: Showing news for + Weather ── */}
           <div className="bg-white border border-[#D9E5F2] rounded-[20px] p-3 px-3.5 shadow-sm flex items-center justify-between">
@@ -458,20 +499,30 @@ export const FeedScreen: React.FC = () => {
       )}
 
       <div className="flex-1 w-full bg-black flex justify-center overflow-hidden">
-        {loading ? (
+        {loading && clippings.length === 0 ? (
           <div className="p-12 text-center">
             <div className="w-8 h-8 rounded-full border-2 border-[#145AB1] border-t-transparent animate-spin mx-auto mb-2" />
             <p className="text-xs text-[#6B7A90] font-bold">Loading today's news...</p>
           </div>
         ) : clippings.length === 0 ? (
-          <div className="bg-[#E8F2FC] border border-[#D0E2F7] rounded-2xl p-8 text-center my-6 flex flex-col items-center justify-center shadow-sm">
+          <div className="bg-[#E8F2FC] border border-[#D0E2F7] rounded-2xl p-8 text-center my-6 mx-4 flex flex-col items-center justify-center shadow-sm">
             <div className="w-16 h-16 rounded-full bg-[#0d4a8f]/10 flex items-center justify-center mb-4">
               <Newspaper className="w-8 h-8 text-[#0d4a8f]" />
             </div>
-            <h3 className="text-lg font-bold text-[#0A2540] mb-2">No news found today</h3>
-            <p className="text-xs text-[#6B7A90] max-w-xs leading-relaxed">
-              Reporters in {district || 'your selected region'} haven't posted any news today. Check back later!
+            <h3 className="text-lg font-bold text-[#0A2540] mb-2">No news in this district yet</h3>
+            <p className="text-xs text-[#6B7A90] max-w-xs leading-relaxed mb-4">
+              Reporters in {district && district !== 'All' ? district : 'your selected area'} haven't published news today yet.
             </p>
+            <button
+              onClick={() => {
+                useAuthStore.getState().setDistrict('All');
+                useAuthStore.getState().setUserState('All');
+                fetchFeed();
+              }}
+              className="px-5 py-2.5 bg-[#015BB3] hover:bg-[#0d4a8f] active:scale-95 text-white text-xs font-bold rounded-xl shadow-md transition-all cursor-pointer"
+            >
+              Show All State & District News
+            </button>
           </div>
         ) : (
           <div className="h-full w-full overflow-y-auto snap-y snap-mandatory no-scrollbar relative bg-black">
@@ -519,13 +570,13 @@ export const FeedScreen: React.FC = () => {
                         loop
                         muted
                         playsInline
-                        className="w-full h-full object-fill relative z-10"
+                        className="w-full h-full object-contain relative z-10"
                       />
                     ) : clip.png_url ? (
                       <img
                         src={clip.png_url}
                         alt="News clipping"
-                        className="w-full h-full object-fill relative z-10"
+                        className="w-full h-full object-contain relative z-10"
                       />
                     ) : (
                       <div className="flex flex-col items-center text-[#6B7A90] relative z-10">
@@ -622,57 +673,7 @@ export const FeedScreen: React.FC = () => {
         />
       )}
 
-      {/* ── RTI Share Sheet (Clipping, Reporter Card 1:1, Status 9:16) ─── */}
-      {shareSheetOpen && (
-        <ShareAfterClipping
-          post={{
-            id: shareSheetOpen.id,
-            headline: shareSheetOpen.headline || shareSheetOpen.title || 'News Update',
-            place: shareSheetOpen.district || district || 'హైదరాబాద్',
-            date: new Date(shareSheetOpen.created_at || Date.now()).toLocaleDateString('te-IN', {
-              day: 'numeric',
-              month: 'short',
-            }),
-            clippingUrl: shareSheetOpen.png_url,
-            thumbUrl:
-              shareSheetOpen.image_url ||
-              shareSheetOpen.imageUrl ||
-              shareSheetOpen.custom_layout?.image_url ||
-              shareSheetOpen.custom_layout?.imageUrls?.[0] ||
-              shareSheetOpen.custom_layout?.image_urls?.[0] ||
-              shareSheetOpen.image_urls?.[0] ||
-              shareSheetOpen.png_url,
-            videoUrl: shareSheetOpen.mp4_url || shareSheetOpen.video_url || shareSheetOpen.custom_layout?.mp4_url || undefined,
-          }}
-          reporter={{
-            id: shareSheetOpen.user_id || user?.id || 'reporter',
-            name:
-              shareSheetOpen.reporter_name ||
-              shareSheetOpen.custom_layout?.reporter_name ||
-              shareSheetOpen.custom_layout?.reporterName ||
-              shareSheetOpen.author_name ||
-              user?.full_name ||
-              'Spot News Reporter',
-            slug: (
-              shareSheetOpen.reporter_name ||
-              shareSheetOpen.custom_layout?.reporter_name ||
-              shareSheetOpen.custom_layout?.reporterName ||
-              shareSheetOpen.author_name ||
-              'reporter'
-            )
-              .toLowerCase()
-              .replace(/\s+/g, '-'),
-            verified: true,
-            avgStars: 4.8,
-            ratingsCount: 24,
-            stories: 15,
-            views: shareSheetOpen.views_count || 120,
-            experienceYears: 3,
-            photoUrl: user?.avatarUrl,
-          }}
-          onClose={() => setShareSheetOpen(null)}
-        />
-      )}
+
 
       {/* ── Comments Bottom Sheet (Drawer) ─────────────────────────────────── */}
       {commentOpen && (

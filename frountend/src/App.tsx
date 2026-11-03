@@ -318,6 +318,9 @@ function App() {
 
 
   useEffect(() => {
+    // Ensure full-screen feed is always reset to false on app start
+    useUIStore.getState().setIsFullScreenFeed(false);
+
     // Initialize Google AdMob SDK
     admobService.initialize();
 
@@ -487,6 +490,8 @@ function App() {
           }
         />
 
+        <Route path="/n/:id" element={<FeedScreen />} />
+        <Route path="/story/:id" element={<FeedScreen />} />
         <Route
           path="/preview/:id"
           element={isAuthenticated ? <PreviewScreen /> : <Navigate to="/login" />}
@@ -514,9 +519,11 @@ function App() {
               <MainLayout>
                 <Routes>
                   <Route path="/" element={<FeedScreen />} />
+                  <Route path="/n/:id" element={<FeedScreen />} />
+                  <Route path="/story/:id" element={<FeedScreen />} />
                   <Route path="/location" element={<LocationSelectScreen />} />
                   <Route path="/ad-requests" element={<ReporterAdRequestsScreen />} />
-                  <Route path="/stats" element={hasReporterAccess ? <StatsScreen /> : <Navigate to="/" />} />
+                  <Route path="/stats" element={<StatsScreen />} />
                   <Route path="/dashboard" element={<DashboardScreen />} />
                   <Route path="/generate" element={hasReporterAccess ? <GenerateScreen /> : <Navigate to="/" />} />
                   <Route path="/templates" element={<TemplatesScreen />} />

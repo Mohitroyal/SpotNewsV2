@@ -2,10 +2,11 @@ import React, { useState, useEffect } from 'react';
 import {
   Megaphone, Plus, CheckCircle2,
   Clock, Phone, MessageSquare, Globe, Trash2,
-  Check, X, RefreshCw, Loader2, Pause, Play, DollarSign
+  Check, X, RefreshCw, Loader2, Pause, Play, DollarSign, Zap
 } from 'lucide-react';
 import { localAdsService } from '@/services/localAds.service';
 import type { LocalAd, LocalAdMediaType, LocalAdCtaType } from '@/types/localAds';
+import { useAuthStore, isSuperAdminUser } from '@/store';
 
 const TELANGANA_DISTRICTS = [
   "All / మొత్తం తెలంగాణ",
@@ -24,10 +25,52 @@ const TELANGANA_DISTRICTS = [
   "Suryapet / సూర్యాపేట",
 ];
 
-export const LocalAdsAdminSection: React.FC = () => {
+interface LocalAdsAdminSectionProps {
+  isSuperAdmin?: boolean;
+}
+
+export const LocalAdsAdminSection: React.FC<LocalAdsAdminSectionProps> = ({ isSuperAdmin: propIsSuperAdmin }) => {
+  const { user } = useAuthStore();
+  const isSuperAdmin =
+    propIsSuperAdmin ??
+    (isSuperAdminUser(user) ||
+      user?.role === 'superadmin' ||
+      user?.plan === 'superadmin' ||
+      (user as any)?.user_metadata?.role === 'superadmin' ||
+      (user as any)?.app_metadata?.role === 'superadmin');
   const [ads, setAds] = useState<LocalAd[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<'all' | 'pending' | 'accepted_payment_pending' | 'active' | 'rejected'>('all');
+
+  // Auto-Approve Ads state (defaults to false if no setting exists)
+  const [autoApproveAds, setAutoApproveAds] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem('spotnews_auto_approve_ads') === 'true';
+    } catch {
+      return false;
+    }
+  });
+  const [toggleLoading, setToggleLoading] = useState(false);
+
+  useEffect(() => {
+    localAdsService.getAutoApproveAdsConfig().then((active) => {
+      setAutoApproveAds(active);
+    });
+  }, []);
+
+  const handleToggleAutoApprove = async () => {
+    if (!isSuperAdmin || toggleLoading) return;
+    const nextVal = !autoApproveAds;
+    setAutoApproveAds(nextVal);
+    setToggleLoading(true);
+    try {
+      await localAdsService.setAutoApproveAdsConfig(nextVal);
+    } catch (err) {
+      console.warn('Failed to update auto_approve_ads:', err);
+    } finally {
+      setToggleLoading(false);
+    }
+  };
 
   // Accept Dialog state
   const [acceptingAd, setAcceptingAd] = useState<LocalAd | null>(null);
@@ -53,9 +96,16 @@ export const LocalAdsAdminSection: React.FC = () => {
 
   const loadAds = async () => {
     setLoading(true);
-    const data = await localAdsService.fetchAllAdRequestsForAdmin();
-    setAds(data);
-    setLoading(false);
+    const safetyTimer = setTimeout(() => setLoading(false), 3000);
+    try {
+      const data = await localAdsService.fetchAllAdRequestsForAdmin();
+      setAds(data || []);
+    } catch (e) {
+      console.warn('Failed to load local ads:', e);
+    } finally {
+      clearTimeout(safetyTimer);
+      setLoading(false);
+    }
   };
 
   useEffect(() => {
@@ -192,6 +242,52 @@ export const LocalAdsAdminSection: React.FC = () => {
           </button>
         </div>
       </div>
+
+      {/* ⚡ Auto-Approve Advertisements Toggle (Superadmin only) ⚡ */}
+      {isSuperAdmin && (
+        <div
+          className={`flex items-center justify-between gap-3 rounded-2xl border px-4 py-3 transition-all ${
+            autoApproveAds
+              ? 'bg-emerald-50 border-emerald-300'
+              : 'bg-gray-50/70 border-gray-200'
+          }`}
+        >
+          <div className="flex items-center gap-2.5 min-w-0">
+            <div
+              className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 ${
+                autoApproveAds ? 'bg-emerald-500 text-white shadow-xs' : 'bg-gray-200 text-gray-500'
+              }`}
+            >
+              <Zap className="w-4 h-4" />
+            </div>
+            <div className="min-w-0">
+              <p className="text-xs font-bold text-[#0A2540] leading-tight flex items-center gap-1.5">
+                <span>Auto-Approve Ads</span>
+              </p>
+              <p className="text-[10px] text-gray-500 leading-snug">
+                {autoApproveAds
+                  ? 'ON — All new advertisement submissions are automatically accepted'
+                  : 'OFF — New advertisements require manual review'}
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={handleToggleAutoApprove}
+            disabled={toggleLoading}
+            className={`relative inline-flex w-11 h-6 rounded-full transition-colors duration-300 shrink-0 cursor-pointer border-0 focus:outline-none ${
+              autoApproveAds ? 'bg-emerald-500' : 'bg-gray-300'
+            }`}
+            title={autoApproveAds ? 'Disable auto-approval for ads' : 'Enable auto-approval for ads'}
+          >
+            <span
+              className={`inline-block w-5 h-5 my-0.5 rounded-full bg-white shadow-md transform transition-transform duration-300 ${
+                autoApproveAds ? 'translate-x-5' : 'translate-x-0.5'
+              }`}
+            />
+          </button>
+        </div>
+      )}
 
       {/* KPI Counters */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
@@ -339,10 +435,15 @@ export const LocalAdsAdminSection: React.FC = () => {
                     </span>
                   )}
                   {ad.status === 'accepted_payment_pending' && (
-                    <div className="text-right">
+                    <div className="text-right space-y-0.5">
                       <span className="text-[11px] font-bold text-emerald-800 bg-emerald-50 border border-emerald-300 px-2.5 py-1 rounded-full block">
                         {(ad.amount_inr ?? 0) === 0 ? 'Accepted / Free (₹0)' : `Accepted / Awaiting ₹${ad.amount_inr}`}
                       </span>
+                      {ad.approval_type === 'auto' && (
+                        <span className="text-[9px] font-black uppercase tracking-wider text-emerald-700 bg-emerald-100/80 px-2 py-0.5 rounded-full inline-block">
+                          ⚡ Auto-Approved
+                        </span>
+                      )}
                     </div>
                   )}
                   {ad.status === 'active' && (

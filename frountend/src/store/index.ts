@@ -409,7 +409,15 @@ export const useUIStore = create<UIStore>()(
       setIsFullScreenFeed: (val) => set({ isFullScreenFeed: val }),
       toggleFullScreenFeed: () => set((state) => ({ isFullScreenFeed: !state.isFullScreenFeed })),
     }),
-    { name: "newscraft-ui" }
+    {
+      name: "newscraft-ui",
+      partialize: (state) => ({
+        logoMode: state.logoMode,
+        showInnerBorders: state.showInnerBorders,
+        sidebarOpen: state.sidebarOpen,
+        language: state.language,
+      }),
+    }
   )
 );
 
@@ -432,8 +440,58 @@ export const SUPER_ADMIN_EMAIL = 'mohithroyal16450@gmail.com';
  * - Emails: mohithroyal16450@gmail.com or baba.journlist@gmail.com / baba.journilist@gmail.com
  * - Phones: 9346843889 or 7668886666
  */
+/**
+ * Determines whether a target account is a protected superadmin account that cannot be modified or banned.
+ * Only genuine superadmin accounts are protected:
+ * 1. Root owner emails: mohithroyal16450@gmail.com, baba.journlist@gmail.com, baba.journilist@gmail.com
+ * 2. Accounts whose saved database role is 'superadmin'
+ * Ordinary users (user, reporter, admin) are NOT protected superadmin accounts.
+ */
+export const isProtectedSuperAdminAccount = (targetUser?: any): boolean => {
+  if (!targetUser) return false;
+  const email = (
+    typeof targetUser === 'string'
+      ? targetUser
+      : targetUser?.email || targetUser?.user_metadata?.email || ''
+  ).trim().toLowerCase();
+
+  if (SUPER_ADMIN_EMAILS.some((e) => e.toLowerCase() === email)) {
+    return true;
+  }
+
+  if (typeof targetUser === 'object') {
+    const role = (
+      targetUser.role ||
+      targetUser.user_metadata?.role ||
+      targetUser.app_metadata?.role ||
+      ''
+    ).toString().toLowerCase().trim();
+    if (role === 'superadmin') {
+      return true;
+    }
+  }
+
+  return false;
+};
+
+/**
+ * Returns true if the user is a superadmin:
+ * - Emails: mohithroyal16450@gmail.com or baba.journlist@gmail.com / baba.journilist@gmail.com
+ * - Phones: 9346843889 or 7668886666 (when logging in via phone OTP or superadmin session)
+ */
 export const isSuperAdminUser = (userOrEmail?: any): boolean => {
   if (!userOrEmail) return false;
+
+  const email = (
+    typeof userOrEmail === 'string'
+      ? userOrEmail
+      : userOrEmail?.email || userOrEmail?.user_metadata?.email || ''
+  ).trim().toLowerCase();
+
+  // Root superadmin emails always match
+  if (email && SUPER_ADMIN_EMAILS.some((e) => e.toLowerCase() === email)) {
+    return true;
+  }
 
   // Check role property if object
   if (typeof userOrEmail === 'object') {
@@ -442,13 +500,17 @@ export const isSuperAdminUser = (userOrEmail?: any): boolean => {
       userOrEmail.user_metadata?.role ||
       userOrEmail.app_metadata?.role ||
       ''
-    ).toString().toLowerCase();
+    ).toString().toLowerCase().trim();
     if (role === 'superadmin') {
       return true;
     }
+    // If the object has an explicit non-superadmin role and email is not in SUPER_ADMIN_EMAILS, do not classify as superadmin
+    if (role === 'user' || role === 'reporter') {
+      return false;
+    }
   }
 
-  // Check phone number
+  // Check phone number for phone OTP sign-in sessions
   const phone = (
     typeof userOrEmail === 'string'
       ? userOrEmail
@@ -456,20 +518,17 @@ export const isSuperAdminUser = (userOrEmail?: any): boolean => {
   ).replace(/\D/g, '');
 
   if (phone && SUPER_ADMIN_PHONES.some((p) => phone.endsWith(p))) {
-    return true;
+    // Only treat as superadmin if it's a phone login or superadmin email/empty email
+    if (!email || email.endsWith('@phone.user') || SUPER_ADMIN_EMAILS.some((e) => e.toLowerCase() === email)) {
+      return true;
+    }
   }
-
-  const email = (
-    typeof userOrEmail === 'string'
-      ? userOrEmail
-      : userOrEmail?.email || userOrEmail?.user_metadata?.email || ''
-  ).trim().toLowerCase();
 
   if (email && SUPER_ADMIN_PHONES.some((p) => email.includes(p))) {
     return true;
   }
 
-  return SUPER_ADMIN_EMAILS.some((e) => e.toLowerCase() === email);
+  return false;
 };
 
 /**

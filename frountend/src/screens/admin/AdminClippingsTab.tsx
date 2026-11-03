@@ -73,7 +73,7 @@ export const AdminClippingsTab: React.FC<AdminClippingsTabProps> = ({
   onRestore,
   onSelectClippingModal,
 }) => {
-  const [approvalFilter, setApprovalFilter] = useState<'pending' | 'approved' | 'rejected' | 'all'>('pending');
+  const [approvalFilter, setApprovalFilter] = useState<'pending' | 'approved' | 'rejected' | 'all'>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [page, setPage] = useState(1);
   const pageSize = 15;
@@ -98,6 +98,8 @@ export const AdminClippingsTab: React.FC<AdminClippingsTabProps> = ({
     timerId: any;
   } | null>(null);
 
+
+
   // Filtered clippings
   const filteredList = useMemo(() => {
     return clippings.filter((c) => {
@@ -113,15 +115,15 @@ export const AdminClippingsTab: React.FC<AdminClippingsTabProps> = ({
       }
 
       // District scope if not superadmin
-      if (currentAdminDistrict && !isSuperAdmin) {
-        if ((c.district || '').toLowerCase() !== currentAdminDistrict.toLowerCase()) {
+      if (currentAdminDistrict && currentAdminDistrict !== 'all' && !isSuperAdmin) {
+        if (c.district && c.district.toLowerCase() !== currentAdminDistrict.toLowerCase()) {
           return false;
         }
       }
 
       // Status
       const isApproved = c.is_posted === true || c.status === 'approved';
-      const isPending = c.status === 'pending_approval' || (!c.is_posted && c.status !== 'rejected');
+      const isPending = (c.status === 'pending_approval' || (!c.is_posted && c.status !== 'rejected')) && c.status !== 'failed' && Boolean(c.png_url);
       const isRejected = c.status === 'rejected';
 
       if (approvalFilter === 'pending') return isPending;
@@ -134,16 +136,16 @@ export const AdminClippingsTab: React.FC<AdminClippingsTabProps> = ({
   // Counts for filter chips
   const pendingCount = useMemo(() => {
     return clippings.filter((c) => {
-      if (currentAdminDistrict && !isSuperAdmin) {
-        if ((c.district || '').toLowerCase() !== currentAdminDistrict.toLowerCase()) return false;
+      if (currentAdminDistrict && currentAdminDistrict !== 'all' && !isSuperAdmin) {
+        if (c.district && c.district.toLowerCase() !== currentAdminDistrict.toLowerCase()) return false;
       }
-      return c.status === 'pending_approval' || (!c.is_posted && c.status !== 'rejected');
+      return (c.status === 'pending_approval' || (!c.is_posted && c.status !== 'rejected')) && c.status !== 'failed' && Boolean(c.png_url);
     }).length;
   }, [clippings, currentAdminDistrict, isSuperAdmin]);
 
   const visibleList = filteredList.slice(0, page * pageSize);
   const visiblePendingItems = visibleList.filter(
-    (c) => c.status === 'pending_approval' || (!c.is_posted && c.status !== 'rejected')
+    (c) => (c.status === 'pending_approval' || (!c.is_posted && c.status !== 'rejected')) && c.status !== 'failed' && Boolean(c.png_url)
   );
 
   // Approve single handler with Undo toast trigger
@@ -191,7 +193,7 @@ export const AdminClippingsTab: React.FC<AdminClippingsTabProps> = ({
     setRejectingClip(null);
   };
 
-  // Bulk Approve handler
+  // Bulk Approve handler (parallel chunked execution for instant responsiveness)
   const handleBulkApprove = async () => {
     if (!confirmApproveAll) {
       setConfirmApproveAll(true);
@@ -200,8 +202,10 @@ export const AdminClippingsTab: React.FC<AdminClippingsTabProps> = ({
     }
 
     setBulkApproving(true);
-    for (const clip of visiblePendingItems) {
-      await onApprove(clip);
+    const itemsToApprove = [...visiblePendingItems];
+    for (let i = 0; i < itemsToApprove.length; i += 5) {
+      const chunk = itemsToApprove.slice(i, i + 5);
+      await Promise.allSettled(chunk.map((clip) => onApprove(clip)));
     }
     setBulkApproving(false);
     setConfirmApproveAll(false);
@@ -221,7 +225,7 @@ export const AdminClippingsTab: React.FC<AdminClippingsTabProps> = ({
                 District Clippings Review & Approvals
               </h2>
               <span className="text-[10px] font-black px-2.5 py-0.5 rounded-full bg-[#dbeafe] text-[var(--adm-blue)] uppercase tracking-wider">
-                DISTRICT ADMIN
+                {isSuperAdmin ? 'SUPERADMIN' : 'DISTRICT ADMIN'}
               </span>
             </div>
             <p className="text-xs text-[var(--adm-text-muted)] mt-1 max-w-2xl leading-relaxed">

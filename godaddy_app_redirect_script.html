@@ -319,6 +319,11 @@
         if (clip.png_url && previewBox && previewImg) {
           previewImg.src = clip.png_url;
           previewBox.style.display = "block";
+          previewBox.style.cursor = "pointer";
+          previewBox.title = "వార్త యాప్‌లో తెరవండి (Open in App)";
+          previewBox.onclick = function() {
+            openApp();
+          };
         }
       }
     })

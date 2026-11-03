@@ -40,7 +40,14 @@ export const ReporterCard = forwardRef<HTMLDivElement, { data: ReporterCardData;
     return (
       <div ref={ref} className={`rc rc-${format}`}>
         <div className="rc-head">
-          <img className="rc-logo" src="/assets/spot_news_badge.png" alt="" />
+          <img
+            className="rc-logo"
+            src="/rti_express_logo.png"
+            alt=""
+            onError={(e) => {
+              (e.currentTarget as HTMLImageElement).src = "/assets/spot_news_badge.png";
+            }}
+          />
           {format === "square" && <span className="rc-tag">తాజా వార్త</span>}
           <div className="rc-who">
             <div className="rc-name">{r.name}</div>
@@ -61,7 +68,14 @@ export const ReporterCard = forwardRef<HTMLDivElement, { data: ReporterCardData;
         <div className="rc-headline">{p.headline}</div>
         {p.thumbUrl && (
           <div className="rc-thumb">
-            <img src={p.thumbUrl} alt="" crossOrigin="anonymous" />
+            <img
+              src={p.thumbUrl}
+              alt=""
+              crossOrigin="anonymous"
+              onError={(e) => {
+                (e.currentTarget as HTMLElement).style.display = "none";
+              }}
+            />
           </div>
         )}
         <div className="rc-chips">

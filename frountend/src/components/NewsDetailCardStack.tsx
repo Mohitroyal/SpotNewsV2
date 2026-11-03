@@ -1,11 +1,13 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { ArrowLeft, ThumbsUp, MessageCircle, Share2, Newspaper, ChevronUp, ChevronDown } from 'lucide-react';
+import { ArrowLeft, ThumbsUp, MessageCircle, Share2, Newspaper, ChevronUp, ChevronDown, Video } from 'lucide-react';
 import { NewsVideoPlayer } from './NewsVideoPlayer';
+import { NewsImageCarousel } from './NewsImageCarousel';
 import mastheadLogo from '@/assets/rti_express_logo.png';
 import { admobService } from '@/services/admob.service';
 import { LocalAdFeedCard } from '@/components/LocalAdFeedCard';
 import type { LocalAd } from '@/types/localAds';
 import { StarRating } from '@/features/rating/StarRating';
+import { getReporterPhoto } from '@/store';
 
 export interface NewsDetailCardStackProps {
   items: any[];
@@ -18,6 +20,96 @@ export interface NewsDetailCardStackProps {
   onEndReached?: () => void;
   localAds?: LocalAd[];
 }
+
+const isComposedClippingVideo = (url?: string | null): boolean => {
+  if (!url || typeof url !== 'string') return false;
+  const lower = url.toLowerCase();
+  return lower.includes('/clippings/') && lower.includes('.mp4');
+};
+
+const extractNewsImages = (item: any): string[] => {
+  if (!item) return [];
+
+  const rawCandidates: any[] = [];
+
+  // 1. Direct database column 'image_urls' (jsonb array or string)
+  if (item.image_urls) {
+    if (Array.isArray(item.image_urls)) {
+      rawCandidates.push(...item.image_urls);
+    } else if (typeof item.image_urls === 'string') {
+      try {
+        const parsed = JSON.parse(item.image_urls);
+        if (Array.isArray(parsed)) rawCandidates.push(...parsed);
+        else if (item.image_urls.trim()) rawCandidates.push(item.image_urls.trim());
+      } catch {
+        if (item.image_urls.trim()) rawCandidates.push(item.image_urls.trim());
+      }
+    }
+  }
+
+  // 2. custom_layout.image_urls or custom_layout.imageUrls
+  const clUrls = item.custom_layout?.image_urls || item.custom_layout?.imageUrls;
+  if (clUrls) {
+    if (Array.isArray(clUrls)) {
+      rawCandidates.push(...clUrls);
+    } else if (typeof clUrls === 'string') {
+      try {
+        const parsed = JSON.parse(clUrls);
+        if (Array.isArray(parsed)) rawCandidates.push(...parsed);
+      } catch {
+        if (clUrls.trim()) rawCandidates.push(clUrls.trim());
+      }
+    }
+  }
+
+  // 3. config.imageUrls or config.image_urls
+  const cfgUrls = item.config?.imageUrls || item.config?.image_urls;
+  if (cfgUrls && Array.isArray(cfgUrls)) {
+    rawCandidates.push(...cfgUrls);
+  }
+
+  // 4. Single image fields if no array candidates were found
+  if (rawCandidates.length === 0) {
+    const single =
+      item.image_url ||
+      item.imageUrl ||
+      item.custom_layout?.image_url ||
+      item.custom_layout?.imageUrl ||
+      item.config?.imageUrl ||
+      item.preview_url;
+    if (single && typeof single === 'string' && single.trim()) {
+      rawCandidates.push(single.trim());
+    }
+  }
+
+  // Deduplicate while preserving order and filtering out invalid entries
+  const validImages: string[] = [];
+  const seen = new Set<string>();
+  for (const c of rawCandidates) {
+    if (typeof c === 'string') {
+      const clean = c.trim();
+      if (clean && !seen.has(clean)) {
+        seen.add(clean);
+        validImages.push(clean);
+      }
+    }
+  }
+
+  // Fallback to raw clipping png_url only if no photos exist at all
+  if (validImages.length === 0) {
+    const rawClip =
+      item.png_url ||
+      item.pngUrl ||
+      item.custom_layout?.png_url ||
+      item.custom_layout?.pngUrl ||
+      item.clipping_url;
+    if (rawClip && typeof rawClip === 'string' && rawClip.trim()) {
+      validImages.push(rawClip.trim());
+    }
+  }
+
+  return validImages;
+};
 
 export const NewsDetailCardStack: React.FC<NewsDetailCardStackProps> = ({
   items,
@@ -222,17 +314,46 @@ export const NewsDetailCardStack: React.FC<NewsDetailCardStackProps> = ({
             item.config?.subheadline ||
             '';
 
-          const videoUrl =
+          // ── Media Source Resolution ──
+          // 1. Original uploaded news video footage (Text view hero player ONLY)
+          const rawOriginalVideoCandidate =
+            item.custom_layout?.original_video_url ||
+            item.custom_layout?.video_url ||
+            item.custom_layout?.videoUrl ||
+            item.config?.videoUrl ||
+            item.config?.video_url ||
+            item.original_video_url ||
+            (!isComposedClippingVideo(item.video_url) ? item.video_url : undefined) ||
+            (!isComposedClippingVideo(item.videoUrl) ? item.videoUrl : undefined);
+
+          const originalNewsVideoUrl =
+            rawOriginalVideoCandidate && !isComposedClippingVideo(rawOriginalVideoCandidate)
+              ? rawOriginalVideoCandidate
+              : undefined;
+
+          // 2. Composed full clipping video export (contains rendered newspaper frame & baked text)
+          const fullClippingVideoUrl =
+            (isComposedClippingVideo(item.mp4_url) ? item.mp4_url : undefined) ||
+            (isComposedClippingVideo(item.mp4Url) ? item.mp4Url : undefined) ||
+            (isComposedClippingVideo(item.custom_layout?.mp4_url) ? item.custom_layout?.mp4_url : undefined) ||
+            (isComposedClippingVideo(item.custom_layout?.mp4Url) ? item.custom_layout?.mp4Url : undefined) ||
             item.mp4_url ||
             item.mp4Url ||
-            item.video_url ||
-            item.videoUrl ||
             item.custom_layout?.mp4_url ||
-            item.custom_layout?.mp4Url ||
-            item.custom_layout?.videoUrl ||
-            item.custom_layout?.video_url ||
-            item.config?.videoUrl;
+            item.custom_layout?.mp4Url;
 
+          // 3. Whether this item represents a video news clipping
+          const isVideoPost = Boolean(
+            originalNewsVideoUrl ||
+            fullClippingVideoUrl ||
+            item.custom_layout?.video_url ||
+            item.custom_layout?.videoUrl ||
+            item.config?.videoUrl ||
+            item.media_type === 'video' ||
+            (item as any).mediaType === 'video'
+          );
+
+          // 4. Original complete raw clipping image
           const rawClippingUrl =
             item.png_url ||
             item.pngUrl ||
@@ -240,18 +361,7 @@ export const NewsDetailCardStack: React.FC<NewsDetailCardStackProps> = ({
             item.custom_layout?.pngUrl ||
             item.clipping_url;
 
-          const articlePhotoUrl =
-            item.image_url ||
-            item.imageUrl ||
-            item.custom_layout?.image_url ||
-            item.custom_layout?.imageUrls?.[0] ||
-            item.custom_layout?.image_urls?.[0] ||
-            (item.image_urls && item.image_urls[0]) ||
-            (item.config?.imageUrls && item.config?.imageUrls[0]) ||
-            (item.config as any)?.imageUrl ||
-            item.preview_url;
-
-          const hasRawClipping = Boolean(rawClippingUrl || videoUrl);
+          const postImages = extractNewsImages(item);
 
           const reporterName =
             item.reporter_name ||
@@ -260,6 +370,17 @@ export const NewsDetailCardStack: React.FC<NewsDetailCardStackProps> = ({
             item.author_name ||
             item.user_name ||
             'Mohithroyal Pokkala';
+
+          const reporterPhoto =
+            item.reporter_image ||
+            item.reporter_photo ||
+            item.author_image ||
+            item.author_photo ||
+            item.user_avatar ||
+            item.user_image ||
+            item.custom_layout?.reporterImage ||
+            item.custom_layout?.reporter_image ||
+            getReporterPhoto(item.author_email || item.user_email || item.reporter_email);
 
           const formattedTime = formatDate(item.created_at || item.createdAt);
 
@@ -297,17 +418,17 @@ export const NewsDetailCardStack: React.FC<NewsDetailCardStackProps> = ({
                     transition: 'transform 0.45s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.4s ease',
                   }}
                 >
-                  {/* ── FULL RAW CLIPPING (Uncropped, Full Resolution) ── */}
-                  {viewMode === 'clipping' && hasRawClipping ? (
+                  {/* ── FULL RAW CLIPPING (Uncropped, Original Saved Layout & Proportions) ── */}
+                  {viewMode === 'clipping' ? (
                   <div className="flex-1 w-full bg-black relative flex items-center justify-center overflow-hidden">
-                    {videoUrl ? (
+                    {fullClippingVideoUrl ? (
                       <NewsVideoPlayer
-                        src={videoUrl}
+                        src={fullClippingVideoUrl}
                         isActive={isActive}
-                        objectFit="fill"
-                        className="w-full h-full object-fill relative z-10"
+                        objectFit="contain"
+                        className="w-full h-full object-contain relative z-10"
                       />
-                    ) : (
+                    ) : rawClippingUrl ? (
                       <>
                         {/* Ambient background blur */}
                         <div
@@ -317,10 +438,18 @@ export const NewsDetailCardStack: React.FC<NewsDetailCardStackProps> = ({
                         <img
                           src={rawClippingUrl}
                           alt={headline}
-                          className="w-full h-full object-fill relative z-10"
+                          className="w-full h-full object-contain relative z-10"
                           loading={Math.abs(activeIndex - index) <= 1 ? 'eager' : 'lazy'}
                         />
                       </>
+                    ) : (
+                      <div className="flex flex-col items-center justify-center text-gray-400 p-6 text-center z-10">
+                        <Newspaper className="w-16 h-16 mb-3 opacity-40 text-gray-400" />
+                        <p className="text-sm font-bold text-white mb-1">Original Clipping Unavailable</p>
+                        <p className="text-xs text-gray-400 max-w-xs">
+                          The original raw clipping source is missing for this item.
+                        </p>
+                      </div>
                     )}
                   </div>
                 ) : (
@@ -331,19 +460,33 @@ export const NewsDetailCardStack: React.FC<NewsDetailCardStackProps> = ({
                       className="w-full relative bg-[#20252B] overflow-hidden flex-shrink-0"
                       style={{ height: '38%', minHeight: '190px', maxHeight: '280px' }}
                     >
-                      {videoUrl ? (
-                        <NewsVideoPlayer
-                          src={videoUrl}
-                          isActive={isActive}
-                          objectFit="cover"
-                          className="w-full h-full object-cover"
-                        />
-                      ) : (articlePhotoUrl || rawClippingUrl) ? (
-                        <img
-                          src={articlePhotoUrl || rawClippingUrl}
+                      {isVideoPost ? (
+                        originalNewsVideoUrl ? (
+                          /* Only original news video plays in the hero media place - no composed clipping export, no overlapping banners or logos */
+                          <NewsVideoPlayer
+                            src={originalNewsVideoUrl}
+                            isActive={isActive}
+                            objectFit="cover"
+                            className="w-full h-full object-cover"
+                          />
+                        ) : (
+                          /* If original video source is missing, report that original footage is unavailable rather than substituting the composed clipping video */
+                          <div className="w-full h-full flex flex-col items-center justify-center bg-[#15191E] text-gray-400 p-4 text-center">
+                            <Video className="w-10 h-10 mb-2 opacity-50 text-amber-400" />
+                            <span className="text-xs font-bold text-gray-200 uppercase tracking-wider mb-1">
+                              Original Video Unavailable
+                            </span>
+                            <span className="text-[11px] text-gray-400 max-w-xs">
+                              Original uploaded footage not found in custom_layout.video_url. Switch to Full Clipping to view the saved broadcast.
+                            </span>
+                          </div>
+                        )
+                      ) : postImages.length > 0 ? (
+                        <NewsImageCarousel
+                          images={postImages}
                           alt={headline}
-                          className="w-full h-full object-cover"
-                          loading={Math.abs(activeIndex - index) <= 1 ? 'eager' : 'lazy'}
+                          isActive={isActive}
+                          postId={item.id || index}
                         />
                       ) : (
                         <div className="w-full h-full flex flex-col items-center justify-center bg-[#20252B] text-gray-400 relative">
@@ -355,9 +498,9 @@ export const NewsDetailCardStack: React.FC<NewsDetailCardStackProps> = ({
                         </div>
                       )}
 
-                      {/* RTI Logo Overlay (Only shown on static photos, video shows only video by default) */}
-                      {!videoUrl && (
-                        <div className="absolute top-2.5 right-2.5 z-10 w-11 h-11 rounded-full bg-white shadow-md border-2 border-white/80 p-0.5 flex items-center justify-center overflow-hidden">
+                      {/* RTI Logo Overlay (Only shown on static photos, video shows only video) */}
+                      {!isVideoPost && (
+                        <div className="absolute top-2.5 right-2.5 z-20 w-11 h-11 rounded-full bg-white shadow-md border-2 border-white/80 p-0.5 flex items-center justify-center overflow-hidden pointer-events-none">
                           <img
                             src={mastheadLogo}
                             alt="RTI Spot News"
@@ -365,37 +508,39 @@ export const NewsDetailCardStack: React.FC<NewsDetailCardStackProps> = ({
                           />
                         </div>
                       )}
+                    </div>
 
-                      {/* Author Info Overlay Strip (Only shown for static photos, not overlapping video player) */}
-                      {!videoUrl && (
-                        <div className="absolute bottom-0 inset-x-0 bg-gradient-to-t from-black/90 via-black/50 to-transparent pt-6 pb-2 px-3 flex items-center justify-between text-white z-10">
-                          <div className="flex items-center gap-2 min-w-0">
-                            <div className="w-7 h-7 rounded-full bg-[#015BB3] border border-white/80 flex items-center justify-center text-xs font-bold text-white shrink-0 shadow-sm">
-                              {(reporterName || 'R')[0].toUpperCase()}
-                            </div>
-                            <div className="flex flex-col min-w-0 leading-tight">
-                              <span className="text-[12px] font-bold text-white truncate drop-shadow-sm">
-                                {reporterName}
-                              </span>
-                              <span className="text-[10px] text-white/80 font-medium tracking-wide">
-                                {formattedTime}
-                              </span>
-                            </div>
-                          </div>
-
-                          <div className="bg-[#0A56B3] px-2 py-0.5 rounded text-[9.5px] font-black tracking-wider uppercase border border-white/40 shadow-sm">
-                            RTI EXPRESS
-                          </div>
+                    {/* Author & Publisher Strip (Stationary below hero media area, matches screenshot) */}
+                    <div className="px-3.5 py-1.5 bg-[#1A1E24] text-white border-b border-gray-200 flex items-center justify-between flex-shrink-0">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <div className="w-7 h-7 rounded-full bg-[#015BB3] border border-white/80 flex items-center justify-center text-xs font-bold text-white shrink-0 shadow-sm overflow-hidden">
+                          {reporterPhoto ? (
+                            <img src={reporterPhoto} alt={reporterName} className="w-full h-full object-cover" />
+                          ) : (
+                            (reporterName || 'R')[0].toUpperCase()
+                          )}
                         </div>
-                      )}
+                        <div className="flex flex-col min-w-0 leading-tight">
+                          <span className="text-[12px] font-bold text-white truncate">
+                            {reporterName}
+                          </span>
+                          <span className="text-[10px] text-white/80 font-medium">
+                            {formattedTime}
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="bg-[#0A56B3] text-white px-2 py-0.5 rounded text-[9.5px] font-black tracking-wider uppercase border border-white/40 shadow-sm">
+                        RTI EXPRESS
+                      </div>
                     </div>
 
                     {/* Headline & Body Text (Scrolls comfortably inside flex-1 min-h-0) */}
-                    <div className="flex-1 min-h-0 px-3.5 pt-3 pb-2 overflow-y-auto select-none font-sans">
+                    <div className="flex-1 min-h-0 px-3.5 pt-3 pb-3 overflow-y-auto select-none font-sans">
                       <h2 className="text-[18px] sm:text-[19px] font-bold text-black leading-snug font-sans m-0">
                         {headline}
                       </h2>
-                      {subheadline && (
+                      {subheadline && subheadline.trim().toLowerCase() !== headline.trim().toLowerCase() && (
                         <h3 className="text-[14px] font-bold text-black/90 mt-1 m-0">
                           {subheadline}
                         </h3>

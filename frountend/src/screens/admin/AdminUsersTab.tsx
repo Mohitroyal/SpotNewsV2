@@ -15,6 +15,7 @@ import {
   RefreshCw,
 } from 'lucide-react';
 import type { AdminUserProfile } from '@/services/admin.service';
+import { isProtectedSuperAdminAccount } from '@/store';
 import { AdminStatusBar } from './AdminStatusBar';
 
 interface AdminUsersTabProps {
@@ -90,6 +91,8 @@ export const AdminUsersTab: React.FC<AdminUsersTabProps> = ({
   // Action loading state
   const [actionLoadingId, setActionLoadingId] = useState<string | null>(null);
 
+
+
   // Filter counts
   const counts = useMemo(() => {
     return {
@@ -108,17 +111,10 @@ export const AdminUsersTab: React.FC<AdminUsersTabProps> = ({
       // Search
       const q = searchQuery.toLowerCase().trim();
       if (q) {
-        const qDigits = q.replace(/\D/g, '');
-        const uPhoneDigits = (u.phone_number || '').replace(/\D/g, '');
-        const uEmailDigits = (u.email || '').replace(/\D/g, '');
-        const phoneMatch = qDigits.length >= 3 && (uPhoneDigits.includes(qDigits) || uEmailDigits.includes(qDigits));
-
         const matches =
-          phoneMatch ||
           (u.email || '').toLowerCase().includes(q) ||
           (u.full_name || '').toLowerCase().includes(q) ||
           (u.phone_number || '').toLowerCase().includes(q) ||
-          (u.district || '').toLowerCase().includes(q) ||
           (u.role || '').toLowerCase().includes(q) ||
           (u.plan || '').toLowerCase().includes(q);
         if (!matches) return false;
@@ -150,8 +146,28 @@ export const AdminUsersTab: React.FC<AdminUsersTabProps> = ({
 
   const startEdit = (u: AdminUserProfile) => {
     setEditingUser(u);
-    setEditRole(u.role || 'user');
-    setEditPlan(u.plan || 'free');
+    const rawRole = (u.role || 'user').toString().toLowerCase().trim();
+    const initialRole =
+      rawRole === 'superadmin'
+        ? 'superadmin'
+        : rawRole === 'admin'
+        ? 'admin'
+        : rawRole === 'reporter'
+        ? 'reporter'
+        : 'user';
+    setEditRole(initialRole);
+
+    const rawPlan = (u.plan || 'free').toString().toLowerCase().trim();
+    const initialPlan =
+      rawPlan === 'enterprise'
+        ? 'enterprise'
+        : rawPlan === 'pro'
+        ? 'pro'
+        : rawPlan === 'reporter'
+        ? 'reporter'
+        : 'free';
+    setEditPlan(initialPlan);
+
     setEditPhone(u.phone_number || '');
     setEditDistrict(u.district || '');
   };
@@ -180,7 +196,7 @@ export const AdminUsersTab: React.FC<AdminUsersTabProps> = ({
           <Search className="w-4 h-4 text-[var(--adm-text-muted)] absolute left-3 top-1/2 -translate-y-1/2" />
           <input
             type="text"
-            placeholder="Search by mobile number, email, name, role or plan..."
+            placeholder="Search by email, name, role or plan..."
             value={searchQuery}
             onChange={(e) => { setSearchQuery(e.target.value); setPage(1); }}
             className="w-full bg-[var(--adm-chip-bg)] border border-[var(--adm-card-border)] rounded-xl pl-9 pr-3 py-2 text-xs font-medium text-[var(--adm-text-primary)] placeholder-[var(--adm-text-muted)] focus:outline-none focus:border-[var(--adm-blue)]"
@@ -317,6 +333,7 @@ export const AdminUsersTab: React.FC<AdminUsersTabProps> = ({
             const isAdmin = u.role === 'admin' || isSuper;
             const isReporter = u.role === 'reporter';
             const isBlocked = Boolean(u.is_banned);
+            const isProtected = isProtectedSuperAdminAccount(u);
             const isSelf = Boolean(
               currentUserEmail && u.email && currentUserEmail.toLowerCase() === u.email.toLowerCase()
             );
@@ -473,7 +490,7 @@ export const AdminUsersTab: React.FC<AdminUsersTabProps> = ({
                   </button>
 
                   {/* Block / Unblock button (Admins cannot be blocked) */}
-                  {!isAdmin && (
+                  {!isAdmin && !isProtected && (
                     <button
                       onClick={() => handleBan(u)}
                       disabled={actionLoadingId === u.id}
