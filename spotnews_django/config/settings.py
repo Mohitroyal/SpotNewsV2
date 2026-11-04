@@ -83,6 +83,14 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 CORS_ALLOWED_ORIGINS = [origin.strip() for origin in os.getenv("CORS_ALLOWED_ORIGINS", "").split(",") if origin.strip()]
 CORS_ALLOW_ALL_ORIGINS = True
 
+from corsheaders.defaults import default_headers, default_methods
+CORS_ALLOW_HEADERS = list(default_headers) + [
+    'cache-control',
+    'pragma',
+    'expires',
+]
+CORS_ALLOW_METHODS = list(default_methods)
+
 # MSG91 Config
 MSG91_AUTHKEY = os.getenv("MSG91_AUTHKEY", "")
 MSG91_TEMPLATE_ID = os.getenv("MSG91_TEMPLATE_ID", "")

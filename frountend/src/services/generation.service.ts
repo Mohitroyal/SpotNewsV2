@@ -605,32 +605,20 @@ export const generationService = {
 
 
   async getById(id: string): Promise<ApiResponse<Generation>> {
-    // 1. Try dedicated Backend Status API endpoint directly (uncached ground truth)
+    // 1. Try dedicated Backend Status API endpoint directly (standard GET with cache-busting timestamp, no CORS preflight)
     try {
-      const endpoints = [
-        `https://spotnewsv2.onrender.com/api/v1/generate/${id}`,
-        `https://spotnewsv2.onrender.com/v1/generate/${id}`
-      ];
-      for (const endpoint of endpoints) {
-        try {
-          const fetchRes = await fetch(endpoint, {
-            headers: {
-              'Cache-Control': 'no-cache, no-store, must-revalidate',
-              'Pragma': 'no-cache',
-            }
-          });
-          if (fetchRes.ok) {
-            const resJson = await fetchRes.json();
-            const genData = resJson.data || resJson;
-            if (genData?.id) {
-              return {
-                success: true,
-                data: genData as Generation,
-                message: resJson.message || "Generation retrieved successfully"
-              };
-            }
-          }
-        } catch {}
+      const url = `https://spotnewsv2.onrender.com/api/v1/generate/${id}?_t=${Date.now()}`;
+      const fetchRes = await fetch(url);
+      if (fetchRes.ok) {
+        const resJson = await fetchRes.json();
+        const genData = resJson.data || resJson;
+        if (genData?.id) {
+          return {
+            success: true,
+            data: genData as Generation,
+            message: resJson.message || "Generation retrieved successfully"
+          };
+        }
       }
     } catch {}
 
