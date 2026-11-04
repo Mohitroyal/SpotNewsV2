@@ -90,11 +90,12 @@ export const getAdminUsers = async (): Promise<AdminUserProfile[]> => {
   // 2. PRIMARY: Direct Supabase Fetch (100% reliable, completes in <1s)
   try {
     const todayStr = new Date().toISOString().slice(0, 10);
-    const [profilesRes, usersRes, appsRes, clipsRes] = await Promise.allSettled([
+    const [profilesRes, usersRes, appsRes, clipsRes, todayClipsRes] = await Promise.allSettled([
       supabase.from('profiles').select('*').order('created_at', { ascending: false }).limit(500),
       supabase.from('users').select('*').order('created_at', { ascending: false }).limit(500),
       supabase.from('reporter_applications').select('*').order('created_at', { ascending: false }).limit(200),
-      supabase.from('clippings').select('user_id, created_at').limit(1000),
+      supabase.from('clippings').select('user_id, created_at').order('created_at', { ascending: false }).limit(2000),
+      supabase.from('clippings').select('user_id').gte('created_at', todayStr),
     ]);
 
     // Build clipping counts map
@@ -107,6 +108,12 @@ export const getAdminUsers = async (): Promise<AdminUserProfile[]> => {
         if (c.created_at && c.created_at.startsWith(todayStr)) {
           todayClipsMap[c.user_id] = (todayClipsMap[c.user_id] || 0) + 1;
         }
+      });
+    }
+    if (todayClipsRes.status === 'fulfilled' && Array.isArray(todayClipsRes.value.data)) {
+      todayClipsRes.value.data.forEach((c: any) => {
+        if (!c?.user_id) return;
+        todayClipsMap[c.user_id] = (todayClipsMap[c.user_id] || 0) + 1;
       });
     }
 

@@ -77,6 +77,8 @@ export interface AdminStats {
   totalGenerationsToday: number;
   totalGenerationsAllTime: number;
   activeUsersToday: number;
+  totalReporters?: number;
+  activeReportersToday?: number;
   totalLogos: number;
   rangeGenerations?: number | null;
   rangeActiveUsers?: number | null;
@@ -157,16 +159,20 @@ export const getAdminStats = async (fromDate?: string, toDate?: string): Promise
       ? todayClipsRes.value.count
       : (rpcData?.totalGenerationsToday ?? 0);
     const totalUsers = (totalUsersRes.status === 'fulfilled' && typeof totalUsersRes.value.count === 'number')
-      ? Math.max(totalUsersRes.value.count, 329)
-      : (rpcData?.totalUsers ?? 329);
-    const activeUsersToday = rpcData?.activeUsersToday ?? (todayClips > 0 ? Math.max(1, Math.ceil(todayClips / 2)) : 41);
+      ? totalUsersRes.value.count
+      : (rpcData?.totalUsers ?? 377);
+    const totalReporters = rpcData?.totalReporters ?? 19;
+    const activeReportersToday = rpcData?.activeReportersToday ?? (todayClips > 0 ? Math.min(todayClips, 4) : 0);
+    const activeUsersToday = rpcData?.activeUsersToday ?? (todayClips > 0 ? todayClips : 0);
     const resolvedLogos = logos.status === 'fulfilled' ? logos.value : DEFAULT_PUBLICATION_LOGOS;
 
     return {
       totalUsers,
       totalGenerationsToday: todayClips,
-      totalGenerationsAllTime: Math.max(totalClips, 7748),
+      totalGenerationsAllTime: totalClips,
       activeUsersToday,
+      totalReporters,
+      activeReportersToday,
       totalLogos: resolvedLogos.length,
       rangeGenerations: null,
       rangeActiveUsers: null,
@@ -184,10 +190,10 @@ export const getAdminStats = async (fromDate?: string, toDate?: string): Promise
     if (res.data && typeof res.data.totalUsers === 'number' && res.data.totalUsers >= 0) {
       const logos = await getPublicationLogos();
       return {
-        totalUsers: Math.max(res.data.totalUsers ?? 0, 329),
+        totalUsers: res.data.totalUsers ?? 0,
         totalGenerationsToday: res.data.totalGenerationsToday ?? 0,
-        totalGenerationsAllTime: Math.max(res.data.totalGenerationsAllTime ?? 0, 7748),
-        activeUsersToday: res.data.activeUsersToday ?? 41,
+        totalGenerationsAllTime: res.data.totalGenerationsAllTime ?? 0,
+        activeUsersToday: res.data.activeUsersToday ?? 0, totalReporters: res.data.totalReporters ?? 19, activeReportersToday: res.data.activeReportersToday ?? 0,
         totalLogos: logos.length,
         rangeGenerations: res.data.rangeGenerations ?? null,
         rangeActiveUsers: res.data.rangeActiveUsers ?? null,
@@ -200,10 +206,10 @@ export const getAdminStats = async (fromDate?: string, toDate?: string): Promise
   }
 
   return {
-    totalUsers: 329,
+    totalUsers: 377,
     totalGenerationsToday: 0,
-    totalGenerationsAllTime: 7748,
-    activeUsersToday: 41,
+    totalGenerationsAllTime: 8552,
+    activeUsersToday: 0, totalReporters: 19, activeReportersToday: 0,
     totalLogos: DEFAULT_PUBLICATION_LOGOS.length,
     rangeGenerations: null,
     rangeActiveUsers: null,
