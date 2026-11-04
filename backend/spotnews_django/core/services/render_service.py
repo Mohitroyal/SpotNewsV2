@@ -1243,6 +1243,8 @@ class RenderService:
 
         // ── window.onerror: Report JS errors with exact file/line/column ────
 
+        window.__LAYOUT_DONE__ = false;
+
         window.onerror = function(msg, src, line, col, err) {
 
             console.error(
@@ -1257,11 +1259,7 @@ class RenderService:
 
             );
 
-            if (!window.__LAYOUT_DONE__) {
-
-                window.__LAYOUT_DONE__ = true;
-
-            }
+            // Let executeLayout handle its own completion and errors
 
             return false;
 
@@ -3948,17 +3946,35 @@ class RenderService:
 
 
 
-                        for wait_i in range(12):
+                        has_compositor = await page.evaluate("!!document.getElementById('compositor-canvas')")
 
-                            is_done = await page.evaluate("typeof window.__LAYOUT_DONE__ === 'undefined' ? true : window.__LAYOUT_DONE__ === true")
+                        if has_compositor:
 
-                            print(f"[DEBUG LAYOUT POLL {wait_i}] is_done = {is_done}")
+                            for wait_i in range(40):
 
-                            if is_done:
+                                is_done = await page.evaluate("window.__LAYOUT_DONE__ === true")
 
-                                break
+                                print(f"[DEBUG LAYOUT POLL {wait_i}] is_done = {is_done}")
 
-                            await asyncio.sleep(0.25)
+                                if is_done:
+
+                                    break
+
+                                await asyncio.sleep(0.25)
+
+                        else:
+
+                            for wait_i in range(12):
+
+                                is_done = await page.evaluate("typeof window.__LAYOUT_DONE__ === 'undefined' ? true : window.__LAYOUT_DONE__ === true")
+
+                                print(f"[DEBUG LAYOUT POLL {wait_i}] is_done = {is_done}")
+
+                                if is_done:
+
+                                    break
+
+                                await asyncio.sleep(0.25)
 
 
 
