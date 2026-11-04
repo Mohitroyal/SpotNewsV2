@@ -35,6 +35,7 @@ import {
   banUser,
   getAdminClippings,
   approveClippingToFeed,
+  bulkApproveClippingsToFeed,
   rejectClippingSubmission,
   updateReporterApplicationStatus,
   getAutoApproveConfig,
@@ -937,6 +938,28 @@ export const AdminScreen = () => {
   };
 
   // Approval Handlers for District Admin / Superadmin
+  const handleBulkApproveClippings = async (items: AdminClippingLog[]): Promise<boolean> => {
+    if (!items || items.length === 0) return true;
+    try {
+      const res = await bulkApproveClippingsToFeed(items);
+      if (res.success) {
+        showToast(`Successfully approved ${res.approvedCount} clippings & posted to live feed!`, 'success');
+        const approvedIdSet = new Set(items.map((i) => i.id));
+        setClippings((prev) =>
+          prev.map((c) => (approvedIdSet.has(c.id) ? { ...c, is_posted: true, status: 'approved' } : c))
+        );
+        fetchClippings();
+        return true;
+      } else {
+        showToast(res.error || 'Failed to bulk approve clippings', 'error');
+        return false;
+      }
+    } catch {
+      showToast('Error bulk approving clippings', 'error');
+      return false;
+    }
+  };
+
   const handleApproveClipping = async (clip: AdminClippingLog): Promise<boolean> => {
     try {
       const res = await approveClippingToFeed(clip.id, {
@@ -1304,6 +1327,7 @@ export const AdminScreen = () => {
             isSuperAdmin={isSuperAdmin}
             onRefresh={() => fetchClippings()}
             onApprove={handleApproveClipping}
+            onBulkApprove={handleBulkApproveClippings}
             onReject={handleRejectClipping}
             onUndoApprove={handleUndoApprove}
             onRemoveFromFeed={handleRemoveFromFeed}

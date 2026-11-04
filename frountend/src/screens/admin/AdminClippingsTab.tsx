@@ -23,6 +23,7 @@ interface AdminClippingsTabProps {
   isSuperAdmin?: boolean;
   onRefresh: () => void;
   onApprove: (clip: AdminClippingLog) => Promise<boolean>;
+  onBulkApprove?: (items: AdminClippingLog[]) => Promise<boolean>;
   onReject: (clip: AdminClippingLog, reason: string, note?: string) => Promise<boolean>;
   onUndoApprove?: (clipId: string) => Promise<void>;
   onRemoveFromFeed?: (clip: AdminClippingLog) => Promise<void>;
@@ -67,6 +68,7 @@ export const AdminClippingsTab: React.FC<AdminClippingsTabProps> = ({
   isSuperAdmin,
   onRefresh,
   onApprove,
+  onBulkApprove,
   onReject,
   onUndoApprove,
   onRemoveFromFeed,
@@ -84,8 +86,6 @@ export const AdminClippingsTab: React.FC<AdminClippingsTabProps> = ({
   const [rejectNote, setRejectNote] = useState('');
   const [rejectSubmitting, setRejectSubmitting] = useState(false);
 
-  // Bulk Approve Confirmation state
-  const [confirmApproveAll, setConfirmApproveAll] = useState(false);
   const [bulkApproving, setBulkApproving] = useState(false);
 
   // Action loading state
@@ -193,22 +193,25 @@ export const AdminClippingsTab: React.FC<AdminClippingsTabProps> = ({
     setRejectingClip(null);
   };
 
-  // Bulk Approve handler (parallel chunked execution for instant responsiveness)
+  // Bulk Approve handler (direct execution on tap with non-blocking feedback)
   const handleBulkApprove = async () => {
-    if (!confirmApproveAll) {
-      setConfirmApproveAll(true);
-      setTimeout(() => setConfirmApproveAll(false), 5000);
-      return;
-    }
+    if (bulkApproving || visiblePendingItems.length === 0) return;
 
     setBulkApproving(true);
-    const itemsToApprove = [...visiblePendingItems];
-    for (let i = 0; i < itemsToApprove.length; i += 5) {
-      const chunk = itemsToApprove.slice(i, i + 5);
-      await Promise.allSettled(chunk.map((clip) => onApprove(clip)));
+    try {
+      const itemsToApprove = [...visiblePendingItems];
+      if (onBulkApprove) {
+        await onBulkApprove(itemsToApprove);
+      } else {
+        for (let i = 0; i < itemsToApprove.length; i += 5) {
+          const chunk = itemsToApprove.slice(i, i + 5);
+          await Promise.allSettled(chunk.map((clip) => onApprove(clip)));
+        }
+        onRefresh();
+      }
+    } finally {
+      setBulkApproving(false);
     }
-    setBulkApproving(false);
-    setConfirmApproveAll(false);
   };
 
   return (
@@ -314,11 +317,7 @@ export const AdminClippingsTab: React.FC<AdminClippingsTabProps> = ({
           <button
             onClick={handleBulkApprove}
             disabled={bulkApproving}
-            className={`px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-2 transition-all shadow-sm cursor-pointer ${
-              confirmApproveAll
-                ? 'bg-amber-600 text-white animate-pulse'
-                : 'bg-[var(--adm-green)] hover:bg-[#047857] text-white'
-            }`}
+            className="px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-2 transition-all shadow-sm cursor-pointer bg-[var(--adm-green)] hover:bg-[#047857] text-white disabled:opacity-50 active:scale-95"
           >
             {bulkApproving ? (
               <RefreshCw className="w-4 h-4 animate-spin" />
@@ -326,8 +325,8 @@ export const AdminClippingsTab: React.FC<AdminClippingsTabProps> = ({
               <Check className="w-4 h-4" />
             )}
             <span>
-              {confirmApproveAll
-                ? `Click again to confirm (${visiblePendingItems.length})`
+              {bulkApproving
+                ? `Approving ${visiblePendingItems.length} clippings...`
                 : `Approve all visible (${visiblePendingItems.length})`}
             </span>
           </button>

@@ -723,6 +723,67 @@ export const approveClippingToFeed = async (
   }
 };
 
+// ─── Bulk Approve Clippings (Post to Feed) ──────────────────────────
+export const bulkApproveClippingsToFeed = async (
+  clippings: { id: string; headline?: string; district?: string; user_id?: string; user_email?: string; png_url?: string }[]
+): Promise<{ success: boolean; approvedCount: number; error?: string }> => {
+  if (!clippings || clippings.length === 0) {
+    return { success: true, approvedCount: 0 };
+  }
+
+  try {
+    const curUser = useAuthStore.getState().user;
+    const adminEmail = curUser?.email || (curUser as any)?.user_metadata?.email || 'mohithroyal16450@gmail.com';
+    const adminId = curUser?.id || null;
+    const clipIds = clippings.map((c) => c.id);
+
+    // 1. Authoritative bulk approval via SECURITY DEFINER RPC
+    const { data: rpcData, error: rpcError } = await publicClient.rpc('set_bulk_clippings_approval_rpc', {
+      p_clipping_ids: clipIds,
+      p_status: 'approved',
+      p_is_posted: true,
+      p_admin_user_id: adminId,
+      p_admin_email: adminEmail,
+    });
+
+    let approvedCount = 0;
+    if (!rpcError && rpcData?.success) {
+      approvedCount = rpcData.approved_count || clipIds.length;
+    } else {
+      console.warn('[AdminService] Bulk RPC fallback to chunked individual:', rpcError);
+      for (let i = 0; i < clippings.length; i += 5) {
+        const chunk = clippings.slice(i, i + 5);
+        const results = await Promise.allSettled(
+          chunk.map((c) =>
+            publicClient.rpc('set_clipping_approval_rpc', {
+              p_clipping_id: c.id,
+              p_status: 'approved',
+              p_is_posted: true,
+              p_admin_user_id: adminId,
+              p_admin_email: adminEmail,
+            })
+          )
+        );
+        approvedCount += results.filter((r) => r.status === 'fulfilled' && (r as any).value?.data?.success !== false).length;
+      }
+    }
+
+    // 2. Dispatch notifications in background (non-blocking)
+    (async () => {
+      for (const clip of clippings) {
+        try {
+          await dispatchClippingApprovalNotifications(clip.id, clip);
+        } catch {}
+      }
+    })();
+
+    return { success: true, approvedCount };
+  } catch (err: any) {
+    console.error('[AdminService] bulkApproveClippingsToFeed failed:', err);
+    return { success: false, approvedCount: 0, error: err?.message || 'Failed to bulk approve clippings' };
+  }
+};
+
 // ─── Reject Clipping Submission ───────────────────────────────────────────────
 export const rejectClippingSubmission = async (
   clippingId: string,
