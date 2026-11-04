@@ -420,6 +420,14 @@ export const setAutoApproveConfig = async (enabled: boolean): Promise<{ success:
 
 export const getAutoApproveReportersConfig = async (): Promise<boolean> => {
   try {
+    const { data, error } = await supabase.rpc('get_auto_approve_reporters_rpc');
+    if (!error && typeof data === 'boolean') {
+      try { localStorage.setItem('spotnews_auto_approve_reporters', String(data)); } catch {}
+      return data;
+    }
+  } catch {}
+
+  try {
     const { data } = await supabase
       .from('app_config')
       .select('config_value')
@@ -439,6 +447,10 @@ export const getAutoApproveReportersConfig = async (): Promise<boolean> => {
 export const setAutoApproveReportersConfig = async (enabled: boolean): Promise<boolean> => {
   try {
     localStorage.setItem('spotnews_auto_approve_reporters', String(enabled));
+  } catch {}
+  try {
+    const { error } = await supabase.rpc('set_auto_approve_reporters_rpc', { p_enabled: enabled });
+    if (!error) return true;
   } catch {}
   try {
     await supabase.from('app_config').upsert({

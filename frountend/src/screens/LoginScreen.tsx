@@ -525,7 +525,7 @@ export const LoginScreen = ({ defaultTab: initialTabProp }: { defaultTab?: 'logi
         pressId: applyForm.pressId,
         avatarUrl: applyForm.photo || '',
         submittedDate: new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }),
-        status: 'PENDING' as const,
+        status: (isAutoApprove ? ('APPROVED_PAYMENT_PENDING' as const) : ('PENDING' as const)),
       };
       
       try { reporterApprovalService.saveMockApplication(appData); } catch (e) {}
