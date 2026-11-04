@@ -1421,3 +1421,101 @@ def upload_image(request):
 
 
 
+
+
+@csrf_exempt
+def get_clipping_status(request, clipping_id):
+    """
+    Dedicated un-cached clipping generation status endpoint for the frontend preview polling loop.
+    Returns:
+      - status: 'completed' ONLY when png_url is non-empty and valid!
+      - status: 'failed' if generation failed
+      - status: 'processing' while in progress
+      - progress: 100 when completed, or the actual progress percentage
+      - stage: 'Generation Completed' when completed, or the current stage string
+      - png_url, pdf_url, approval_status, is_posted, mp4_url
+    """
+    if request.method != "GET":
+        return JsonResponse({"detail": "Method not allowed"}, status=405)
+
+    try:
+        with connection.cursor() as cursor:
+            cursor.execute("""
+                SELECT id, status, png_url, pdf_url, custom_layout, headline,
+                       article_content, is_posted, is_public, mp4_url
+                FROM clippings
+                WHERE id = %s
+                LIMIT 1
+            """, [clipping_id])
+            row = cursor.fetchone()
+
+        if not row:
+            return JsonResponse({"detail": "Clipping not found"}, status=404)
+
+        raw_id, raw_status, png_url, pdf_url, custom_layout, headline, article_content, is_posted, is_public, mp4_url = row
+
+        if isinstance(custom_layout, str):
+            try:
+                custom_layout = json.loads(custom_layout)
+            except Exception:
+                custom_layout = {}
+        elif not isinstance(custom_layout, dict):
+            custom_layout = {}
+
+        has_png = bool(png_url and str(png_url).strip())
+        is_failed = (raw_status == "failed") or bool(custom_layout.get("error"))
+
+        # Crucial: generation is ONLY completed if png_url actually exists!
+        if is_failed:
+            gen_status = "failed"
+            progress = custom_layout.get("progress", 0)
+            stage = custom_layout.get("stage", "Generation Failed")
+        elif has_png:
+            gen_status = "completed"
+            progress = 100
+            stage = "Generation Completed"
+        else:
+            gen_status = "processing"
+            progress = custom_layout.get("progress", 15)
+            stage = custom_layout.get("stage", "Processing newspaper layout")
+
+        # Map moderation status safely
+        approval_status = "approved" if raw_status == "approved" else (
+            "rejected" if raw_status == "rejected" else (
+                "pending" if raw_status in ("pending_approval", "pending") else "none"
+            )
+        )
+
+        response_data = {
+            "id": str(raw_id),
+            "status": gen_status,
+            "stage": stage,
+            "progress": progress,
+            "png_url": png_url or custom_layout.get("png_url") or "",
+            "pngUrl": png_url or custom_layout.get("png_url") or "",
+            "pdf_url": pdf_url or custom_layout.get("pdf_url") or "",
+            "pdfUrl": pdf_url or custom_layout.get("pdf_url") or "",
+            "mp4_url": mp4_url or custom_layout.get("mp4_url") or "",
+            "mp4Url": mp4_url or custom_layout.get("mp4_url") or "",
+            "headline": headline or "",
+            "approval_status": approval_status,
+            "approvalStatus": approval_status,
+            "is_posted": bool(is_posted),
+            "isPosted": bool(is_posted),
+            "error": custom_layout.get("error", "") if is_failed else None,
+            "message": custom_layout.get("error", "") if is_failed else None,
+            "custom_layout": custom_layout
+        }
+
+        resp = JsonResponse({
+            "success": True,
+            "data": response_data,
+            "message": "Clipping status retrieved successfully"
+        })
+        resp["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+        resp["Pragma"] = "no-cache"
+        return resp
+
+    except Exception as e:
+        print(f"[STATUS API ERROR] {e}")
+        return JsonResponse({"detail": str(e)}, status=500)

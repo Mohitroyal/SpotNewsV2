@@ -98,21 +98,27 @@ export const PreviewScreen = () => {
 
 
 
-  // Fetch from Supabase / Backend directly on mount if not in memory or if output (png_url) is missing or not marked completed
+  // Fetch from Supabase / Backend directly on mount if not in memory or if output (png_url) is missing
   useEffect(() => {
     if (!id) return;
-    if (!generation || !generation.png_url || generation.status !== 'completed') {
+    if (!generation || !generation.png_url) {
       generationService.getById(id).then((res: any) => {
         const item = res?.data || res;
         if (item && item.id) {
-          const isCompleted = item.status === 'completed' || Boolean(item.png_url);
-          const progress = isCompleted ? 100 : (item.progress ?? (item.custom_layout?.progress ?? 15));
-          const stage = isCompleted ? 'Generation Completed' : (item.stage || 'Processing newspaper layout');
+          const rawPng = item.png_url || item.pngUrl || item.custom_layout?.png_url;
+          const hasPng = Boolean(rawPng && String(rawPng).trim().length > 0);
+          const isFailed = item.status === 'failed' || Boolean(item.error);
+          const isCompleted = hasPng;
+          const progress = isCompleted ? 100 : (item.progress ?? (item.custom_layout?.progress ?? 25));
+          const stage = isCompleted ? 'Generation Completed' : (item.stage || 'Rendering newspaper layout...');
           const updatedItem = {
             ...item,
-            status: isCompleted ? 'completed' : item.status,
+            status: isFailed ? 'failed' : (isCompleted ? 'completed' : 'processing'),
             stage,
-            progress
+            progress,
+            png_url: rawPng,
+            pngUrl: rawPng,
+            pdf_url: item.pdf_url || item.pdfUrl || item.custom_layout?.pdf_url
           };
           if (!generation) {
             addGeneration(updatedItem);
@@ -122,7 +128,7 @@ export const PreviewScreen = () => {
         }
       }).catch(err => console.warn("Direct fetch error:", err));
     }
-  }, [id, generation?.id, generation?.png_url, generation?.status, addGeneration, updateGeneration]);
+  }, [id, generation?.id, Boolean(generation?.png_url), addGeneration, updateGeneration]);
 
 
 
@@ -571,25 +577,29 @@ export const PreviewScreen = () => {
           consecFailRef.current = 0;
 
           // Compute progress from stage map
-
-          const isCompleted = generationData.status === 'completed' || Boolean(generationData.png_url);
+          const rawPng = generationData.png_url || generationData.pngUrl || generationData.custom_layout?.png_url;
+          const hasPng = Boolean(rawPng && String(rawPng).trim().length > 0);
           const isFailed = generationData.status === 'failed' || Boolean(generationData.error);
+          const isCompleted = hasPng;
 
-          const stage = isCompleted ? 'Generation Completed' : (generationData.stage || generationData.current_stage || liveStage || 'Processing newspaper layout');
+          const stage = isCompleted ? 'Generation Completed' : (generationData.stage || generationData.current_stage || liveStage || 'Rendering newspaper layout...');
           setLiveStage(stage);
 
           const progress = isCompleted ? 100 : (generationData.progress ?? getProgress(stage));
 
           const updatedGen = {
             ...generationData,
-            status: isFailed ? 'failed' : (isCompleted ? 'completed' : (generationData.status || 'processing')),
+            status: isFailed ? 'failed' : (isCompleted ? 'completed' : 'processing'),
             stage,
-            progress
+            progress,
+            png_url: rawPng,
+            pngUrl: rawPng,
+            pdf_url: generationData.pdf_url || generationData.pdfUrl || generationData.custom_layout?.pdf_url
           };
 
           updateGeneration(generation.id, updatedGen);
 
-          console.log(`[POLL] #${attempt} | status=${updatedGen.status} | stage=${stage} | progress=${progress}% | isCompleted=${isCompleted}`);
+          console.log(`[POLL] #${attempt} | status=${updatedGen.status} | stage=${stage} | progress=${progress}% | hasPng=${hasPng}`);
 
           // Only terminate polling when the composed output file is ready OR when generation explicitly failed.
           if (isCompleted || isFailed) {
@@ -661,7 +671,7 @@ export const PreviewScreen = () => {
 
   // eslint-disable-next-line react-hooks/exhaustive-deps
 
-  }, [generation?.id, generation?.status]);
+  }, [generation?.id, Boolean(generation?.png_url)]);
 
 
 

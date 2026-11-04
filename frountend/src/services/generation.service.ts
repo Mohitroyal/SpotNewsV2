@@ -643,11 +643,13 @@ export const generationService = {
         .maybeSingle();
 
       if (!error && clip) {
-        const hasPng = Boolean(clip.png_url && clip.png_url.trim().length > 0);
+        const pngVal = clip.png_url || clip.custom_layout?.png_url;
+        const hasPng = Boolean(pngVal && String(pngVal).trim().length > 0);
         const isFailed = clip.status === 'failed' || Boolean(clip.custom_layout?.error);
-        const genStatus = isFailed ? 'failed' : (hasPng ? 'completed' : (clip.custom_layout?.generation_status || (['processing', 'rendering'].includes(clip.status) ? 'processing' : 'completed')));
-        const progress = hasPng ? 100 : (clip.custom_layout?.progress ?? (genStatus === 'completed' ? 100 : 15));
-        const stage = hasPng ? 'Generation Completed' : (clip.custom_layout?.stage || 'Processing newspaper layout');
+        // Generation is strictly 'processing' until the output PNG has been rendered and uploaded
+        const genStatus = isFailed ? 'failed' : (hasPng ? 'completed' : 'processing');
+        const progress = hasPng ? 100 : (clip.custom_layout?.progress ?? (isFailed ? 0 : 25));
+        const stage = hasPng ? 'Generation Completed' : (clip.custom_layout?.stage || 'Rendering newspaper layout...');
 
         return {
           success: true,
