@@ -1,0 +1,3 @@
+-- REPLACED (4 Nov 2026). Do not run this file.
+-- Use Nov2026_update\SUPABASE_SQL\1_BACKUP_AND_SAFE_ADDITIONS.sql now, and
+-- 2_SWITCH_ON_after_playstore_update.sql later (after v2.35 is live on the Play Store).

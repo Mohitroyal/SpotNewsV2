@@ -1,0 +1,91 @@
+/* RTI View — feed + advisory styles. Fonts: Noto Sans Telugu (UI) + Noto Serif Telugu (headlines, newspaper feel) */
+:root {
+  --navy: #0e2a66; --blue: #1e56c8; --red: #d61f3a; --gold: #ffd43b; --ink: #141a29; --muted: #5b6475; --paper: #fbf8f1;
+  --info: #1e56c8; --caution: #d98a00; --warning: #e4572e; --danger: #c1121f;
+}
+
+/* ---------- feed ---------- */
+.feed-root { position: relative; height: 100dvh; background: #0b0f1a; }
+.feed-scroller { height: 100%; overflow-y: auto; scroll-snap-type: y mandatory; overscroll-behavior: contain; }
+.story-slide { height: 100dvh; scroll-snap-align: start; scroll-snap-stop: always; display: flex; flex-direction: column; padding: 52px 10px 10px; box-sizing: border-box; }
+
+/* flip container */
+.flip { position: relative; flex: 1; perspective: 1600px; }
+.face { position: absolute; inset: 0; border-radius: 18px; overflow: hidden; backface-visibility: hidden; transition: transform .6s cubic-bezier(.2,.8,.2,1); background: #fff; box-shadow: 0 10px 30px rgba(0,0,0,.35); display: flex; flex-direction: column; }
+.face.back { transform: rotateY(180deg); background: var(--paper); }
+.flip.is-flipped .front { transform: rotateY(-180deg); }
+.flip.is-flipped .back  { transform: rotateY(0deg); }
+
+/* newspaper masthead strip — the "paper DNA" Way2News doesn't have */
+.masthead { display: flex; align-items: center; gap: 8px; padding: 7px 12px; background: var(--paper); border-bottom: 3px double #2b1d0e; font-family: "Noto Serif Telugu", serif; }
+.masthead .mh-brand { font-weight: 900; color: #1d6fb8; letter-spacing: .5px; font-family: Georgia, serif; }
+.masthead .mh-meta { flex: 1; font-size: 13px; color: #4a3b26; font-weight: 700; }
+.masthead .mh-count { font-size: 12px; color: #7a6a52; font-weight: 700; }
+.masthead.paper { background: #efe6d2; }
+.masthead.paper .mh-brand { letter-spacing: 0; color: #2b1d0e; font-family: "Noto Sans Telugu", sans-serif; }
+
+.photo { position: relative; height: 38%; background: #222 center/cover no-repeat; }
+.photo .chip.cat { position: absolute; left: 12px; bottom: 10px; background: var(--red); color: #fff; font-weight: 800; font-size: 12.5px; padding: 4px 10px; border-radius: 6px; }
+.auto-cover { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; background: linear-gradient(150deg,#0e2a66,#163f99 55%,#b3122a); color: #fff; font: 900 34px "Noto Sans Telugu", sans-serif; }
+
+.body { flex: 1; padding: 14px 16px 8px; display: flex; flex-direction: column; gap: 8px; overflow: hidden; }
+.headline { margin: 0; font: 900 23px/1.45 "Noto Serif Telugu", serif; color: var(--ink); }
+.summary { margin: 0; font: 500 16px/1.75 "Noto Sans Telugu", sans-serif; color: #2d3443; display: -webkit-box; -webkit-line-clamp: 6; -webkit-box-orient: vertical; overflow: hidden; }
+
+.tracker { display: flex; gap: 6px; background: #f3f6fb; border-radius: 12px; padding: 8px; }
+.tracker .step { flex: 1; display: flex; align-items: center; gap: 6px; font: 700 11.5px "Noto Sans Telugu", sans-serif; color: #8a93a6; }
+.tracker .dot { width: 22px; height: 22px; border-radius: 11px; display: inline-flex; align-items: center; justify-content: center; background: #dfe5ef; color: #555; font-size: 11px; flex: none; }
+.tracker .step.done { color: #15803d; } .tracker .step.done .dot { background: #16a34a; color: #fff; }
+
+.reporter { margin-top: auto; display: flex; align-items: center; gap: 10px; padding-top: 8px; border-top: 1px solid #eef1f6; }
+.reporter .avatar { width: 38px; height: 38px; border-radius: 19px; background: #8b5cf6 center/cover; color: #fff; display: flex; align-items: center; justify-content: center; font-weight: 800; }
+.r-name { font-weight: 800; font-size: 14px; color: var(--ink); }
+.r-name .tick { display: inline-block; width: 16px; height: 16px; border-radius: 8px; background: #1e88e5; color: #fff; font-size: 10px; text-align: center; line-height: 16px; }
+.r-sub { font: 600 12px "Noto Sans Telugu", sans-serif; color: var(--muted); }
+
+.clip-img { width: 100%; height: 100%; object-fit: contain; background: var(--paper); }
+.clip-missing { flex: 1; display: flex; align-items: center; justify-content: center; color: var(--muted); font-family: "Noto Sans Telugu"; }
+
+.actions { display: flex; gap: 8px; padding: 10px 2px 2px; }
+.actions .act { flex: 1; height: 44px; border-radius: 12px; border: 0; background: #1b2236; color: #fff; font: 800 14px "Noto Sans Telugu", sans-serif; cursor: pointer; }
+.actions .flip-btn { flex: 1.6; background: var(--paper); color: #2b1d0e; }
+.actions .wa { flex: 1.4; background: #25d366; }
+
+/* ---------- advisory strip (pinned) ---------- */
+.adv-strip { position: absolute; z-index: 5; left: 10px; right: 10px; top: 8px; height: 38px; border: 0; border-radius: 19px; display: flex; align-items: center; gap: 8px; padding: 0 14px; color: #fff; font: 800 13.5px "Noto Sans Telugu", sans-serif; box-shadow: 0 4px 14px rgba(0,0,0,.3); cursor: pointer; }
+.adv-strip-text { flex: 1; text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.adv-strip.lvl-info { background: var(--info); } .adv-strip.lvl-caution { background: var(--caution); }
+.adv-strip.lvl-warning { background: var(--warning); } .adv-strip.lvl-danger { background: var(--danger); animation: pulse 1.6s infinite; }
+@keyframes pulse { 50% { box-shadow: 0 0 0 6px rgba(193,18,31,.25); } }
+
+/* ---------- advisory card ---------- */
+.adv-card { flex: 1; border-radius: 18px; overflow-y: auto; background: #fff; display: flex; flex-direction: column; font-family: "Noto Sans Telugu", sans-serif; }
+.adv-head { display: flex; justify-content: space-between; align-items: flex-start; padding: 14px 16px; color: #fff; }
+.adv-card.lvl-info .adv-head { background: linear-gradient(135deg,#1e56c8,#3b82f6); }
+.adv-card.lvl-caution .adv-head { background: linear-gradient(135deg,#d98a00,#f5b301); }
+.adv-card.lvl-warning .adv-head { background: linear-gradient(135deg,#c2410c,#e4572e); }
+.adv-card.lvl-danger .adv-head { background: linear-gradient(135deg,#8e0d1a,#c1121f); }
+.adv-kicker { font-size: 12.5px; font-weight: 800; opacity: .95; }
+.adv-badge { display: inline-block; margin-top: 6px; background: rgba(255,255,255,.22); padding: 3px 10px; border-radius: 8px; font-weight: 900; font-size: 15px; }
+.adv-lang { border: 1px solid rgba(255,255,255,.6); background: transparent; color: #fff; border-radius: 14px; padding: 4px 10px; font-weight: 700; cursor: pointer; }
+.adv-now { display: flex; gap: 14px; align-items: center; padding: 12px 16px; border-bottom: 1px solid #eef1f6; }
+.adv-temp { font: 900 54px Inter, sans-serif; color: var(--ink); }
+.adv-meta { font-size: 13.5px; font-weight: 700; color: var(--muted); line-height: 1.5; }
+.adv-cond { color: var(--ink); }
+.adv-list { padding: 10px 12px; display: flex; flex-direction: column; gap: 10px; }
+.adv-item { border-radius: 14px; padding: 10px 12px; background: #f6f8fc; border-left: 6px solid var(--info); }
+.adv-item.lvl-caution { border-color: var(--caution); background: #fff8e8; }
+.adv-item.lvl-warning { border-color: var(--warning); background: #fff1ec; }
+.adv-item.lvl-danger  { border-color: var(--danger);  background: #ffecee; }
+.adv-item.cat-surroundings { border-color: #16a34a; background: #effaf2; }
+.adv-item-head { display: flex; gap: 10px; align-items: flex-start; }
+.adv-ico { font-size: 26px; }
+.adv-cat { font-size: 11px; font-weight: 800; color: var(--muted); }
+.adv-title { font-size: 16.5px; font-weight: 900; color: var(--ink); line-height: 1.4; }
+.adv-trigger { font-size: 12px; font-weight: 700; color: var(--muted); }
+.adv-item ul { margin: 6px 0 0 38px; padding: 0; font-size: 14px; line-height: 1.65; color: #2d3443; }
+.adv-foot { margin-top: auto; display: flex; justify-content: space-between; align-items: center; padding: 10px 16px; font-size: 12px; color: var(--muted); border-top: 1px solid #eef1f6; }
+.adv-share { background: #25d366; color: #fff; border: 0; border-radius: 12px; padding: 8px 14px; font-weight: 800; cursor: pointer; }
+
+.sheet { position: fixed; inset: 0; z-index: 50; background: rgba(0,0,0,.5); display: flex; align-items: flex-end; }
+.sheet-inner { width: 100%; height: 88dvh; display: flex; border-radius: 18px 18px 0 0; overflow: hidden; }

@@ -15,4 +15,8 @@ APK/
 pw-browsers/
 temp_pages/
 "frountend (3)/"
-"frountend final/"
+"frountend final/"  
+node_modules/  
+dist/  
+build/  
+.gradle/ 

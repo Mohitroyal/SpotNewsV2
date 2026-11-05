@@ -1,0 +1,148 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android" xmlns:tools="http://schemas.android.com/tools">
+
+    <!-- Allow Android to detect and launch installed UPI apps (GPay, PhonePe, Paytm, etc.) -->
+    <queries>
+        <package android:name="com.google.android.apps.nbu.paisa.user" />
+        <package android:name="com.phonepe.app" />
+        <package android:name="net.one97.paytm" />
+        <package android:name="in.org.npci.upiapp" />
+        <package android:name="in.amazon.mShop.android.shopping" />
+        <package android:name="com.whatsapp" />
+        <package android:name="com.whatsapp.w4b" />
+        <package android:name="com.instagram.android" />
+        <package android:name="com.facebook.katana" />
+        <package android:name="com.twitter.android" />
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:scheme="upi" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:scheme="tez" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:scheme="phonepe" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:scheme="paytmmp" />
+        </intent>
+    </queries>
+
+    <application
+        android:allowBackup="true"
+        android:icon="@mipmap/ic_launcher"
+        android:label="@string/app_name"
+        android:roundIcon="@mipmap/ic_launcher_round"
+        android:supportsRtl="true"
+        android:theme="@style/AppTheme">
+        <activity
+            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|locale|smallestScreenSize|screenLayout|uiMode"
+            android:name=".MainActivity"
+            android:label="@string/title_activity_main"
+            android:theme="@style/AppTheme.NoActionBarLaunch"
+            android:launchMode="singleTask"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+
+            <intent-filter android:autoVerify="true">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="https" android:host="rtiexpress.in" android:pathPrefix="/n/" />
+                <data android:scheme="https" android:host="rtiexpress.in" android:pathPrefix="/r/" />
+            </intent-filter>
+
+            <intent-filter android:autoVerify="true">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="https" android:host="news-frount.vercel.app" />
+            </intent-filter>
+
+            <!-- New share landing page (share-landing/ on Vercel). Change the host if your
+                 Vercel project gets a different name or you connect your own domain. -->
+            <intent-filter android:autoVerify="true">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="https" android:host="rti-spotnews.vercel.app" android:pathPrefix="/n/" />
+                <data android:scheme="https" android:host="rti-spotnews.vercel.app" android:pathPrefix="/r/" />
+            </intent-filter>
+
+            <intent-filter android:autoVerify="true">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="https" android:host="rtiexpressnews.godaddysites.com" />
+                <data android:scheme="http" android:host="rtiexpressnews.godaddysites.com" />
+                <data android:scheme="https" android:host="spotnewsv2.onrender.com" />
+                <data android:scheme="http" android:host="spotnewsv2.onrender.com" />
+            </intent-filter>
+
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="spotnews" android:host="feed" />
+                <data android:scheme="spotnews" android:host="*" />
+                <data android:scheme="spotnews" />
+            </intent-filter>
+
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="newscraft" android:host="feed" />
+                <data android:scheme="newscraft" android:host="*" />
+                <data android:scheme="newscraft" />
+            </intent-filter>
+
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="newscraft" android:host="auth-callback" />
+            </intent-filter>
+        </activity>
+
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data android:name="android.support.FILE_PROVIDER_PATHS" android:resource="@xml/file_paths" />
+        </provider>
+
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_icon"
+            android:resource="@drawable/ic_stat_logo" />
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_color"
+            android:resource="@color/notification_color" />
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_channel_id"
+            android:value="news" />
+
+        <!-- Google AdMob Application ID (RTI EXPRESS Spot news 24x7) -->
+        <meta-data
+            android:name="com.google.android.gms.ads.APPLICATION_ID"
+            android:value="ca-app-pub-5229942501184833~5967466877" />
+
+    </application>
+
+    <!-- Permissions -->
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" tools:node="remove" />
+    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" tools:node="remove" />
+    <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" tools:node="remove" />
+    <uses-permission android:name="android.permission.READ_MEDIA_VIDEO" tools:node="remove" />
+</manifest>

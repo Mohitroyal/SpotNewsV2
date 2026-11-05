@@ -1,0 +1,1515 @@
+import { useParams, useNavigate } from 'react-router-dom';
+
+import { useGenerationStore, useAuthStore } from '@/store';
+
+import { ArrowLeft, Download, FileDown, Share2, CheckCircle2, Clock, RefreshCw, AlertTriangle } from 'lucide-react';
+
+import { generationService, verifyGeneratedClippingUrl } from '@/services/generation.service';
+
+import { submitClippingForApproval } from '@/services/admin.service';
+
+import { supabase, publicClient } from '@/lib/supabase';
+
+import { useState, useEffect, useRef } from 'react';
+
+import { Capacitor } from '@capacitor/core';
+
+import { Filesystem, Directory } from '@capacitor/filesystem';
+
+import { directShareClipping } from '@/features/share';
+
+import rtiExpressLogo from '@/assets/rti_express_logo.png';
+
+
+
+// ─── Stage → Progress mapping ───────────────────────────────────────────────
+
+const STAGE_PROGRESS: Record<string, number> = {
+
+  'initialization':           5,
+
+  'Image Processing':         15,
+
+  'Content Generation':       30,
+
+  'Translation':              35,
+
+  'Database Save (rendering)':40,
+
+  'Template Selection':       45,
+
+  'HTML Generation':          55,
+
+  'Screenshot Generation':    70,
+
+  'Font Loading':             72,
+
+  'Playwright Launch':        74,
+
+  'PNG Screenshot Creation':  80,
+
+  'Supabase Upload (PNG)':    85,
+
+  'PDF Generation':           88,
+
+  'PDF Creation':             90,
+
+  'Supabase Upload (PDF)':    93,
+
+  'Database Save (completed)':97,
+
+  'Email Notification':       99,
+
+  'Final Response':           100,
+
+};
+
+
+
+const MAX_POLL_MS     = 90 * 1000; // 90 seconds bounded limit
+
+const POLL_INTERVAL   = 3000;           // 3 seconds
+
+const MAX_CONSEC_FAIL = 150;            // 150 consecutive polls (~7.5 min) to tolerate server wake-up/deploys
+
+
+
+function getProgress(stage?: string): number {
+
+  if (!stage) return 10;
+
+  return STAGE_PROGRESS[stage] ?? 10;
+
+}
+
+
+
+function fmtElapsed(ms: number): string {
+
+  const s = Math.floor(ms / 1000);
+
+  if (s < 60) return `${s}s`;
+
+  return `${Math.floor(s / 60)}m ${s % 60}s`;
+
+}
+
+
+
+export const PreviewScreen = () => {
+
+  const { id } = useParams();
+
+  const navigate = useNavigate();
+
+  const generations = useGenerationStore((state) => state.generations);
+
+  const generation = generations.find(g => g.id === id);
+
+  const updateGeneration = useGenerationStore((state) => state.updateGeneration);
+
+  const addGeneration = useGenerationStore((state) => state.addGeneration);
+
+
+
+  // Fetch from Supabase directly if not present in memory store
+
+  useEffect(() => {
+
+    if (!generation && id) {
+
+      generationService.getById(id).then((res: any) => {
+
+        const item = res?.data || res;
+
+        if (item && item.id) {
+
+          addGeneration(item);
+
+        }
+
+      }).catch(err => console.warn("Direct fetch error:", err));
+
+    }
+
+  }, [id, generation, addGeneration]);
+
+
+
+  const [downloading, setDownloading] = useState(false);
+
+  const [isSharing, setIsSharing] = useState(false);
+
+  const [isPosted, setIsPosted] = useState(false);
+
+  const [approvalStatus, setApprovalStatus] = useState<'none' | 'pending' | 'approved' | 'rejected'>('none');
+
+
+
+  const handleDirectShare = async () => {
+
+    if (!generation?.id || isSharing) return;
+
+    if (!isPosted && approvalStatus !== 'approved') {
+
+      alert('ఈ వార్తా క్లిప్పింగ్ జిల్లా అడ్మిన్ ఆమోదం తెలిపిన తర్వాతే షేర్ చేయవచ్చు.\n(Sharing is available only after Admin Approval).');
+
+      return;
+
+    }
+
+    setIsSharing(true);
+
+    try {
+
+      await directShareClipping({
+
+        id: generation.id,
+
+        headline: generation.config?.headline || 'RTI Express Spot News',
+
+        clippingUrl:
+
+          generation.png_url ||
+
+          (generation as any)?.pngUrl ||
+
+          generation.custom_layout?.png_url ||
+
+          (generation as any)?.clipping_url ||
+
+          (generation as any)?.preview_url ||
+
+          '',
+
+        videoUrl: generation.mp4_url || (generation as any)?.mp4Url || generation.config?.videoUrl || undefined,
+
+        reporterSlug: (generation.config?.reporterName || user?.full_name || 'reporter')
+
+          .toLowerCase()
+
+          .replace(/\s+/g, '-'),
+
+        reporterId: (generation as any)?.user_id || user?.id,
+
+        status: approvalStatus,
+
+        is_posted: isPosted,
+
+      });
+
+    } catch (e: any) {
+
+      console.error('Direct share error:', e);
+
+      alert('షేర్ విఫలమైంది: ' + (e.message || ''));
+
+    } finally {
+
+      setIsSharing(false);
+
+    }
+
+  };
+
+  
+
+  const user = useAuthStore((state) => state.user);
+
+  const district = useAuthStore((state) => state.district) || '';
+
+
+
+  const [isCheckingStatus, setIsCheckingStatus] = useState(false);
+
+  const hasAutoSubmittedRef = useRef(false);
+
+
+
+  const checkStatus = async (showFeedback = false) => {
+
+    if (!generation?.id) return;
+
+    if (showFeedback) setIsCheckingStatus(true);
+
+    try {
+
+      const { data } = await publicClient
+
+        .from('clippings')
+
+        .select('status, is_posted')
+
+        .eq('id', generation.id)
+
+        .maybeSingle();
+
+
+
+      if (data) {
+
+        if (data.is_posted || data.status === 'approved') {
+
+          setIsPosted(true);
+
+          setApprovalStatus('approved');
+
+          if (showFeedback) alert('✅ Clipping has been approved by Admin! Download and Share are now available.');
+
+        } else if (data.status === 'rejected') {
+
+          setApprovalStatus('rejected');
+
+          if (showFeedback) alert('❌ This clipping was marked as rejected by Admin.');
+
+        } else {
+
+          setApprovalStatus('pending');
+
+          if (showFeedback) alert('⏳ Status: Still awaiting District Admin approval. Please check back shortly.');
+
+        }
+
+      } else {
+
+        setApprovalStatus('pending');
+
+        if (showFeedback) alert('⏳ Status: Still awaiting District Admin approval. Please check back shortly.');
+
+      }
+
+    } catch {
+
+      /* silent */
+
+    } finally {
+
+      if (showFeedback) setIsCheckingStatus(false);
+
+    }
+
+  };
+
+
+
+  // Initial check of clipping approval status from DB
+
+  useEffect(() => {
+
+    if (!generation?.id) return;
+
+    checkStatus(false);
+
+  }, [generation?.id]);
+
+
+
+  // Real-time polling while pending approval so buttons unlock automatically when approved
+
+  useEffect(() => {
+
+    if (!generation?.id || isPosted || approvalStatus === 'approved') return;
+
+    const interval = setInterval(() => {
+
+      checkStatus(false);
+
+    }, 4000);
+
+    return () => clearInterval(interval);
+
+  }, [generation?.id, isPosted, approvalStatus]);
+
+
+
+  // Automatically submit to District Admin for approval (or auto-approve if enabled)
+
+  useEffect(() => {
+
+    if (!generation?.id || !generation?.png_url) return;
+
+    // Only run once per mount -- hasAutoSubmittedRef guards repeated fires
+
+    if (hasAutoSubmittedRef.current) return;
+
+
+
+    const autoSubmit = async () => {
+
+      hasAutoSubmittedRef.current = true;
+
+      try {
+
+        // Guard: check current DB state to avoid race conditions / duplicate writes
+
+        const { data: currentClip } = await supabase
+
+          .from('clippings')
+
+          .select('status, is_posted, district, state, user_id, headline')
+
+          .eq('id', generation.id)
+
+          .maybeSingle();
+
+
+
+        if (currentClip?.status === 'approved' && currentClip?.is_posted) {
+
+          setApprovalStatus('approved');
+
+          setIsPosted(true);
+
+          return;
+
+        }
+
+
+
+        // Prefer auth store values, then DB row, then generation config, then safe defaults
+
+        const targetDistrict =
+
+          district ||
+
+          currentClip?.district ||
+
+          (generation as any)?.district ||
+
+          (generation.config as any)?.district ||
+
+          'All';
+
+
+
+        const headline = generation.config?.headline || generation.headline || currentClip?.headline || 'New Newspaper Clipping';
+
+        // Submit clipping for review via secure backend RPC (evaluates auto-approval on backend)
+        const submitResult = await submitClippingForApproval(generation.id, {
+          district: targetDistrict,
+          state: (user as any)?.state || 'Andhra Pradesh',
+        });
+
+        if (submitResult.auto_approved || (submitResult.status === 'approved' && submitResult.is_posted)) {
+          setApprovalStatus('approved');
+          setIsPosted(true);
+          return;
+        }
+
+        // Submission is Pending:
+        setApprovalStatus('pending');
+        setIsPosted(false);
+
+        // Notify matching district admins + superadmins via in-app notifications
+
+        try {
+
+          const { data: admins } = await supabase
+
+            .from('profiles')
+
+            .select('id, email, district, role')
+
+            .in('role', ['admin', 'superadmin']);
+
+
+
+          const targetAdmins = (admins || []).filter(
+
+            (adm) => adm.role === 'superadmin' || !adm.district ||
+
+              adm.district.toLowerCase() === targetDistrict.toLowerCase()
+
+          );
+
+
+
+          if (targetAdmins.length > 0) {
+
+            const notifs = targetAdmins.map((adm) => ({
+
+              user_id: adm.id,
+
+              user_email: adm.email,
+
+              title: `📰 [${targetDistrict}] New Clipping for Approval`,
+
+              message: `A reporter submitted "${headline.substring(0, 50)}" for ${targetDistrict} District Admin review before publishing.`,
+
+              notification_type: 'clipping_approval_request',
+
+            }));
+
+            await supabase.from('notifications').insert(notifs);
+
+          }
+
+        } catch (notifErr) {
+
+          console.warn('[AutoSubmit] Admin notification insert failed:', notifErr);
+
+        }
+
+      } catch (e) {
+
+        console.warn('[AutoSubmit] Auto-submit warning:', e);
+
+      }
+
+    };
+
+
+
+    // Small delay to allow auth store (district/state) to finish hydrating before submitting
+
+    const timer = setTimeout(autoSubmit, 1500);
+
+    return () => clearTimeout(timer);
+
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+
+  }, [generation?.id, generation?.png_url]);
+
+  
+
+  const [pollAttempt, setPollAttempt]   = useState(0);
+
+  const [elapsedMs,  setElapsedMs]      = useState(0);
+
+  const [liveStage, setLiveStage]       = useState<string>('');
+
+
+
+  const startTimeRef    = useRef<number>(Date.now());
+
+  const consecFailRef   = useRef<number>(0);
+
+  const intervalRef     = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const elapsedTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+
+
+  useEffect(() => {
+
+    if (
+
+      !generation ||
+
+      generation.status === 'completed' ||
+
+      generation.status === 'failed' ||
+
+      generation.png_url
+
+    ) return;
+
+
+
+    startTimeRef.current  = Date.now();
+
+    consecFailRef.current = 0;
+
+    setPollAttempt(0);
+
+    setElapsedMs(0);
+
+
+
+    // ── Elapsed-time ticker ──────────────────────────────────────────────────
+
+    elapsedTimerRef.current = setInterval(() => {
+
+      setElapsedMs(Date.now() - startTimeRef.current);
+
+    }, 1000);
+
+
+
+    // ── Main polling loop ────────────────────────────────────────────────────
+
+    intervalRef.current = setInterval(async () => {
+
+      const elapsed = Date.now() - startTimeRef.current;
+
+
+
+      // Hard 10-minute timeout
+
+      if (elapsed >= MAX_POLL_MS) {
+
+        console.warn(`[POLL] 10-minute timeout reached. Stopping.`);
+
+        clearInterval(intervalRef.current!);
+
+        clearInterval(elapsedTimerRef.current!);
+
+        updateGeneration(generation.id, {
+
+          status:  'failed',
+
+          stage:   'Polling Timeout',
+
+          message: `Generation did not complete within 90 seconds (${fmtElapsed(elapsed)}). The backend may still be running — check Render logs.`,
+
+          error:   'Frontend polling timeout after 10 minutes.',
+
+        } as any);
+
+        return;
+
+      }
+
+
+
+      setPollAttempt(n => n + 1);
+
+      const attempt = pollAttempt + 1;
+
+      const ts = new Date().toISOString();
+
+      console.log(`[POLL] #${attempt} | elapsed=${fmtElapsed(elapsed)} | ${ts}`);
+
+
+
+      try {
+
+        const pollRes = await generationService.getById(generation.id) as any;
+
+        const generationData = pollRes?.data || pollRes;
+
+
+
+        if (generationData && generationData.id) {
+
+          // Successful response — reset consecutive-failure counter
+
+          consecFailRef.current = 0;
+
+
+
+          // Track live stage for progress bar
+
+          const stage = generationData.stage || generationData.current_stage || liveStage;
+
+          if (stage) setLiveStage(stage);
+
+
+
+          // Compute progress from stage map
+
+          const progress = generationData.png_url ? 100 : (generationData.progress ?? getProgress(stage));
+
+
+
+          updateGeneration(generation.id, { ...generationData, progress });
+
+
+
+          console.log(`[POLL] #${attempt} | status=${generationData.status} | stage=${stage} | progress=${progress}%`);
+
+
+
+          // Only stop polling when genuinely completed with verified PNG or explicitly failed
+          const isCompleted = generationData.status === 'completed' && Boolean(generationData.png_url) && verifyGeneratedClippingUrl(generationData.png_url, generation.id);
+          const isFailed = generationData.status === 'failed';
+
+          if (isCompleted || isFailed) {
+            clearInterval(intervalRef.current!);
+            clearInterval(elapsedTimerRef.current!);
+          }
+
+        }
+
+      } catch (e: any) {
+
+        consecFailRef.current += 1;
+
+        const cf = consecFailRef.current;
+
+
+
+        console.warn(`[POLL] #${attempt} NETWORK ERROR (consecutive=${cf}):`, e?.message || e);
+
+
+
+        // If server returns 503/502 → likely Render waking up
+
+        const status = e?.response?.status;
+
+        if (status === 503 || status === 502 || status === 0 || !status) {
+
+          // setServerWaking(true);
+
+        }
+
+
+
+        if (cf >= MAX_CONSEC_FAIL) {
+
+          console.warn(`[POLL] Too many consecutive network failures (${cf}). Stopping.`);
+
+          clearInterval(intervalRef.current!);
+
+          clearInterval(elapsedTimerRef.current!);
+
+          updateGeneration(generation.id, {
+
+            status:  'failed',
+
+            stage:   'Polling Network Failures',
+
+            message: `Polling stopped after ${cf} consecutive network errors. Please check your network connection.`,
+
+            error:   'Too many consecutive polling network failures.',
+
+          } as any);
+
+        }
+
+      }
+
+    }, POLL_INTERVAL);
+
+
+
+    return () => {
+
+      clearInterval(intervalRef.current!);
+
+      clearInterval(elapsedTimerRef.current!);
+
+    };
+
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+
+  }, [generation?.id, generation?.status]);
+
+
+
+  if (!generation) {
+
+    return (
+
+      <div className="flex flex-col items-center justify-center h-full pt-20">
+
+        <p className="text-gray-500">Clipping not found.</p>
+
+        <button onClick={() => navigate(-1)} className="mt-4 text-blue-600 font-medium">Go Back</button>
+
+      </div>
+
+    );
+
+  }
+
+
+
+  const handleDownload = async (format: 'jpg' | 'pdf' | 'mp4') => {
+
+    setDownloading(true);
+
+    try {
+
+      let blob;
+
+      if (format === 'mp4') {
+
+        const videoSrc = generation.mp4_url || (generation as any).mp4Url || generation.config?.videoUrl;
+
+        if (!videoSrc) throw new Error("Video URL not available");
+
+        const res = await fetch(videoSrc);
+
+        blob = await res.blob();
+
+      } else if (format === 'jpg') {
+
+        if (!generation.png_url) throw new Error("JPG URL not available");
+
+        const res = await fetch(generation.png_url);
+
+        blob = await res.blob();
+
+      } else {
+
+        if (generation.pdf_url) {
+
+          const res = await fetch(generation.pdf_url);
+
+          blob = await res.blob();
+
+        } else {
+
+          blob = await generationService.exportPdf(generation.id);
+
+        }
+
+      }
+
+
+
+      const fileName = `newscraft-${generation.id}.${format}`;
+
+
+
+      if (Capacitor.isNativePlatform()) {
+
+        const reader = new FileReader();
+
+        reader.readAsDataURL(blob);
+
+        reader.onloadend = async () => {
+
+          let base64data = reader.result as string;
+
+          if (base64data.includes(',')) base64data = base64data.split(',')[1];
+
+          try {
+
+            if (Capacitor.getPlatform() === 'android') {
+
+              await Filesystem.requestPermissions();
+
+            }
+
+            await Filesystem.writeFile({ path: fileName, data: base64data, directory: Directory.Documents, recursive: true });
+
+            alert(`${format.toUpperCase()} Downloaded successfully to your Documents!`);
+
+          } catch (e) {
+
+            console.error("Filesystem write error", e);
+
+            alert(`Failed to save to device storage: ${e}`);
+
+          } finally {
+
+            setDownloading(false);
+
+          }
+
+        };
+
+      } else {
+
+        const blobUrl = window.URL.createObjectURL(blob);
+
+        const link = document.createElement("a");
+
+        link.href = blobUrl;
+
+        link.download = fileName;
+
+        document.body.appendChild(link);
+
+        link.click();
+
+        document.body.removeChild(link);
+
+        window.URL.revokeObjectURL(blobUrl);
+
+        alert(`${format.toUpperCase()} Downloaded successfully to your device!`);
+
+        setDownloading(false);
+
+      }
+
+    } catch (err) {
+
+      console.error(err);
+
+      alert(`Failed to download ${format.toUpperCase()}`);
+
+      setDownloading(false);
+
+    }
+
+  };
+
+
+
+
+
+
+
+  // ── Derived state for the progress UI ────────────────────────────────────
+
+  const progressPercent = generation.progress ?? getProgress(liveStage || generation.stage);
+
+  const timeLeft        = Math.max(0, MAX_POLL_MS - elapsedMs);
+
+
+
+  return (
+
+    <div className="h-screen bg-[#dceef8] flex flex-col fixed inset-0 z-50 font-sans text-[#0a1a2e]">
+
+      {/* ── HEADER ──────────────────────────────────────────────────────── */}
+
+      <div className="h-16 bg-[#015BB3] border-b-[3px] border-[#145AB1] flex items-center px-4 shrink-0 shadow-sm relative z-20">
+
+        <button
+
+          onClick={() => {
+
+            if (generation.status === 'processing' || generation.status === 'pending') {
+
+              if (window.confirm("Cancel generation?")) navigate(-1);
+
+            } else {
+
+              navigate(-1);
+
+            }
+
+          }}
+
+          className="w-10 h-10 bg-[#cc2222] active:bg-[#a01b1b] rounded-full text-white transition-colors flex items-center justify-center shrink-0 mr-4 shadow-sm"
+
+        >
+
+          <ArrowLeft className="w-5 h-5 ml-[-2px]" />
+
+        </button>
+
+        <div className="flex flex-col flex-1 truncate">
+
+          <span className="text-white font-bold text-[17px] tracking-wide" style={{ fontFamily: 'Georgia, serif' }}>Preview</span>
+
+          <span className="text-[10px] text-[#a0c4dc] tracking-wider truncate">
+
+            clipping_{generation.id.slice(0, 8)}.jpg
+
+          </span>
+
+        </div>
+
+        <div className="w-10 h-10 rounded-xl bg-white p-1 shadow-sm shrink-0 overflow-hidden flex items-center justify-center border border-white/30 ml-2">
+
+          <img src={rtiExpressLogo} alt="RTI Express" className="w-full h-full object-contain" />
+
+        </div>
+
+      </div>
+
+
+
+      {/* ── Main Content ─────────────────────────────────────────────────── */}
+
+      <div className="flex-1 overflow-y-auto p-4 flex flex-col items-center justify-center relative z-10">
+
+
+
+        {/* ── STATE 1: GENERATING ────────────────────────────────────────── */}
+
+        {(!generation.png_url && generation.status !== 'failed') && (
+
+          <div className="flex flex-col items-center w-full max-w-sm px-4">
+
+            {/* SPINNER */}
+
+            <div className="relative w-[120px] h-[120px] flex items-center justify-center mb-6">
+
+              {/* Outer glowing ring */}
+
+              <div className="absolute inset-0 rounded-full border-[2px] border-[#cc2222]/20 shadow-[0_0_15px_rgba(204,34,34,0.3)] animate-pulse" style={{ animationDuration: '3s' }} />
+
+              {/* Inner ring */}
+
+              <div className="absolute inset-0 rounded-full border-[4px] border-transparent border-t-[#cc2222] border-r-[#cc2222] animate-spin" style={{ animationDuration: '1.8s', animationTimingFunction: 'linear' }} />
+
+              {/* Orbiting dot */}
+
+              <div className="absolute inset-0 animate-spin" style={{ animationDuration: '3s', animationTimingFunction: 'linear' }}>
+
+                <div className="absolute top-0 left-1/2 w-3 h-3 bg-[#cc2222] rounded-full shadow-[0_0_8px_#cc2222] transform -translate-x-1/2 -translate-y-1/2" />
+
+              </div>
+
+              {/* Center Logo Icon */}
+
+              <div className="w-14 h-14 bg-white rounded-full shadow-[0_0_14px_rgba(204,34,34,0.25)] flex items-center justify-center p-1.5 animate-pulse overflow-hidden border border-white/80" style={{ animationDuration: '2s' }}>
+
+                <img src={rtiExpressLogo} alt="RTI Express Spot News" className="w-full h-full object-contain" />
+
+              </div>
+
+            </div>
+
+
+
+            {/* STATUS TEXT */}
+
+            <h2 className="text-[#0a1a2e] font-bold text-[16px] mb-1 text-center" style={{ fontFamily: 'Georgia, serif' }}>Publishing</h2>
+
+            <p className="text-[#a0c4dc] text-[10px] font-medium mb-3 text-center">Processing newspaper layout</p>
+
+            <div className="text-[#cc2222] font-bold text-[28px] mb-6 tracking-tight drop-shadow-sm transition-all duration-300 transform scale-105">{progressPercent}%</div>
+
+
+
+            {/* PROGRESS BAR */}
+
+            <div className="w-full mb-6">
+
+              <div className="flex justify-between text-[9px] uppercase font-bold text-[#a0c4dc] mb-1.5">
+
+                <span>Progress</span>
+
+                <span>{progressPercent}/100</span>
+
+              </div>
+
+              <div className="w-full h-[8px] bg-[#b8d4e8] rounded-[4px] overflow-hidden shadow-inner relative">
+
+                {/* Liquid / Shimmer Progress Fill */}
+
+                <div
+
+                  className="absolute top-0 left-0 h-full rounded-[4px] transition-all duration-500 ease-out"
+
+                  style={{ 
+
+                    width: `${progressPercent}%`,
+
+                    background: 'linear-gradient(90deg, #cc2222, #ff6666, #cc2222)',
+
+                    backgroundSize: '200% 100%',
+
+                    animation: 'shimmer 2s infinite linear'
+
+                  }}
+
+                />
+
+              </div>
+
+            </div>
+
+
+
+            {/* INFO CARD */}
+
+            <div className="w-full bg-white border border-[#b8d4e8] rounded-lg p-3.5 mb-6 shadow-sm">
+
+              <div className="flex justify-between items-center mb-2.5 animate-in slide-in-from-right-4 duration-300 fade-in fill-mode-both" style={{ animationDelay: '0ms' }}>
+
+                <span className="text-[#0a1a2e] text-[10px] font-semibold">Poll #</span>
+
+                <span className="text-[#0a1a2e] text-[10px] font-mono font-medium">{pollAttempt}</span>
+
+              </div>
+
+              <div className="flex justify-between items-center mb-2.5 animate-in slide-in-from-right-4 duration-300 fade-in fill-mode-both" style={{ animationDelay: '100ms' }}>
+
+                <span className="text-[#0a1a2e] text-[10px] font-semibold">Elapsed</span>
+
+                <span className="text-[#0a1a2e] text-[10px] font-mono font-medium">{(elapsedMs / 1000).toFixed(1)}s</span>
+
+              </div>
+
+              <div className="flex justify-between items-center mb-2.5 animate-in slide-in-from-right-4 duration-300 fade-in fill-mode-both" style={{ animationDelay: '200ms' }}>
+
+                <span className="text-[#0a1a2e] text-[10px] font-semibold">Timeout in</span>
+
+                <span className="text-[#0a1a2e] text-[10px] font-mono font-medium">{(timeLeft / 1000).toFixed(1)}s</span>
+
+              </div>
+
+              <div className="flex justify-between items-center animate-in slide-in-from-right-4 duration-300 fade-in fill-mode-both" style={{ animationDelay: '300ms' }}>
+
+                <span className="text-[#0a1a2e] text-[10px] font-semibold">Pattern</span>
+
+                <span className="text-[#0a1a2e] text-[10px] font-mono font-medium">Pattern {generation.config?.layoutPattern || 'A'}</span>
+
+              </div>
+
+            </div>
+
+
+
+            {/* HINT BAR */}
+
+            <div className="w-full bg-[#015BB3] rounded-[6px] py-[10px] px-[14px] flex items-center justify-center gap-2 shadow-sm animate-in zoom-in-95 duration-500 fill-mode-both" style={{ animationDelay: '400ms' }}>
+
+              <div className="w-3.5 h-3.5 rounded-full bg-white/20 flex items-center justify-center shrink-0">
+
+                <span className="text-white text-[9px] font-bold font-serif italic">i</span>
+
+              </div>
+
+              <span className="text-white text-[10px] font-medium tracking-wide">Checking every 3 seconds &middot; Do not close this screen</span>
+
+            </div>
+
+          </div>
+
+        )}
+
+
+
+        {/* ── STATE 3: ERROR ─────────────────────────────────────────────── */}
+
+        {(!generation.png_url && generation.status === 'failed') && (
+
+           <div className="flex flex-col items-center w-full max-w-sm px-4">
+
+              <div className="w-[120px] h-[120px] rounded-full bg-[#cc2222] flex items-center justify-center mb-6 shadow-lg animate-in fade-in zoom-in duration-300" style={{ animation: 'shake 0.3s cubic-bezier(.36,.07,.19,.97) both' }}>
+
+                <span className="text-white text-[60px] font-bold leading-none mt-[-4px]">!</span>
+
+              </div>
+
+              <h2 className="text-[#cc2222] font-bold text-[18px] mb-2 text-center" style={{ fontFamily: 'Georgia, serif' }}>Generation Failed</h2>
+
+              <div className="bg-white border border-[#b8d4e8] p-4 rounded-lg w-full mb-8 shadow-sm">
+
+                <p className="text-[#0a1a2e] text-[12px] text-center font-medium leading-relaxed">
+
+                  {generation.message || generation.error || 'An unexpected error occurred during clipping generation.'}
+
+                </p>
+
+              </div>
+
+              
+
+              <div className="flex flex-col gap-2.5 w-full">
+
+                <button 
+
+                  onClick={() => {
+
+                    updateGeneration(generation.id, {
+
+                      status: 'pending',
+
+                      error: undefined,
+
+                      message: undefined,
+
+                      stage: 'Resuming Polling',
+
+                    } as any);
+
+                    consecFailRef.current = 0;
+
+                    startTimeRef.current = Date.now();
+
+                  }}
+
+                  className="w-full bg-[#cc2222] active:bg-[#a01b1b] text-white py-[14px] rounded-[8px] font-bold text-xs tracking-wider uppercase transition-colors shadow-sm flex justify-center items-center gap-2"
+
+                >
+
+                  <span>Resume / Check Result</span>
+
+                </button>
+
+                <button 
+
+                  onClick={() => navigate('/generate')}
+
+                  className="w-full bg-white border border-[#b8d4e8] text-[#0a2540] py-[12px] rounded-[8px] font-bold text-xs tracking-wider uppercase transition-colors shadow-sm flex justify-center items-center gap-2"
+
+                >
+
+                  <ArrowLeft className="w-4 h-4" />
+
+                  <span>Back to Generator</span>
+
+                </button>
+
+              </div>
+
+           </div>
+
+        )}
+
+
+
+        {/* ── STATE 2: COMPLETE ───────────────────────────────────────────── */}
+
+        {(generation.png_url) && (
+
+          <div className="flex flex-col items-center w-full h-full relative animate-in fade-in duration-500 pb-2">
+
+             <div className="flex flex-col items-center mb-4 shrink-0 relative">
+
+               <div className="absolute inset-0 bg-[#015BB3] rounded-full opacity-0 animate-ping" style={{ animationDuration: '1.5s', animationDelay: '0.4s' }} />
+
+               <div className="w-12 h-12 rounded-full bg-[#015BB3] flex items-center justify-center mb-2 shadow-sm animate-in zoom-in duration-500" style={{ animationTimingFunction: 'cubic-bezier(0.68, -0.55, 0.265, 1.55)' }}>
+
+                 <svg className="w-6 h-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+
+                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" style={{ strokeDasharray: 24, strokeDashoffset: 24, animation: 'draw 0.4s ease-out 0.3s forwards' }} />
+
+                 </svg>
+
+               </div>
+
+               <h2 className="text-[#0a1a2e] font-bold text-[18px] animate-in slide-in-from-bottom-2 duration-300" style={{ fontFamily: 'Georgia, serif' }}>Clipping Ready</h2>
+
+             </div>
+
+
+
+             <div className="flex-1 w-full min-h-0 flex justify-center mb-5 bg-white border-[2px] border-[#cc2222] p-1 shadow-sm relative overflow-hidden group animate-in slide-in-from-bottom-4 duration-500 delay-100 fill-mode-both">
+
+               {/* This box contains the actual clipping */}
+
+               {generation.mp4_url || generation.config?.videoUrl ? (
+
+                 <video
+
+                    src={generation.mp4_url || generation.config?.videoUrl}
+
+                    controls
+
+                    autoPlay
+
+                    loop
+
+                    className="w-full h-full object-contain bg-white transition-transform duration-700 ease-out hover:scale-[1.02]"
+
+                 />
+
+               ) : (
+
+                 <img
+
+                    src={generation.png_url}
+
+                    alt="Newspaper Preview"
+
+                    className="w-full h-full object-contain bg-white transition-transform duration-700 ease-out hover:scale-[1.02]"
+
+                    style={{ imageRendering: 'crisp-edges' as any }}
+
+                  />
+
+               )}
+
+             </div>
+
+
+
+             {/* ── APPROVAL / ACTION CONTROLS ── */}
+
+             <div className="w-full shrink-0 flex flex-col gap-2.5">
+
+                {/* STATE A: APPROVED -> Show Download and Share Buttons */}
+
+                {(isPosted || approvalStatus === 'approved') ? (
+
+                  <>
+
+                    <div className="w-full bg-[#ECFDF5] border border-[#10B981] rounded-[12px] py-2 px-3 flex items-center justify-center gap-2 shadow-2xs">
+
+                      <CheckCircle2 className="w-4 h-4 text-[#059669] shrink-0" />
+
+                      <span className="text-[12px] font-bold text-[#065F46]">
+
+                        అడ్మిన్ ఆమోదించారు · డౌన్‌లోడ్ & షేర్ అందుబాటులో ఉన్నాయి (Approved & Live)
+
+                      </span>
+
+                    </div>
+
+
+
+                    <div className="flex w-full gap-2">
+
+                      {(generation.mp4_url || (generation as any).mp4Url || generation.config?.videoUrl) ? (
+
+                        <>
+
+                          <button
+
+                            onClick={() => handleDownload('mp4')}
+
+                            disabled={downloading}
+
+                            className="flex-1 py-[14px] bg-[#cc2222] hover:bg-[#ff3333] active:bg-[#a01b1b] text-white rounded-[8px] font-bold text-xs tracking-wider uppercase transition-all flex items-center justify-center gap-2 shadow-sm hover:shadow-[0_4px_12px_rgba(204,34,34,0.3)] relative overflow-hidden group"
+
+                          >
+
+                            <div className="absolute inset-0 bg-white/20 translate-x-[-100%] group-hover:animate-[shimmerSweep_1s_ease-out]" />
+
+                            <Download className="w-4 h-4 shrink-0" />
+
+                            <span>Save Video</span>
+
+                          </button>
+
+
+
+                          <button
+
+                            onClick={() => handleDownload('jpg')}
+
+                            disabled={downloading}
+
+                            className="flex-1 py-[14px] bg-[#015BB3] hover:bg-[#145AB1] active:bg-[#015BB3] text-white rounded-[8px] font-bold text-xs tracking-wider uppercase transition-all flex items-center justify-center gap-2 shadow-sm hover:shadow-[0_4px_12px_rgba(1,91,179,0.3)] relative overflow-hidden group"
+
+                          >
+
+                            <div className="absolute inset-0 bg-white/10 translate-x-[-100%] group-hover:animate-[shimmerSweep_1s_ease-out]" />
+
+                            <Download className="w-4 h-4 shrink-0" />
+
+                            <span>Save JPG</span>
+
+                          </button>
+
+                        </>
+
+                      ) : (
+
+                        <>
+
+                          <button
+
+                            onClick={() => handleDownload('jpg')}
+
+                            disabled={downloading}
+
+                            className="flex-1 py-[14px] bg-[#cc2222] hover:bg-[#ff3333] active:bg-[#a01b1b] text-white rounded-[8px] font-bold text-xs tracking-wider uppercase transition-all flex items-center justify-center gap-2 shadow-sm hover:shadow-[0_4px_12px_rgba(204,34,34,0.3)] relative overflow-hidden group"
+
+                          >
+
+                            <div className="absolute inset-0 bg-white/20 translate-x-[-100%] group-hover:animate-[shimmerSweep_1s_ease-out]" />
+
+                            <Download className="w-4 h-4 shrink-0" />
+
+                            <span>Save JPG</span>
+
+                          </button>
+
+
+
+                          <button
+
+                            onClick={() => handleDownload('pdf')}
+
+                            disabled={downloading}
+
+                            className="flex-1 py-[14px] bg-[#015BB3] hover:bg-[#145AB1] active:bg-[#015BB3] text-white rounded-[8px] font-bold text-xs tracking-wider uppercase transition-all flex items-center justify-center gap-2 shadow-sm hover:shadow-[0_4px_12px_rgba(1,91,179,0.3)] relative overflow-hidden group"
+
+                          >
+
+                            <div className="absolute inset-0 bg-white/10 translate-x-[-100%] group-hover:animate-[shimmerSweep_1s_ease-out]" />
+
+                            <FileDown className="w-4 h-4 shrink-0" />
+
+                            <span>Save PDF</span>
+
+                          </button>
+
+                        </>
+
+                      )}
+
+                    </div>
+
+
+
+                    <div className="flex w-full gap-2">
+
+                      <button
+
+                        onClick={handleDirectShare}
+
+                        disabled={downloading || isSharing}
+
+                        className="flex-1 py-[14px] bg-[#25D366] hover:bg-[#20ba5a] active:bg-[#1da851] text-white rounded-[8px] font-bold text-xs tracking-wider uppercase transition-all flex items-center justify-center gap-2 shadow-sm relative overflow-hidden group cursor-pointer"
+
+                      >
+
+                        <div className="absolute inset-0 bg-white/30 translate-x-[-100%] group-hover:animate-[shimmerSweep_1s_ease-out]" />
+
+                        <Share2 className="w-4 h-4 shrink-0" />
+
+                        <span>{isSharing ? 'షేర్ అవుతోంది...' : 'Share Clipping'}</span>
+
+                      </button>
+
+
+
+                      <div className="flex-1 py-[14px] bg-[#EBF3FC] text-[#015BB3] border border-[#CBD5E1] rounded-[8px] font-bold text-xs tracking-wider uppercase flex items-center justify-center gap-2 shadow-2xs">
+
+                        <CheckCircle2 className="w-4 h-4 text-[#015BB3] shrink-0" />
+
+                        <span>Live on Feed</span>
+
+                      </div>
+
+                    </div>
+
+                  </>
+
+                ) : approvalStatus === 'rejected' ? (
+
+                  /* STATE B: REJECTED -> Inform user and provide re-edit button */
+
+                  <div className="w-full bg-[#FEF2F2] border-2 border-[#EF4444] rounded-[16px] p-4 text-center shadow-xs">
+
+                    <div className="flex items-center justify-center gap-2 mb-2">
+
+                      <AlertTriangle className="w-5 h-5 text-[#DC2626]" />
+
+                      <span className="font-extrabold text-[15px] text-[#991B1B]">
+
+                        క్లిప్పింగ్ తిరస్కరించబడింది (Rejected by Admin)
+
+                      </span>
+
+                    </div>
+
+                    <p className="text-[12.5px] text-[#7F1D1D] font-medium leading-relaxed mb-3">
+
+                      ఈ వార్తా క్లిప్పింగ్‌ను జిల్లా అడ్మిన్ ఆమోదించలేదు. దయచేసి సమాచారాన్ని సరిచూసి మళ్లీ సృష్టించండి.
+
+                    </p>
+
+                    <button
+
+                      onClick={() => navigate('/generate')}
+
+                      className="w-full py-3 bg-[#DC2626] hover:bg-[#B91C1C] text-white rounded-[10px] text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-2"
+
+                    >
+
+                      <ArrowLeft className="w-4 h-4" />
+
+                      <span>మళ్లీ రాయండి (Back to Generator)</span>
+
+                    </button>
+
+                  </div>
+
+                ) : (
+
+                  /* STATE C: PENDING APPROVAL -> Lock download and share until admin approves */
+
+                  <div className="w-full bg-gradient-to-b from-[#FFFDF7] to-[#FFFBEB] border-2 border-[#F59E0B] rounded-[18px] p-4 text-center shadow-sm">
+
+                    <div className="flex items-center justify-center gap-2 mb-1.5">
+
+                      <Clock className="w-5 h-5 text-[#D97706] animate-pulse" />
+
+                      <span className="font-extrabold text-[15px] text-[#92400E]">
+
+                        అడ్మిన్ ఆమోదం కోసం వేచి ఉంది
+
+                      </span>
+
+                    </div>
+
+                    <div className="text-[11px] font-bold text-[#B45309] uppercase tracking-wider mb-2">
+
+                      Pending Admin Approval
+
+                    </div>
+
+                    
+
+                    <p className="text-[12.5px] text-[#78350F] font-medium leading-relaxed mb-3.5 px-1">
+
+                      ఈ వార్తా క్లిప్పింగ్ జిల్లా అడ్మిన్ పరిశీలనలో ఉంది. <strong>అడ్మిన్ ఆమోదం (Approval) తెలిపిన తర్వాతే</strong> Share మరియు Download (JPG / PDF) ఆప్షన్లు అందుబాటులోకి వస్తాయి.
+
+                    </p>
+
+                    
+
+                    <div className="flex flex-col gap-2">
+
+                      <button
+
+                        onClick={() => checkStatus(true)}
+
+                        disabled={isCheckingStatus}
+
+                        className="w-full py-2.5 px-4 bg-white border border-[#D97706] text-[#92400E] hover:bg-[#FEF3C7] active:scale-[0.98] rounded-[12px] text-xs font-bold flex items-center justify-center gap-2 shadow-2xs transition-all cursor-pointer"
+
+                      >
+
+                        <RefreshCw className={`w-3.5 h-3.5 ${isCheckingStatus ? 'animate-spin text-[#D97706]' : 'text-[#D97706]'}`} />
+
+                        <span>{isCheckingStatus ? 'పరిశీలిస్తోంది...' : 'ఆమోదం స్థితిని తనిఖీ చేయండి (Check Status)'}</span>
+
+                      </button>
+
+
+
+                      
+
+                    </div>
+
+                  </div>
+
+                )}
+
+             </div>
+
+          </div>
+
+        )}
+
+      </div>
+
+
+
+
+
+
+
+      {/* CSS Animations */}
+
+      <style dangerouslySetInnerHTML={{__html: `
+
+        @keyframes draw {
+
+          from { stroke-dashoffset: 24; }
+
+          to { stroke-dashoffset: 0; }
+
+        }
+
+        @keyframes shake {
+
+          10%, 90% { transform: translate3d(-1px, 0, 0); }
+
+          20%, 80% { transform: translate3d(2px, 0, 0); }
+
+          30%, 50%, 70% { transform: translate3d(-4px, 0, 0); }
+
+          40%, 60% { transform: translate3d(4px, 0, 0); }
+
+        }
+
+        @keyframes shimmer {
+
+          0% { background-position: 200% 0; }
+
+          100% { background-position: -200% 0; }
+
+        }
+
+        @keyframes shimmerSweep {
+
+          100% { transform: translateX(100%); }
+
+        }
+
+      `}} />
+
+    </div>
+
+  );
+
+};
+
+
+

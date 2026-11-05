@@ -1,0 +1,56 @@
+RTI EXPRESS SPOT NEWS 24x7 - VERSION 2.35 - FINAL FILES
+=======================================================
+
+WHAT IS IN THIS FOLDER
+  frontend\                 All app files changed since the old version, at their normal paths
+                            (copy into the folder that has package.json).
+  backend\spotnews_django\  Django server files (core\...)        -> LIVE service "spotnewsv2"
+  backend\backend3\         OTP server files (backend\app\...)    -> LIVE service "news-backend-sjw6"
+  SUPABASE_SQL\             Database changes, with UNDO files.
+  INTEGRATE_INTO_MY_COPY.bat  Copies the files into your own copy; saves every replaced file first.
+  BUILD_REAL_APK.bat        Builds the REAL app (com.newscraft.mobile, LIVE servers, your release key).
+                            Your project folders are not changed. It makes:
+                              SpotNews-v2.35-Release-....apk   install on phones
+                              SpotNews-v2.35-PlayStore-....aab upload to Google Play
+  CHANGES.md, PUBLIC_DATA_SOURCES.md   What changed and where the content comes from.
+
+
+SAFE ORDER (the old Play Store app keeps working at every step)
+-----------------------------------------------------------------
+1. Build:  double-click BUILD_REAL_APK.bat  (Enter = use your main project folder,
+           or paste the path of your backup copy). About 10-15 minutes.
+
+2. Database (LIVE Supabase project rffrqokpnqoycpozrjuc):
+   SQL Editor -> New query -> paste SUPABASE_SQL\1_BACKUP_AND_SAFE_ADDITIONS.sql -> Run.
+   It makes a backup first and only ADDS things. (1b is already inside file 1.)
+
+3. Servers: copy the backend files into the LIVE repository folder
+   (INTEGRATE_INTO_MY_COPY.bat, step 2 -> paste  D:\RTI\Spot News\Code\Spotnewsv2 ),
+   then in that folder:
+       git add spotnews_django backend3
+       git commit -m "v2.35 server"
+       git push origin main
+   Render redeploys both live services by itself (watch "Events" until "Deploy live").
+   On the live services, do NOT add or change Firebase settings - they are already there.
+
+4. Install SpotNews-v2.35-Release-....apk on YOUR phone over the current app
+   (same signing key, nothing is lost). Check: home, swipe feed, reporter OTP login,
+   registration with documents, create a clipping, post an ad, notifications.
+
+5. Google Play Console -> Testing -> Internal testing -> Create release ->
+   upload SpotNews-v2.35-PlayStore-....aab. After it works, promote to Production with a
+   staged rollout (start at 20%).
+
+6. When most readers have updated (about 1-2 weeks):
+   run SUPABASE_SQL\2_SWITCH_ON_after_playstore_update.sql on the LIVE database.
+
+UNDO
+  Database: UNDO_1.sql (after step 2) / UNDO_2.sql (after step 6).
+  Servers:  git revert HEAD  then  git push origin main.
+  App:      your old SpotNews-v2.34-Release.apk is still in the Nov2026_update folder.
+
+NOTES
+  * If Google Play says the bundle is signed with the wrong key, stop and tell Claude
+    (the Play app may use a different upload key than android\newscraft-release.keystore).
+  * Hourly post notifications are made on the phone. News and ad notifications are sent by
+    the server to readers of that district.

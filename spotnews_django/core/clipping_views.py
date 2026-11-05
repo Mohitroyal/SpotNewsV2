@@ -880,6 +880,11 @@ def run_clipping_generation_background(clipping_id, data, user_id):
 
                     )
 
+                # Atomic claim flag to prevent duplicate notifications by client-side RPC or subsequent queries
+                with connection.cursor() as notif_cursor:
+                    notif_cursor.execute("UPDATE clippings SET approval_notified = true WHERE id = %s", [clipping_id])
+                if not connection.in_atomic_block:
+                    connection.commit()
             except Exception as notif_err:
 
                 print(f"[AUTO-APPROVE NOTIF ERROR] {notif_err}")

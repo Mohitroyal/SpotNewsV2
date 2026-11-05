@@ -2,7 +2,7 @@ from django.urls import path
 from .views import (
     health_check, health_msg91, admin_stats, admin_auth_users,
     send_notification_view, device_tokens_stats_view, story_share_view,
-    send_approval_sms_view
+    send_approval_sms_view, process_notification_events_view
 )
 from .admin_extras import admin_generations, admin_user_role, admin_user_plan, admin_user_ban, admin_user_delete, admin_logos
 
@@ -82,6 +82,8 @@ urlpatterns = [
     # Push Notification Endpoints (FCM HTTP v1)
     path('v1/notifications/send', send_notification_view, name='send_notification'),
     path('v1/notifications/send/', send_notification_view),
+    path('v1/notifications/process-events', process_notification_events_view, name='process_notification_events'),
+    path('v1/notifications/process-events/', process_notification_events_view),
     path('v1/notifications/tokens', device_tokens_stats_view, name='device_tokens_stats'),
     path('v1/notifications/tokens/', device_tokens_stats_view),
 ]

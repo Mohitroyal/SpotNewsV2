@@ -1,0 +1,576 @@
+import { create } from "zustand";
+import { persist } from "zustand/middleware";
+import type { User, GenerationConfig, Generation } from "@/types";
+
+// ─── Permanent Reporter Name & Photo Helpers ─────────────────────────────────────
+// Clean up any stale legacy keys that leaked across different accounts
+if (typeof window !== "undefined" && window.localStorage) {
+  try {
+    localStorage.removeItem("spotnews_last_reporter_name");
+    localStorage.removeItem("spotnews_last_reporter_photo");
+    if (localStorage.getItem("spotnews_active_reporter_name") === "వార్తా పాఠకులు") {
+      localStorage.setItem("spotnews_active_reporter_name", "Guest Reader");
+    }
+    if (localStorage.getItem("spotnews_reader_name") === "వార్తా పాఠకులు") {
+      localStorage.setItem("spotnews_reader_name", "Guest Reader");
+    }
+    if (localStorage.getItem("spotnews_reporter_name_guest@spotnews.local") === "వార్తా పాఠకులు") {
+      localStorage.setItem("spotnews_reporter_name_guest@spotnews.local", "Guest Reader");
+    }
+  } catch (e) {
+    // ignore
+  }
+}
+
+export const getReporterName = (email?: string): string => {
+  try {
+    if (typeof window === "undefined" || !window.localStorage) return "";
+    if (email) {
+      const cleanEmail = email.toLowerCase().trim();
+      if (cleanEmail) {
+        const name = localStorage.getItem(`spotnews_reporter_name_${cleanEmail}`);
+        if (name) return name === "వార్తా పాఠకులు" ? "Guest Reader" : name;
+      }
+    }
+    const activeName = localStorage.getItem('spotnews_active_reporter_name');
+    if (activeName) return activeName === "వార్తా పాఠకులు" ? "Guest Reader" : activeName;
+  } catch (e) {
+    console.warn("[NameStore] Error reading reporter name:", e);
+  }
+  return "";
+};
+
+export const saveReporterName = (email: string | undefined, name: string): void => {
+  try {
+    if (!name || typeof window === "undefined" || !window.localStorage) return;
+    const trimmed = name.trim();
+    if (email) {
+      const cleanEmail = email.toLowerCase().trim();
+      if (cleanEmail) {
+        localStorage.setItem(`spotnews_reporter_name_${cleanEmail}`, trimmed);
+      }
+    }
+    localStorage.setItem('spotnews_active_reporter_name', trimmed);
+  } catch (e) {
+    console.warn("[NameStore] Error saving reporter name:", e);
+  }
+};
+
+export const isGoogleDefaultAvatar = (url?: string): boolean => {
+  if (!url) return false;
+  return (
+    url.includes('googleusercontent.com') ||
+    url.includes('lh3.google') ||
+    url.includes('google.com/accounts')
+  );
+};
+
+export const getReporterPhoto = (email?: string): string => {
+  try {
+    if (typeof window === "undefined" || !window.localStorage) return "";
+    
+    // 1. Check permanent registration photo
+    const regPhoto = localStorage.getItem('spotnews_registration_photo');
+    if (regPhoto && !isGoogleDefaultAvatar(regPhoto)) return regPhoto;
+
+    // 2. Check email-specific photo
+    if (email) {
+      const cleanEmail = email.toLowerCase().trim();
+      if (cleanEmail) {
+        const photo = localStorage.getItem(`spotnews_reporter_photo_${cleanEmail}`);
+        if (photo && !isGoogleDefaultAvatar(photo)) return photo;
+      }
+    }
+
+    // 3. Check active reporter photo
+    const activePhoto = localStorage.getItem('spotnews_active_reporter_photo');
+    if (activePhoto && !isGoogleDefaultAvatar(activePhoto)) return activePhoto;
+
+    // Fallbacks if only Google avatar exists
+    if (email) {
+      const cleanEmail = email.toLowerCase().trim();
+      const photo = localStorage.getItem(`spotnews_reporter_photo_${cleanEmail}`);
+      if (photo) return photo;
+    }
+    if (activePhoto) return activePhoto;
+  } catch (e) {
+    console.warn("[PhotoStore] Error reading reporter photo:", e);
+  }
+  return "";
+};
+
+export const getEffectiveReporterPhoto = (
+  preferredEmail?: string,
+  extraCandidates: (string | undefined | null)[] = []
+): string => {
+  const candidates: string[] = [];
+
+  for (const c of extraCandidates) {
+    if (c && typeof c === 'string' && c.trim()) {
+      candidates.push(c.trim());
+    }
+  }
+
+  if (preferredEmail) {
+    const p = getReporterPhoto(preferredEmail);
+    if (p) candidates.push(p);
+  }
+
+  try {
+    const reg = localStorage.getItem('spotnews_registration_photo');
+    if (reg) candidates.push(reg);
+    const active = localStorage.getItem('spotnews_active_reporter_photo');
+    if (active) candidates.push(active);
+  } catch {}
+
+  // 1. Highest priority: real uploaded photo (e.g. data:image/ or non-Google URL)
+  const realPhoto = candidates.find((url) => url && !isGoogleDefaultAvatar(url));
+  if (realPhoto) return realPhoto;
+
+  // 2. Fallback to any photo if no real photo exists
+  const anyPhoto = candidates.find((url) => Boolean(url));
+  return anyPhoto || '';
+};
+
+export const saveReporterPhoto = (email: string | undefined, photoUrl: string): void => {
+  try {
+    if (!photoUrl || typeof window === "undefined" || !window.localStorage) return;
+
+    // Guard: never let a Google letter avatar overwrite an existing real uploaded photo
+    const existing = getReporterPhoto(email);
+    if (isGoogleDefaultAvatar(photoUrl) && existing && !isGoogleDefaultAvatar(existing)) {
+      return;
+    }
+
+    if (email) {
+      const cleanEmail = email.toLowerCase().trim();
+      if (cleanEmail) {
+        localStorage.setItem(`spotnews_reporter_photo_${cleanEmail}`, photoUrl);
+      }
+    }
+
+    if (!isGoogleDefaultAvatar(photoUrl) || !existing) {
+      localStorage.setItem('spotnews_active_reporter_photo', photoUrl);
+    }
+
+    // If it's a real uploaded photo (base64 data URL), permanently preserve it as the registration photo!
+    if (photoUrl.startsWith('data:image/')) {
+      localStorage.setItem('spotnews_registration_photo', photoUrl);
+    }
+  } catch (e) {
+    console.warn("[PhotoStore] Error saving reporter photo:", e);
+  }
+};
+
+// ─── Auth Store ────────────────────────────────────────────────────────────────
+interface AuthStore {
+  user: User | null;
+  token: string | null;
+  isAuthenticated: boolean;
+  login: (user: User, token: string) => void;
+  logout: () => void;
+  updateUser: (partial: Partial<User>) => void;
+  otpState?: { phoneNumber: string; reqId: string } | null;
+  setOtpState: (state: { phoneNumber: string; reqId: string } | null) => void;
+  district: string;
+  setDistrict: (district: string) => void;
+  userState: string;
+  setUserState: (state: string) => void;
+  mandal?: string;
+  setMandal?: (mandal: string) => void;
+}
+
+export const useAuthStore = create<AuthStore>()(
+  persist(
+    (set) => ({
+      user: null,
+      token: null,
+      isAuthenticated: false,
+      login: (user, token) => {
+        const email = user?.email || (user as any)?.user_metadata?.email;
+        const storedName = getReporterName(email);
+        const storedPhoto = getReporterPhoto(email);
+
+        const accountName =
+          (user as any)?.user_metadata?.full_name ||
+          (user as any)?.user_metadata?.name ||
+          user?.full_name ||
+          user?.firstName ||
+          "";
+
+        const rawExisting = accountName || storedName || "";
+        const existingName = rawExisting === "వార్తా పాఠకులు" ? "Guest Reader" : rawExisting;
+
+        const accountPhoto =
+          user?.avatarUrl ||
+          (user as any)?.user_metadata?.avatar_url ||
+          (user as any)?.user_metadata?.picture ||
+          "";
+
+        const existingPhoto = getEffectiveReporterPhoto(email, [storedPhoto, accountPhoto]);
+
+        const existingMetadata = (user as any)?.user_metadata || {};
+        const updatedMetadata = {
+          ...existingMetadata,
+          ...(existingName ? { full_name: existingName, name: existingName } : {}),
+          ...(existingPhoto ? { avatar_url: existingPhoto, picture: existingPhoto } : {}),
+        };
+
+        const enrichedUser: User = {
+          ...user,
+          full_name: existingName || user?.full_name || user?.firstName || "",
+          firstName: existingName || user?.firstName || "",
+          avatarUrl: existingPhoto || "",
+          user_metadata: updatedMetadata,
+          role:
+            (user as any)?.email?.toLowerCase() === 'mohitroyal116@gmail.com' || (user as any)?.email?.toLowerCase() === 'mohithroyal116@gmail.com' ? 'reporter' :
+            (isSuperAdminUser(user) ? 'superadmin' :
+              ((user as any)?.role ||
+              (user as any)?.user_metadata?.role ||
+              (user as any)?.app_metadata?.role ||
+              'user')),
+          plan:
+            isSuperAdminUser(user) ? 'pro' :
+            (user?.plan ||
+            (user as any)?.subscription_plan ||
+            ((user as any)?.role === 'superadmin' ? 'superadmin' : undefined) ||
+            ((user as any)?.role === 'admin' ? 'admin' : undefined) ||
+            'free'),
+        } as any;
+
+        if (existingPhoto && email) {
+          saveReporterPhoto(email, existingPhoto);
+        }
+        if (existingName && email) {
+          saveReporterName(email, existingName);
+        }
+
+        set({ user: enrichedUser, token, isAuthenticated: true });
+      },
+      logout: () =>
+        set({ user: null, token: null, isAuthenticated: false }),
+      updateUser: (partial) =>
+        set((state) => {
+          if (!state.user) return { user: null };
+          const updatedUser: User = { ...state.user, ...partial };
+          const email = (updatedUser.email || (updatedUser as any)?.user_metadata?.email || '').toLowerCase();
+          
+          if (email === 'mohitroyal116@gmail.com' || email === 'mohithroyal116@gmail.com') {
+            updatedUser.role = 'reporter';
+          } else if (isSuperAdminUser(updatedUser)) {
+            updatedUser.role = 'superadmin';
+          }
+
+          const newName =
+            partial.full_name ||
+            partial.firstName ||
+            (partial as any)?.user_metadata?.full_name ||
+            (partial as any)?.user_metadata?.name;
+
+          if (newName) {
+            saveReporterName(email, newName);
+          }
+          if (partial.avatarUrl) {
+            saveReporterPhoto(email, partial.avatarUrl);
+          }
+
+          // Ensure user_metadata is also kept in sync
+          if (newName || partial.avatarUrl) {
+            const currentMetadata = (updatedUser as any)?.user_metadata || {};
+            (updatedUser as any).user_metadata = {
+              ...currentMetadata,
+              ...(newName ? { full_name: newName, name: newName } : {}),
+              ...(partial.avatarUrl ? { avatar_url: partial.avatarUrl, picture: partial.avatarUrl } : {}),
+            };
+          }
+
+          return { user: updatedUser };
+        }),
+      otpState: null,
+      setOtpState: (otpState) => set({ otpState }),
+      district: 'All',
+      setDistrict: (district) => set({ district }),
+      userState: 'All',
+      setUserState: (userState) => set({ userState }),
+      mandal: 'All mandals',
+      setMandal: (mandal) => set({ mandal }),
+    }),
+    { name: "newscraft-auth" }
+  )
+);
+
+// ─── Generation Store ──────────────────────────────────────────────────────────
+interface GenerationStore {
+  currentConfig: Partial<GenerationConfig>;
+  generations: Generation[];
+  isGenerating: boolean;
+  setConfig: (partial: Partial<GenerationConfig>) => void;
+  resetConfig: () => void;
+  addGeneration: (generation: Generation) => void;
+  updateGeneration: (id: string, partial: Partial<Generation>) => void;
+  setGenerations: (generations: Generation[]) => void;
+  setGenerating: (value: boolean) => void;
+}
+
+const defaultConfig: Partial<GenerationConfig> = {
+  language: "en",
+  tone: "formal",
+  templateId: "rti_express",
+  publicationName: "RTI Express",
+  publicationDate: new Date().toLocaleDateString("en-US", {
+    weekday: "long",
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+  }),
+  layoutColumns: 3,
+  imageUrls: [],
+  fontFamily: "playfair",
+  layoutPattern: "A",
+  borderColour: "#cc2222",
+  headingBgColour: "#cc2222",
+};
+
+export const useGenerationStore = create<GenerationStore>()(
+  persist(
+    (set) => ({
+      currentConfig: defaultConfig,
+      generations: [],
+      isGenerating: false,
+      setConfig: (partial) =>
+        set((state) => ({
+          currentConfig: { ...state.currentConfig, ...partial },
+        })),
+      resetConfig: () => set({ currentConfig: defaultConfig }),
+      addGeneration: (generation) =>
+        set((state) => {
+          // Strip base64 imageUrls to prevent localStorage QuotaExceededError
+          const cleanGen = JSON.parse(JSON.stringify(generation));
+          if (cleanGen?.config?.imageUrls) {
+            cleanGen.config.imageUrls = [];
+          }
+          return { generations: [cleanGen, ...state.generations].slice(0, 50) };
+        }),
+      updateGeneration: (id, partial) =>
+        set((state) => ({
+          generations: state.generations.map((g) => {
+            if (g.id === id) {
+              const updated = { ...g, ...partial };
+              if (updated?.config?.imageUrls) {
+                updated.config.imageUrls = [];
+              }
+              return updated;
+            }
+            return g;
+          }),
+        })),
+      setGenerations: (generations) => set({ generations: generations.slice(0, 50) }),
+      setGenerating: (value) => set({ isGenerating: value }),
+    }),
+    { name: "newscraft-generations" }
+  )
+);
+
+// ─── UI Store ─────────────────────────────────────────────────────────────────
+interface UIStore {
+  logoMode: boolean;
+  sidebarOpen: boolean;
+  language: string;
+  showInnerBorders: boolean;
+  isFullScreenFeed: boolean;
+  toggleLogoMode: () => void;
+  toggleInnerBorders: () => void;
+  setLogoMode: (val: boolean) => void;
+  setSidebarOpen: (open: boolean) => void;
+  setLanguage: (lang: string) => void;
+  pendingCropImageSrc: string | null;
+  setPendingCropImageSrc: (src: string | null) => void;
+  setIsFullScreenFeed: (val: boolean) => void;
+  toggleFullScreenFeed: () => void;
+}
+
+export const useUIStore = create<UIStore>()(
+  persist(
+    (set) => ({
+      logoMode: false,
+      showInnerBorders: true,
+      isFullScreenFeed: false,
+      sidebarOpen: true,
+      language: "en",
+      toggleLogoMode: () =>
+        set((state) => ({ logoMode: !state.logoMode })),
+      toggleInnerBorders: () =>
+        set((state) => ({ showInnerBorders: !(state.showInnerBorders ?? true) })),
+      setLogoMode: (val) => set({ logoMode: val }),
+      setSidebarOpen: (open) => set({ sidebarOpen: open }),
+      setLanguage: (lang) => set({ language: lang }),
+      pendingCropImageSrc: null,
+      setPendingCropImageSrc: (src) => set({ pendingCropImageSrc: src }),
+      setIsFullScreenFeed: (val) => set({ isFullScreenFeed: val }),
+      toggleFullScreenFeed: () => set((state) => ({ isFullScreenFeed: !state.isFullScreenFeed })),
+    }),
+    {
+      name: "newscraft-ui",
+      partialize: (state) => ({
+        logoMode: state.logoMode,
+        showInnerBorders: state.showInnerBorders,
+        sidebarOpen: state.sidebarOpen,
+        language: state.language,
+      }),
+    }
+  )
+);
+
+// ─── Admin RBAC Helper ────────────────────────────────────────────────────────
+export const SUPER_ADMIN_EMAILS = [
+  'mohithroyal16450@gmail.com',
+  'baba.journlist@gmail.com',
+  'baba.journilist@gmail.com',
+];
+
+export const SUPER_ADMIN_PHONES = [
+  '9346843889',
+  '7668886666',
+];
+
+export const SUPER_ADMIN_EMAIL = 'mohithroyal16450@gmail.com';
+
+/**
+ * Returns true if the user is a superadmin:
+ * - Emails: mohithroyal16450@gmail.com or baba.journlist@gmail.com / baba.journilist@gmail.com
+ * - Phones: 9346843889 or 7668886666
+ */
+/**
+ * Determines whether a target account is a protected superadmin account that cannot be modified or banned.
+ * Only genuine superadmin accounts are protected:
+ * 1. Root owner emails: mohithroyal16450@gmail.com, baba.journlist@gmail.com, baba.journilist@gmail.com
+ * 2. Accounts whose saved database role is 'superadmin'
+ * Ordinary users (user, reporter, admin) are NOT protected superadmin accounts.
+ */
+export const isProtectedSuperAdminAccount = (targetUser?: any): boolean => {
+  if (!targetUser) return false;
+  const email = (
+    typeof targetUser === 'string'
+      ? targetUser
+      : targetUser?.email || targetUser?.user_metadata?.email || ''
+  ).trim().toLowerCase();
+
+  if (SUPER_ADMIN_EMAILS.some((e) => e.toLowerCase() === email)) {
+    return true;
+  }
+
+  if (typeof targetUser === 'object') {
+    const role = (
+      targetUser.role ||
+      targetUser.user_metadata?.role ||
+      targetUser.app_metadata?.role ||
+      ''
+    ).toString().toLowerCase().trim();
+    if (role === 'superadmin') {
+      return true;
+    }
+  }
+
+  return false;
+};
+
+/**
+ * Returns true if the user is a superadmin:
+ * - Emails: mohithroyal16450@gmail.com or baba.journlist@gmail.com / baba.journilist@gmail.com
+ * - Phones: 9346843889 or 7668886666 (when logging in via phone OTP or superadmin session)
+ */
+export const isSuperAdminUser = (userOrEmail?: any): boolean => {
+  if (!userOrEmail) return false;
+
+  const email = (
+    typeof userOrEmail === 'string'
+      ? userOrEmail
+      : userOrEmail?.email || userOrEmail?.user_metadata?.email || ''
+  ).trim().toLowerCase();
+
+  // Root superadmin emails always match
+  if (email && SUPER_ADMIN_EMAILS.some((e) => e.toLowerCase() === email)) {
+    return true;
+  }
+
+  // Check role property if object
+  if (typeof userOrEmail === 'object') {
+    const role = (
+      userOrEmail.role ||
+      userOrEmail.user_metadata?.role ||
+      userOrEmail.app_metadata?.role ||
+      ''
+    ).toString().toLowerCase().trim();
+    if (role === 'superadmin') {
+      return true;
+    }
+    // If the object has an explicit non-superadmin role and email is not in SUPER_ADMIN_EMAILS, do not classify as superadmin
+    if (role === 'user' || role === 'reporter') {
+      return false;
+    }
+  }
+
+  // Check phone number for phone OTP sign-in sessions
+  const phone = (
+    typeof userOrEmail === 'string'
+      ? userOrEmail
+      : userOrEmail?.phone_number || userOrEmail?.phone || (userOrEmail as any)?.user_metadata?.phone || ''
+  ).replace(/\D/g, '');
+
+  if (phone && SUPER_ADMIN_PHONES.some((p) => phone.endsWith(p))) {
+    // Only treat as superadmin if it's a phone login or superadmin email/empty email
+    if (!email || email.endsWith('@phone.user') || SUPER_ADMIN_EMAILS.some((e) => e.toLowerCase() === email)) {
+      return true;
+    }
+  }
+
+  if (email && SUPER_ADMIN_PHONES.some((p) => email.includes(p))) {
+    return true;
+  }
+
+  return false;
+};
+
+/**
+ * Returns true if the given user or email has admin privileges:
+ * 1. Checks isSuperAdminUser (including superadmin phones)
+ * 2. Checks hardcoded admin emails (SUPER_ADMIN_EMAILS + VITE_ADMIN_EMAILS env var)
+ * 3. Checks role / metadata from Supabase Auth & profiles ('admin')
+ * 4. Checks subscription plan ('admin')
+ */
+export const isAdminUser = (userOrEmail?: any): boolean => {
+  if (!userOrEmail) return false;
+  if (isSuperAdminUser(userOrEmail)) return true;
+
+  const envAdminEmails = (import.meta.env.VITE_ADMIN_EMAILS ?? '')
+    .split(',')
+    .map((e: string) => e.trim().toLowerCase())
+    .filter(Boolean);
+
+  const adminEmails = Array.from(new Set([
+    ...SUPER_ADMIN_EMAILS.map((e) => e.toLowerCase()),
+    ...envAdminEmails,
+  ]));
+
+  if (typeof userOrEmail === 'string') {
+    const cleanEmail = userOrEmail.trim().toLowerCase();
+    return adminEmails.includes(cleanEmail);
+  }
+
+  // Object check
+  const u = userOrEmail;
+  const email = (u.email || u.user_metadata?.email || '').trim().toLowerCase();
+  if (email && adminEmails.includes(email)) return true;
+
+  const role = (
+    u.role ||
+    u.user_metadata?.role ||
+    u.app_metadata?.role ||
+    u.subscription_plan ||
+    u.plan ||
+    ''
+  ).toString().toLowerCase();
+
+  return role === 'admin';
+};
+

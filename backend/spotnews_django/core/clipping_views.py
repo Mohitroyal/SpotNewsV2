@@ -880,6 +880,11 @@ def run_clipping_generation_background(clipping_id, data, user_id):
 
                     )
 
+                # Atomic claim flag to prevent duplicate notifications by client-side RPC or subsequent queries
+                with connection.cursor() as notif_cursor:
+                    notif_cursor.execute("UPDATE clippings SET approval_notified = true WHERE id = %s", [clipping_id])
+                if not connection.in_atomic_block:
+                    connection.commit()
             except Exception as notif_err:
 
                 print(f"[AUTO-APPROVE NOTIF ERROR] {notif_err}")
@@ -935,6 +940,13 @@ def run_clipping_generation_background(clipping_id, data, user_id):
             
 
         print(f"[BACKGROUND] Finished clipping generation for {clipping_id}")
+
+        # Trigger reliable notification outbox worker
+        try:
+            from core.services.notification_service import process_notification_events
+            threading.Thread(target=process_notification_events, kwargs={"batch_size": 10}, daemon=True).start()
+        except Exception as notif_worker_err:
+            print(f"[NOTIFICATION WORKER TRIGGER ERROR] {notif_worker_err}")
 
         
 

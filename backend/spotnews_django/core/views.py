@@ -500,3 +500,24 @@ def story_share_view(request, clip_id):
 </html>"""
     return HttpResponse(html, content_type="text/html; charset=utf-8")
 
+
+
+@csrf_exempt
+def process_notification_events_view(request):
+    """
+    API endpoint to trigger outbox worker for processing pending clipping approval notification events.
+    """
+    try:
+        from core.services.notification_service import process_notification_events
+        batch_size = int(request.GET.get('batch_size', 20)) if request.method == 'GET' else 20
+        if request.method == 'POST' and request.body:
+            try:
+                data = json.loads(request.body.decode('utf-8'))
+                batch_size = int(data.get('batch_size', batch_size))
+            except Exception:
+                pass
+        result = process_notification_events(batch_size=batch_size)
+        return JsonResponse(result)
+    except Exception as e:
+        logger.error("Error processing notification events: %s", e)
+        return JsonResponse({"error": str(e)}, status=500)
