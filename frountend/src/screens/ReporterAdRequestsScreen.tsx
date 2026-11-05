@@ -1,25 +1,31 @@
 import React, { useState, useEffect } from 'react';
-import { useLocation, useNavigate } from 'react-router-dom';
-import { DISTRICTS, findDistrict } from '@/features/daily/dailyContentEngine';
+import { useNavigate } from 'react-router-dom';
 import {
   ArrowLeft, Plus, Image as ImageIcon, Video, CheckCircle2,
   Clock, AlertCircle, Phone, MessageSquare, Globe,
-  Loader2, X, RefreshCw, Sparkles, CreditCard
+  Loader2, X, RefreshCw, Sparkles, CreditCard, SlidersHorizontal
 } from 'lucide-react';
 import { useAuthStore } from '@/store';
-import { localAdsService, adOwnerId } from '@/services/localAds.service';
+import { localAdsService } from '@/services/localAds.service';
 import type { LocalAd, LocalAdMediaType, LocalAdCtaType } from '@/types/localAds';
 import { UpiPaymentModal } from '@/components/UpiPaymentModal';
 
-// Ads can target any district in Andhra Pradesh or Telangana (Nov 2026: AP was missing)
-const AD_DISTRICTS = [
-  'All / అన్ని జిల్లాలు',
-  ...DISTRICTS.map((d) => `${d.en} / ${d.te}`),
+const TELANGANA_DISTRICTS = [
+  "All / మొత్తం తెలంగాణ",
+  "Hyderabad / హైదరాబాద్",
+  "Rangareddy / రంగారెడ్డి",
+  "Medchal-Malkajgiri / మేడ్చల్",
+  "Warangal / వరంగల్",
+  "Karimnagar / కరీంనగర్",
+  "Nizamabad / నిజామాబాద్",
+  "Khammam / ఖమ్మం",
+  "Nalgonda / నల్గొండ",
+  "Mahabubnagar / మహబూబ్‌నగర్",
+  "Sangareddy / సంగారెడ్డి",
+  "Siddipet / సిద్దిపేట",
+  "Adilabad / ఆదిలాబాద్",
+  "Suryapet / సూర్యాపేట",
 ];
-const districtOption = (name?: string) => {
-  const d = findDistrict(name);
-  return d ? `${d.en} / ${d.te}` : AD_DISTRICTS[0];
-};
 
 export const ReporterAdRequestsScreen: React.FC = () => {
   const navigate = useNavigate();
@@ -39,36 +45,19 @@ export const ReporterAdRequestsScreen: React.FC = () => {
   const [mediaType, setMediaType] = useState<LocalAdMediaType>('image');
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string>('');
-  const routeState = (useLocation().state || {}) as { category?: { key: string; te: string; en: string } | null; openForm?: boolean };
-  const myDistrict = useAuthStore((st) => st.district);
-  const [targetDistrict, setTargetDistrict] = useState(() => districtOption(myDistrict));
+  const [targetDistrict, setTargetDistrict] = useState(TELANGANA_DISTRICTS[0]);
   const [ctaType, setCtaType] = useState<LocalAdCtaType>('call');
   const [ctaValue, setCtaValue] = useState('');
+  const [showAdvanced, setShowAdvanced] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [formError, setFormError] = useState('');
-  const [fetchError, setFetchError] = useState('');
-
-  // Coming from "Post Advertisement": open the form with the chosen category
-  useEffect(() => {
-    if (!routeState.openForm) return;
-    setIsModalOpen(true);
-    if (routeState.category) setDescription(`${routeState.category.te} · ${routeState.category.en}\n`);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
 
   const fetchAds = async () => {
+    if (!user?.id) return;
     setLoading(true);
-    setFetchError('');
-    try {
-      const ownerId = adOwnerId(user?.id);
-      const data = await localAdsService.fetchReporterAdRequests(ownerId);
-      setAds(data || []);
-    } catch (err: any) {
-      console.error('[ReporterAdRequestsScreen] fetchAds error:', err);
-      setFetchError('Failed to load ad requests. Please check your connection.');
-    } finally {
-      setLoading(false);
-    }
+    const data = await localAdsService.fetchReporterAdRequests(user.id);
+    setAds(data);
+    setLoading(false);
   };
 
   useEffect(() => {
@@ -107,36 +96,28 @@ export const ReporterAdRequestsScreen: React.FC = () => {
     setSubmitting(true);
     setFormError('');
 
-    try {
-      const ownerId = adOwnerId(user?.id);
-      const res = await localAdsService.createAdRequest({
-        reporter_id: ownerId,
-        reporter_name: String(user?.id || '').startsWith('guest_') ? (title.trim() || 'Reader') : (user?.full_name || 'Reporter'),
-        reporter_phone: (user as any)?.phone_number || '',
-        reporter_email: user?.email || '',
-        title: title.trim(),
-        description: description.trim(),
-        media_type: mediaType,
-        media_file: selectedFile,
-        target_district: targetDistrict.split(' / ')[0],
-        target_state: findDistrict(targetDistrict.split(' / ')[0])?.state || 'All',
-        cta_type: ctaType,
-        cta_value: ctaValue.trim(),
-      });
+    const res = await localAdsService.createAdRequest({
+      reporter_id: user?.id || '',
+      reporter_name: user?.full_name || 'Reporter',
+      reporter_phone: (user as any)?.phone_number || '',
+      reporter_email: user?.email || '',
+      title: title.trim(),
+      description: description.trim(),
+      media_type: mediaType,
+      media_file: selectedFile,
+      target_district: targetDistrict.split(' / ')[0],
+      cta_type: ctaType,
+      cta_value: ctaValue.trim(),
+    });
 
-      if (res.success) {
-        setIsModalOpen(false);
-        resetForm();
-        await fetchAds();
-        alert('🎉 మీ ప్రకటన సమర్పించబడింది! వార్తల్లో కనిపిస్తుంది. / Your ad has been submitted successfully.');
-      } else {
-        setFormError(res.error || 'Failed to submit ad request. Please try again.');
-      }
-    } catch (err: any) {
-      console.error('[ReporterAdRequestsScreen] Submission exception:', err);
-      setFormError(err.message || 'An error occurred while submitting your ad. Please try again.');
-    } finally {
-      setSubmitting(false);
+    setSubmitting(false);
+
+    if (res.success) {
+      setIsModalOpen(false);
+      resetForm();
+      fetchAds();
+    } else {
+      setFormError(res.error || 'Failed to submit ad request. Please try again.');
     }
   };
 
@@ -145,7 +126,7 @@ export const ReporterAdRequestsScreen: React.FC = () => {
     setDescription('');
     setSelectedFile(null);
     setPreviewUrl('');
-    setTargetDistrict(districtOption(myDistrict));
+    setTargetDistrict(TELANGANA_DISTRICTS[0]);
     setCtaValue('');
     setFormError('');
   };
@@ -303,8 +284,8 @@ export const ReporterAdRequestsScreen: React.FC = () => {
             <ArrowLeft className="w-5 h-5 text-white" />
           </button>
           <div>
-            <h1 className="text-[19px] font-extrabold tracking-tight">నా ప్రకటనలు</h1>
-            <p className="text-[14px] text-white/80">My ads</p>
+            <h1 className="text-base font-bold tracking-tight">Local Ads & Sponsorships</h1>
+            <p className="text-[11px] text-white/80">స్థానిక ప్రకటనల అభ్యర్థనలు</p>
           </div>
         </div>
 
@@ -313,7 +294,7 @@ export const ReporterAdRequestsScreen: React.FC = () => {
           className="flex items-center gap-1.5 bg-[#FFCC00] hover:bg-[#E6B800] text-[#015BB3] px-3.5 py-1.5 rounded-full text-xs font-black shadow-sm active:scale-95 transition-all"
         >
           <Plus className="w-4 h-4 stroke-[3]" />
-          <span className="text-[15px]">కొత్త ప్రకటన · New</span>
+          <span>Request Ad</span>
         </button>
       </header>
 
@@ -323,9 +304,9 @@ export const ReporterAdRequestsScreen: React.FC = () => {
         <div className="bg-gradient-to-r from-[#015BB3] to-[#0284c7] rounded-2xl p-4 text-white shadow-sm flex items-start gap-3">
           <Sparkles className="w-6 h-6 text-[#FFCC00] shrink-0 mt-0.5" />
           <div className="text-xs space-y-1">
-            <p className="font-bold text-[17px]">మీ ప్రకటన వెంటనే వార్తల్లో · Your ad goes live at once</p>
+            <p className="font-bold text-sm">Grow Local Business with In-Feed Ads</p>
             <p className="text-white/85 leading-relaxed">
-              పోస్టర్ ఫోటో, మీ ఫోన్ నంబర్ ఇస్తే చాలు - మీ జిల్లా పాఠకులకు వెంటనే కనిపిస్తుంది. Just add a poster photo and your phone number - readers in your district see it right away.
+              Submit your local business poster or video ad here. Once reviewed and accepted by the Superadmin, you can complete payment to have it broadcast across the feed every 15 clippings.
             </p>
           </div>
         </div>
@@ -333,7 +314,7 @@ export const ReporterAdRequestsScreen: React.FC = () => {
         {/* Requests List */}
         <div className="flex items-center justify-between pt-1">
           <h2 className="text-sm font-black text-[#0A2540] uppercase tracking-wider">
-            నా ప్రకటనలు · My ads ({ads.length})
+            Your Ad Requests ({ads.length})
           </h2>
           <button
             onClick={fetchAds}
@@ -349,27 +330,15 @@ export const ReporterAdRequestsScreen: React.FC = () => {
             <Loader2 className="w-7 h-7 animate-spin text-[#015BB3] mb-2" />
             <p className="text-xs font-medium">Loading your ad requests...</p>
           </div>
-        ) : fetchError ? (
-          <div className="bg-red-50 border border-red-200 rounded-2xl p-6 text-center space-y-3 shadow-sm">
-            <AlertCircle className="w-8 h-8 text-red-500 mx-auto" />
-            <p className="text-sm font-bold text-red-800">{fetchError}</p>
-            <button
-              onClick={fetchAds}
-              className="inline-flex items-center gap-1.5 px-4 py-2 bg-[#015BB3] hover:bg-[#0B4EA2] text-white rounded-xl text-xs font-bold transition-colors cursor-pointer"
-            >
-              <RefreshCw className="w-3.5 h-3.5" />
-              <span>Retry · మళ్ళీ ప్రయత్నించండి</span>
-            </button>
-          </div>
         ) : ads.length === 0 ? (
           <div className="bg-white rounded-2xl border border-gray-200/80 p-8 text-center space-y-3 shadow-sm">
             <div className="w-12 h-12 bg-[#EEF4FB] text-[#015BB3] rounded-full flex items-center justify-center mx-auto">
               <ImageIcon className="w-6 h-6" />
             </div>
             <div>
-              <p className="text-[17px] font-bold text-[#0A2540]">ఇంకా ప్రకటనలు లేవు · No ads yet</p>
+              <p className="text-sm font-bold text-[#0A2540]">No Ad Requests Yet</p>
               <p className="text-xs text-[#6B7A90] mt-1 max-w-sm mx-auto">
-                మీ షాప్, సేవ, కార్యక్రమాన్ని ప్రచారం చేయండి. · Promote your shop, service or event.
+                Promote shops, services, and local events. Upload your ad poster or video and request the Superadmin to feature it in the feed.
               </p>
             </div>
             <button
@@ -377,7 +346,7 @@ export const ReporterAdRequestsScreen: React.FC = () => {
               className="inline-flex items-center gap-2 bg-[#015BB3] text-white px-5 py-2.5 rounded-xl text-xs font-bold shadow-md hover:bg-[#0B4EA2] transition-colors"
             >
               <Plus className="w-4 h-4" />
-              <span className="text-[16px]">మొదటి ప్రకటన ఇవ్వండి · Post your first ad</span>
+              <span>Submit First Ad Request</span>
             </button>
           </div>
         ) : (
@@ -396,7 +365,7 @@ export const ReporterAdRequestsScreen: React.FC = () => {
                   {/* Top Bar: Title & Status */}
                   <div className="flex items-start justify-between gap-2">
                     <div className="space-y-0.5">
-                      <span className="text-[13px] font-bold text-[#015BB3] uppercase tracking-wider bg-[#EAF2FB] px-2 py-0.5 rounded-full">
+                      <span className="text-[10px] font-bold text-[#015BB3] uppercase tracking-wider bg-[#EAF2FB] px-2 py-0.5 rounded-full">
                         {ad.media_type === 'video' ? '🎬 Promo Video' : '🖼️ Poster Ad'} • {ad.target_district || 'All Districts'}
                       </span>
                       <h3 className="text-sm font-bold text-[#0A2540] pt-1">{ad.title}</h3>
@@ -404,28 +373,28 @@ export const ReporterAdRequestsScreen: React.FC = () => {
 
                     {/* Status Pill */}
                     {isPending && (
-                      <span className="inline-flex items-center gap-1 text-[14px] font-bold text-amber-800 bg-amber-50 border border-amber-200 px-2.5 py-1 rounded-full shrink-0">
+                      <span className="inline-flex items-center gap-1 text-[11px] font-bold text-amber-800 bg-amber-50 border border-amber-200 px-2.5 py-1 rounded-full shrink-0">
                         <Clock className="w-3 h-3 text-amber-600" />
                         <span>Pending Review</span>
                       </span>
                     )}
 
                     {isAccepted && (
-                      <span className="inline-flex items-center gap-1 text-[14px] font-bold text-emerald-800 bg-emerald-50 border border-emerald-300 px-2.5 py-1 rounded-full shrink-0">
+                      <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-800 bg-emerald-50 border border-emerald-300 px-2.5 py-1 rounded-full shrink-0">
                         <CheckCircle2 className="w-3 h-3 text-emerald-600" />
                         <span>Accepted! Free to Post</span>
                       </span>
                     )}
 
                     {isActive && (
-                      <span className="inline-flex items-center gap-1 text-[14px] font-bold text-blue-800 bg-blue-50 border border-blue-200 px-2.5 py-1 rounded-full shrink-0">
+                      <span className="inline-flex items-center gap-1 text-[11px] font-bold text-blue-800 bg-blue-50 border border-blue-200 px-2.5 py-1 rounded-full shrink-0">
                         <span className="w-2 h-2 rounded-full bg-blue-600 animate-pulse" />
                         <span>Live in Feed</span>
                       </span>
                     )}
 
                     {isRejected && (
-                      <span className="inline-flex items-center gap-1 text-[14px] font-bold text-red-800 bg-red-50 border border-red-200 px-2.5 py-1 rounded-full shrink-0">
+                      <span className="inline-flex items-center gap-1 text-[11px] font-bold text-red-800 bg-red-50 border border-red-200 px-2.5 py-1 rounded-full shrink-0">
                         <AlertCircle className="w-3 h-3 text-red-600" />
                         <span>Rejected</span>
                       </span>
@@ -446,7 +415,7 @@ export const ReporterAdRequestsScreen: React.FC = () => {
                       {ad.description && (
                         <p className="text-gray-600 line-clamp-2">{ad.description}</p>
                       )}
-                      <div className="flex items-center gap-3 text-gray-500 text-[14px] pt-0.5">
+                      <div className="flex items-center gap-3 text-gray-500 text-[11px] pt-0.5">
                         <span className="flex items-center gap-1">
                           {ad.cta_type === 'call' && <Phone className="w-3 h-3 text-blue-600" />}
                           {ad.cta_type === 'whatsapp' && <MessageSquare className="w-3 h-3 text-emerald-600" />}
@@ -454,7 +423,7 @@ export const ReporterAdRequestsScreen: React.FC = () => {
                           <span className="font-medium text-gray-700">{ad.cta_value || 'None'}</span>
                         </span>
                       </div>
-                      <p className="text-[13px] text-gray-400">
+                      <p className="text-[10px] text-gray-400">
                         Submitted: {new Date(ad.created_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
                       </p>
                     </div>
@@ -467,7 +436,7 @@ export const ReporterAdRequestsScreen: React.FC = () => {
                         <p className="text-xs font-bold text-[#0D6832]">
                           Approved by Superadmin! Placement Fee: <span className="text-sm font-extrabold text-[#0D6832]">Free (₹0)</span>
                         </p>
-                        <p className="text-[14px] text-[#2D7A4D]">
+                        <p className="text-[11px] text-[#2D7A4D]">
                           Approved for 100% free placement. Tap below to publish this ad to the live news feed.
                         </p>
                       </div>
@@ -490,9 +459,9 @@ export const ReporterAdRequestsScreen: React.FC = () => {
                   )}
 
                   {isActive && (
-                    <div className="bg-blue-50/70 border border-blue-200/80 rounded-xl px-3 py-2 text-[14px] text-blue-800 flex items-center justify-between">
+                    <div className="bg-blue-50/70 border border-blue-200/80 rounded-xl px-3 py-2 text-[11px] text-blue-800 flex items-center justify-between">
                       <span className="font-semibold">Status: Actively rotating in the district feed</span>
-                      <span className="text-[13px] font-bold bg-blue-100 text-blue-800 px-2 py-0.5 rounded-full">
+                      <span className="text-[10px] font-bold bg-blue-100 text-blue-800 px-2 py-0.5 rounded-full">
                         Paid on {new Date(ad.paid_at || ad.created_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}
                       </span>
                     </div>
@@ -504,107 +473,229 @@ export const ReporterAdRequestsScreen: React.FC = () => {
         )}
       </main>
 
-      {/* ── Post an ad: simple form, goes live at once ─────────────────── */}
+      {/* ── Create Ad Request Modal ────────────────────────────────────── */}
       {isModalOpen && (
-        <div className="fixed inset-0 z-50 bg-black/60 flex items-end sm:items-center justify-center">
-          <div className="bg-white rounded-t-3xl sm:rounded-3xl max-w-lg w-full max-h-[94vh] flex flex-col shadow-2xl overflow-hidden">
-            <div className="px-5 py-4 flex items-center justify-between text-white" style={{ background: 'linear-gradient(135deg,#062F6E,#0B4EA2 55%,#1E6FD9)' }}>
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl max-w-lg w-full max-h-[90vh] flex flex-col shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+            {/* Modal Header */}
+            <div className="bg-[#015BB3] text-white px-5 py-4 flex items-center justify-between">
               <div>
-                <h3 className="font-extrabold text-[20px] m-0">ప్రకటన ఇవ్వండి · Post Ad</h3>
-                <p className="text-[14px] text-white/85 m-0">వెంటనే లైవ్ · Goes live immediately</p>
+                <h3 className="font-bold text-sm">Request Superadmin to Post Ad</h3>
+                <p className="text-[11px] text-white/80">స్థానిక ప్రకటన అభ్యర్థన ఫారమ్</p>
               </div>
-              <button type="button" aria-label="Close" onClick={() => setIsModalOpen(false)}
-                className="w-10 h-10 rounded-full bg-white/15 border-0 text-white flex items-center justify-center cursor-pointer">
-                <X className="w-5 h-5" />
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setShowAdvanced(!showAdvanced)}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold transition-all ${
+                    showAdvanced
+                      ? 'bg-amber-400 text-gray-900 shadow-md ring-2 ring-white/50'
+                      : 'bg-white/15 text-white hover:bg-white/25 border border-white/20'
+                  }`}
+                  title="Advanced Features / అధునాతన ఫీచర్లు"
+                >
+                  <SlidersHorizontal className="w-3.5 h-3.5" />
+                  <span className="text-[11px]">Advanced</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setIsModalOpen(false)}
+                  className="p-1 rounded-full hover:bg-white/10 text-white transition-colors"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
             </div>
 
-            <form onSubmit={handleCreateRequest} className="p-5 overflow-y-auto space-y-5 flex-1">
-              {routeState.category && (
-                <span className="inline-block rounded-full bg-[#FFF1F1] border border-[#FCA5A5] text-[#B3121F] text-[14px] font-extrabold px-3 py-1">
-                  {routeState.category.te} · {routeState.category.en}
-                </span>
-              )}
+            {/* Modal Form Content */}
+            <form onSubmit={handleCreateRequest} className="p-5 overflow-y-auto space-y-4 flex-1 text-xs">
               {formError && (
-                <div className="bg-red-50 border border-red-200 text-red-700 p-3 rounded-xl text-[15px] flex items-center gap-2">
-                  <AlertCircle className="w-5 h-5 shrink-0" />
+                <div className="bg-red-50 border border-red-200 text-red-700 p-3 rounded-xl text-xs flex items-center gap-2">
+                  <AlertCircle className="w-4 h-4 shrink-0" />
                   <span>{formError}</span>
                 </div>
               )}
 
-              {/* 1. Name */}
-              <div className="space-y-1.5">
-                <label className="block text-[17px] font-extrabold text-[#0F172A]">1. వ్యాపారం / ప్రకటన పేరు <span className="text-[14px] font-semibold text-[#64748B]">· Business name</span></label>
-                <input type="text" placeholder="ఉదా: శ్రీ లక్ష్మి సిల్క్స్ · e.g. Sri Laxmi Silks" value={title}
-                  onChange={(e) => setTitle(e.target.value)} required
-                  className="w-full px-4 py-3.5 rounded-2xl border-2 border-[#D9E5F2] focus:outline-none focus:border-[#0B4EA2] text-[17px]" />
+              {/* Title */}
+              <div className="space-y-1">
+                <label className="font-bold text-gray-700">Ad Title / Business Name *</label>
+                <input
+                  type="text"
+                  placeholder="e.g., Sri Laxmi Silks & Sarees Festival Sale"
+                  value={title}
+                  onChange={(e) => setTitle(e.target.value)}
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-gray-300 focus:outline-none focus:border-[#015BB3] text-xs"
+                  required
+                />
               </div>
 
-              {/* 2. Poster photo (video optional) */}
+              {/* Media Type Selection */}
               <div className="space-y-1.5">
-                <label className="block text-[17px] font-extrabold text-[#0F172A]">2. పోస్టర్ ఫోటో <span className="text-[14px] font-semibold text-[#64748B]">· Poster photo</span></label>
-                <label className="flex flex-col items-center justify-center border-2 border-dashed border-[#9CC3F5] rounded-2xl p-4 cursor-pointer bg-[#F6FAFF] min-h-[150px]">
-                  {previewUrl ? (
-                    mediaType === 'video'
-                      ? <video src={previewUrl} className="max-h-44 rounded-xl object-contain" controls />
-                      : <img src={previewUrl} alt="Poster" className="max-h-44 rounded-xl object-contain" />
-                  ) : (
-                    <span className="text-center space-y-1">
-                      {mediaType === 'video' ? <Video className="w-10 h-10 mx-auto text-[#0B4EA2]" /> : <ImageIcon className="w-10 h-10 mx-auto text-[#0B4EA2]" />}
-                      <span className="block text-[17px] font-extrabold text-[#0B4EA2]">{mediaType === 'video' ? 'వీడియో ఎంచుకోండి · Choose video' : 'ఫోటో ఎంచుకోండి · Choose photo'}</span>
-                      <span className="block text-[13px] text-[#64748B]">{mediaType === 'video' ? 'MP4, 25 MB వరకు' : 'గ్యాలరీ లేదా కెమెరా · Gallery or camera'}</span>
-                    </span>
-                  )}
-                  <input type="file" accept={mediaType === 'video' ? 'video/mp4,video/quicktime' : 'image/*'} onChange={handleFileChange} className="hidden" />
+                <label className="font-bold text-gray-700">Ad Media Type *</label>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => { setMediaType('image'); setSelectedFile(null); setPreviewUrl(''); }}
+                    className={`py-2 px-3 rounded-xl border flex items-center justify-center gap-2 text-xs font-bold transition-all ${
+                      mediaType === 'image'
+                        ? 'border-[#015BB3] bg-[#EAF2FB] text-[#015BB3]'
+                        : 'border-gray-200 text-gray-600 hover:bg-gray-50'
+                    }`}
+                  >
+                    <ImageIcon className="w-4 h-4" />
+                    <span>Poster (Image)</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => { setMediaType('video'); setSelectedFile(null); setPreviewUrl(''); }}
+                    className={`py-2 px-3 rounded-xl border flex items-center justify-center gap-2 text-xs font-bold transition-all ${
+                      mediaType === 'video'
+                        ? 'border-[#015BB3] bg-[#EAF2FB] text-[#015BB3]'
+                        : 'border-gray-200 text-gray-600 hover:bg-gray-50'
+                    }`}
+                  >
+                    <Video className="w-4 h-4" />
+                    <span>Promo Video</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* File Upload Area */}
+              <div className="space-y-1">
+                <label className="font-bold text-gray-700">
+                  Upload {mediaType === 'video' ? 'Video File (MP4, max 25MB)' : 'Poster Image (JPG/PNG)'} *
                 </label>
-                <button type="button"
-                  onClick={() => { setMediaType(mediaType === 'video' ? 'image' : 'video'); setSelectedFile(null); setPreviewUrl(''); }}
-                  className="text-[14px] font-bold text-[#0B4EA2] bg-transparent border-0 p-0 cursor-pointer">
-                  {mediaType === 'video' ? '← ఫోటో వాడండి · Use a photo instead' : 'వీడియో ఉందా? · Have a video instead?'}
+                <label className="flex flex-col items-center justify-center border-2 border-dashed border-gray-300 hover:border-[#015BB3] rounded-2xl p-4 cursor-pointer bg-gray-50 hover:bg-blue-50/40 transition-colors">
+                  {previewUrl ? (
+                    mediaType === 'video' ? (
+                      <video src={previewUrl} className="max-h-36 rounded-lg object-contain" controls />
+                    ) : (
+                      <img src={previewUrl} alt="Preview" className="max-h-36 rounded-lg object-contain" />
+                    )
+                  ) : (
+                    <div className="text-center space-y-1 text-gray-500">
+                      {mediaType === 'video' ? <Video className="w-8 h-8 mx-auto text-[#015BB3]" /> : <ImageIcon className="w-8 h-8 mx-auto text-[#015BB3]" />}
+                      <p className="font-bold text-xs text-[#015BB3]">Click to select {mediaType === 'video' ? 'video' : 'poster'}</p>
+                      <p className="text-[10px] text-gray-400">High-resolution files look best in feed</p>
+                    </div>
+                  )}
+                  <input
+                    type="file"
+                    accept={mediaType === 'video' ? 'video/mp4,video/quicktime' : 'image/*'}
+                    onChange={handleFileChange}
+                    className="hidden"
+                  />
+                </label>
+              </div>
+
+              {/* Contact Information */}
+              <div className="space-y-1">
+                <label className="font-bold text-gray-700">
+                  {ctaType === 'call' ? 'Phone Number *' : ctaType === 'whatsapp' ? 'WhatsApp Number *' : 'URL Link *'}
+                </label>
+                <input
+                  type={ctaType === 'link' ? 'url' : 'tel'}
+                  placeholder={ctaType === 'link' ? 'https://example.com' : '9876543210'}
+                  value={ctaValue}
+                  onChange={(e) => setCtaValue(e.target.value)}
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-gray-300 focus:outline-none focus:border-[#015BB3] text-xs"
+                  required
+                />
+              </div>
+
+              {/* Advanced Features (Revealed when Advanced logo clicked beside top X) */}
+              {showAdvanced ? (
+                <div className="p-4 rounded-2xl bg-gradient-to-br from-amber-50/80 via-blue-50/40 to-indigo-50/50 border border-amber-200/80 space-y-3.5 animate-in fade-in slide-in-from-top-2 duration-200 shadow-inner">
+                  <div className="flex items-center justify-between pb-2 border-b border-amber-200/60">
+                    <div className="flex items-center gap-1.5 text-[#015BB3] font-bold text-xs">
+                      <SlidersHorizontal className="w-4 h-4 text-amber-500" />
+                      <span>Advanced Ad Features (అధునాతన ఫీచర్లు)</span>
+                    </div>
+                    <span className="text-[10px] text-amber-700 font-semibold bg-amber-100 px-2 py-0.5 rounded-full">
+                      Custom Options
+                    </span>
+                  </div>
+
+                  {/* Offer / Description */}
+                  <div className="space-y-1">
+                    <label className="font-bold text-gray-700">Offer / Description (Optional)</label>
+                    <textarea
+                      placeholder="Special 50% discount on all silk sarees this festive week..."
+                      value={description}
+                      onChange={(e) => setDescription(e.target.value)}
+                      rows={2}
+                      className="w-full px-3.5 py-2 rounded-xl border border-gray-300 focus:outline-none focus:border-[#015BB3] text-xs bg-white"
+                    />
+                  </div>
+
+                  {/* Target Region / District */}
+                  <div className="space-y-1">
+                    <label className="font-bold text-gray-700">Target Region / District *</label>
+                    <select
+                      value={targetDistrict}
+                      onChange={(e) => setTargetDistrict(e.target.value)}
+                      className="w-full px-3.5 py-2.5 rounded-xl border border-gray-300 focus:outline-none focus:border-[#015BB3] text-xs bg-white"
+                    >
+                      {TELANGANA_DISTRICTS.map((d) => (
+                        <option key={d} value={d}>{d}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* Call to Action Type */}
+                  <div className="space-y-1">
+                    <label className="font-bold text-gray-700">Call-to-Action Type</label>
+                    <select
+                      value={ctaType}
+                      onChange={(e) => setCtaType(e.target.value as LocalAdCtaType)}
+                      className="w-full px-3.5 py-2.5 rounded-xl border border-gray-300 focus:outline-none focus:border-[#015BB3] text-xs bg-white"
+                    >
+                      <option value="call">📞 Phone Call</option>
+                      <option value="whatsapp">💬 WhatsApp Message</option>
+                      <option value="link">🌐 Website / Maps Link</option>
+                    </select>
+                  </div>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setShowAdvanced(true)}
+                  className="w-full py-2.5 px-3 rounded-xl border border-dashed border-blue-200 bg-blue-50/50 hover:bg-blue-50 text-[#015BB3] text-[11px] font-bold flex items-center justify-center gap-1.5 transition-colors"
+                >
+                  <SlidersHorizontal className="w-3.5 h-3.5 text-amber-500" />
+                  <span>Need Offer Description, District or Action Link? Open Advanced</span>
+                </button>
+              )}
+
+              {/* Submit Buttons */}
+              <div className="pt-3 border-t border-gray-200 flex items-center justify-end gap-2.5">
+                <button
+                  type="button"
+                  onClick={() => setIsModalOpen(false)}
+                  className="px-4 py-2.5 rounded-xl text-gray-600 hover:bg-gray-100 font-bold text-xs"
+                >
+                  Cancel
+                </button>
+
+                <button
+                  type="submit"
+                  disabled={submitting}
+                  className="px-5 py-2.5 bg-[#015BB3] hover:bg-[#0B4EA2] text-white rounded-xl font-bold text-xs shadow-md flex items-center gap-2 active:scale-95 transition-all"
+                >
+                  {submitting ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      <span>Uploading & Submitting...</span>
+                    </>
+                  ) : (
+                    <>
+                      <CheckCircle2 className="w-4 h-4" />
+                      <span>Submit for Approval</span>
+                    </>
+                  )}
                 </button>
               </div>
-
-              {/* 3. Contact */}
-              <div className="space-y-1.5">
-                <label className="block text-[17px] font-extrabold text-[#0F172A]">3. పాఠకులు ఎలా సంప్రదించాలి? <span className="text-[14px] font-semibold text-[#64748B]">· Contact</span></label>
-                <div className="grid grid-cols-2 gap-2">
-                  {(['call', 'whatsapp'] as const).map((k) => (
-                    <button key={k} type="button" onClick={() => setCtaType(k)}
-                      className={`py-3 rounded-2xl border-2 text-[16px] font-extrabold cursor-pointer ${ctaType === k ? 'border-[#0B4EA2] bg-[#EAF2FB] text-[#0B4EA2]' : 'border-[#E2E8F0] bg-white text-[#475569]'}`}>
-                      {k === 'call' ? '📞 కాల్ · Call' : '💬 WhatsApp'}
-                    </button>
-                  ))}
-                </div>
-                <input type="tel" inputMode="numeric" placeholder="మొబైల్ నంబర్ · Mobile number" value={ctaValue}
-                  onChange={(e) => setCtaValue(e.target.value)} required
-                  className="w-full px-4 py-3.5 rounded-2xl border-2 border-[#D9E5F2] focus:outline-none focus:border-[#0B4EA2] text-[17px]" />
-              </div>
-
-              {/* 4. District */}
-              <div className="space-y-1.5">
-                <label className="block text-[17px] font-extrabold text-[#0F172A]">4. ఏ జిల్లాలో చూపించాలి? <span className="text-[14px] font-semibold text-[#64748B]">· District</span></label>
-                <select value={targetDistrict} onChange={(e) => setTargetDistrict(e.target.value)}
-                  className="w-full px-4 py-3.5 rounded-2xl border-2 border-[#D9E5F2] focus:outline-none focus:border-[#0B4EA2] text-[17px] bg-white">
-                  {AD_DISTRICTS.map((d) => <option key={d} value={d}>{d}</option>)}
-                </select>
-              </div>
-
-              {/* 5. Offer (optional) */}
-              <div className="space-y-1.5">
-                <label className="block text-[17px] font-extrabold text-[#0F172A]">5. ఆఫర్ / వివరాలు <span className="text-[14px] font-semibold text-[#64748B]">· Offer (optional)</span></label>
-                <textarea rows={2} value={description} onChange={(e) => setDescription(e.target.value)}
-                  placeholder="ఉదా: ఈ వారం 50% తగ్గింపు · e.g. 50% off this week"
-                  className="w-full px-4 py-3 rounded-2xl border-2 border-[#D9E5F2] focus:outline-none focus:border-[#0B4EA2] text-[16px]" />
-              </div>
-
-              <button type="submit" disabled={submitting}
-                className="w-full rounded-2xl py-4 text-[19px] font-extrabold text-white border-0 cursor-pointer flex items-center justify-center gap-2 disabled:opacity-60 shadow-[0_10px_22px_rgba(225,29,46,0.3)]"
-                style={{ background: 'linear-gradient(180deg,#F0202F,#B30F1C)' }}>
-                {submitting
-                  ? <><Loader2 className="w-6 h-6 animate-spin" /> పోస్ట్ అవుతోంది… · Posting…</>
-                  : <><CheckCircle2 className="w-6 h-6" /> ప్రకటన పోస్ట్ చేయండి · Post Ad</>}
-              </button>
-              <p className="text-center text-[13.5px] text-[#64748B] m-0">ఉచితం · వెంటనే లైవ్ · Free · Live at once</p>
             </form>
           </div>
         </div>
@@ -655,7 +746,7 @@ export const ReporterAdRequestsScreen: React.FC = () => {
                       setCopiedUpi(true);
                       setTimeout(() => setCopiedUpi(false), 2000);
                     }}
-                    className="text-[13px] font-bold text-[#015BB3] bg-blue-50 hover:bg-blue-100 active:scale-95 px-2 py-0.5 rounded border border-blue-200 transition-all cursor-pointer"
+                    className="text-[10px] font-bold text-[#015BB3] bg-blue-50 hover:bg-blue-100 active:scale-95 px-2 py-0.5 rounded border border-blue-200 transition-all cursor-pointer"
                   >
                     {copiedUpi ? '✓ Copied' : 'Copy'}
                   </button>

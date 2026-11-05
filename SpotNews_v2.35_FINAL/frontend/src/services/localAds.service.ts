@@ -61,17 +61,29 @@ export function saveLocalSubmittedAdId(id: string): void {
 }
 
 /**
- * Fast client-side image compression to guarantee smooth upload under 1MB.
+ * Fast client-side image compression with timeout protection to prevent mobile WebView stalls.
  */
-async function compressAdImage(file: File): Promise<Blob> {
+async function compressAdImage(file: File): Promise<Blob | File> {
   if (file.size <= 800 * 1024) {
     return file;
   }
   return new Promise((resolve) => {
+    let resolved = false;
+    const timer = setTimeout(() => {
+      if (!resolved) {
+        resolved = true;
+        console.warn('[LocalAds] compressAdImage timed out after 3s, using raw file');
+        resolve(file);
+      }
+    }, 3000);
+
     try {
       const img = new Image();
       const objectUrl = URL.createObjectURL(file);
       img.onload = () => {
+        if (resolved) return;
+        resolved = true;
+        clearTimeout(timer);
         try {
           URL.revokeObjectURL(objectUrl);
           const maxDim = 1280;
@@ -106,12 +118,19 @@ async function compressAdImage(file: File): Promise<Blob> {
         }
       };
       img.onerror = () => {
+        if (resolved) return;
+        resolved = true;
+        clearTimeout(timer);
         URL.revokeObjectURL(objectUrl);
         resolve(file);
       };
       img.src = objectUrl;
     } catch {
-      resolve(file);
+      if (!resolved) {
+        resolved = true;
+        clearTimeout(timer);
+        resolve(file);
+      }
     }
   });
 }
@@ -129,15 +148,22 @@ async function uploadAdImage(file: File): Promise<string> {
   const ext = 'jpg';
   const fileName = `local_ads/ad_${Date.now()}_${Math.random().toString(36).substring(2, 8)}.${ext}`;
 
-  // 1. Upload to primary bucket 'newscraft'
-  try {
-    const { data, error } = await supabase.storage
-      .from(BUCKET_NAME)
-      .upload(fileName, compressedBlob, {
+  // Helper with 10s bounded timeout
+  const uploadWithTimeout = async (bucket: string) => {
+    return Promise.race([
+      supabase.storage.from(bucket).upload(fileName, compressedBlob, {
         contentType: 'image/jpeg',
         upsert: true,
-      });
+      }),
+      new Promise<any>((_, reject) =>
+        setTimeout(() => reject(new Error(`Storage upload to ${bucket} timed out after 10s`)), 10000)
+      ),
+    ]);
+  };
 
+  // 1. Upload to primary bucket 'newscraft'
+  try {
+    const { data, error } = await uploadWithTimeout(BUCKET_NAME);
     if (!error && data) {
       const { data: pubData } = supabase.storage
         .from(BUCKET_NAME)
@@ -156,13 +182,7 @@ async function uploadAdImage(file: File): Promise<string> {
 
   // 2. Fallback to bucket 'uploads'
   try {
-    const { data: fbData, error: fbError } = await supabase.storage
-      .from('uploads')
-      .upload(fileName, compressedBlob, {
-        contentType: 'image/jpeg',
-        upsert: true,
-      });
-
+    const { data: fbData, error: fbError } = await uploadWithTimeout('uploads');
     if (!fbError && fbData) {
       const { data: pubData } = supabase.storage
         .from('uploads')
@@ -229,12 +249,21 @@ export const localAdsService = {
       const validReporterId = adOwnerId(reporterId);
       const localAdIds = getLocalSubmittedAdIds();
 
-      // Query by reporter_id
-      const { data: byReporter, error: repError } = await supabase
+      // Query by reporter_id with 8s timeout
+      const queryPromise = supabase
         .from('local_ads')
         .select('*')
         .eq('reporter_id', validReporterId)
         .order('created_at', { ascending: false });
+
+      const timeoutPromise = new Promise<any>((resolve) =>
+        setTimeout(() => {
+          console.warn('[LocalAds] Query by reporter_id timed out after 8s');
+          resolve({ data: [], error: null });
+        }, 8000)
+      );
+
+      const { data: byReporter, error: repError } = await Promise.race([queryPromise, timeoutPromise]);
 
       if (repError) {
         console.warn('[LocalAds] Query by reporter_id warning:', repError.message);
@@ -315,11 +344,17 @@ export const localAdsService = {
         approved_at: isAutoApprove ? new Date().toISOString() : null,
       };
 
-      const { data, error } = await supabase
+      const insertPromise = supabase
         .from('local_ads')
         .insert(insertData)
         .select()
         .single();
+
+      const timeoutPromise = new Promise<any>((_, reject) =>
+        setTimeout(() => reject(new Error('Database submission timed out after 10s. Please check connection and retry.')), 10000)
+      );
+
+      const { data, error } = await Promise.race([insertPromise, timeoutPromise]);
 
       if (error) throw error;
       if (!data) throw new Error('No data returned from ad insertion.');
