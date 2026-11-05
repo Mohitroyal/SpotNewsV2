@@ -46,6 +46,7 @@ export const ReporterAdRequestsScreen: React.FC = () => {
   const [ctaValue, setCtaValue] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [formError, setFormError] = useState('');
+  const [fetchError, setFetchError] = useState('');
 
   // Coming from "Post Advertisement": open the form with the chosen category
   useEffect(() => {
@@ -57,9 +58,17 @@ export const ReporterAdRequestsScreen: React.FC = () => {
 
   const fetchAds = async () => {
     setLoading(true);
-    const data = await localAdsService.fetchReporterAdRequests(adOwnerId(user?.id));
-    setAds(data);
-    setLoading(false);
+    setFetchError('');
+    try {
+      const ownerId = adOwnerId(user?.id);
+      const data = await localAdsService.fetchReporterAdRequests(ownerId);
+      setAds(data || []);
+    } catch (err: any) {
+      console.error('[ReporterAdRequestsScreen] fetchAds error:', err);
+      setFetchError('Failed to load ad requests. Please check your connection.');
+    } finally {
+      setLoading(false);
+    }
   };
 
   useEffect(() => {
@@ -98,30 +107,36 @@ export const ReporterAdRequestsScreen: React.FC = () => {
     setSubmitting(true);
     setFormError('');
 
-    const res = await localAdsService.createAdRequest({
-      reporter_id: adOwnerId(user?.id),
-      reporter_name: String(user?.id || '').startsWith('guest_') ? (title.trim() || 'Reader') : (user?.full_name || 'Reporter'),
-      reporter_phone: (user as any)?.phone_number || '',
-      reporter_email: user?.email || '',
-      title: title.trim(),
-      description: description.trim(),
-      media_type: mediaType,
-      media_file: selectedFile,
-      target_district: targetDistrict.split(' / ')[0],
-      target_state: findDistrict(targetDistrict.split(' / ')[0])?.state || 'All',
-      cta_type: ctaType,
-      cta_value: ctaValue.trim(),
-    });
+    try {
+      const ownerId = adOwnerId(user?.id);
+      const res = await localAdsService.createAdRequest({
+        reporter_id: ownerId,
+        reporter_name: String(user?.id || '').startsWith('guest_') ? (title.trim() || 'Reader') : (user?.full_name || 'Reporter'),
+        reporter_phone: (user as any)?.phone_number || '',
+        reporter_email: user?.email || '',
+        title: title.trim(),
+        description: description.trim(),
+        media_type: mediaType,
+        media_file: selectedFile,
+        target_district: targetDistrict.split(' / ')[0],
+        target_state: findDistrict(targetDistrict.split(' / ')[0])?.state || 'All',
+        cta_type: ctaType,
+        cta_value: ctaValue.trim(),
+      });
 
-    setSubmitting(false);
-
-    if (res.success) {
-      setIsModalOpen(false);
-      resetForm();
-      fetchAds();
-      alert('🎉 మీ ప్రకటన వార్తల్లో కనిపిస్తోంది! / Your ad is now live in the news feed.');
-    } else {
-      setFormError(res.error || 'Failed to submit ad request. Please try again.');
+      if (res.success) {
+        setIsModalOpen(false);
+        resetForm();
+        await fetchAds();
+        alert('🎉 మీ ప్రకటన సమర్పించబడింది! వార్తల్లో కనిపిస్తుంది. / Your ad has been submitted successfully.');
+      } else {
+        setFormError(res.error || 'Failed to submit ad request. Please try again.');
+      }
+    } catch (err: any) {
+      console.error('[ReporterAdRequestsScreen] Submission exception:', err);
+      setFormError(err.message || 'An error occurred while submitting your ad. Please try again.');
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -333,6 +348,18 @@ export const ReporterAdRequestsScreen: React.FC = () => {
           <div className="flex flex-col items-center justify-center py-12 text-[#6B7A90]">
             <Loader2 className="w-7 h-7 animate-spin text-[#015BB3] mb-2" />
             <p className="text-xs font-medium">Loading your ad requests...</p>
+          </div>
+        ) : fetchError ? (
+          <div className="bg-red-50 border border-red-200 rounded-2xl p-6 text-center space-y-3 shadow-sm">
+            <AlertCircle className="w-8 h-8 text-red-500 mx-auto" />
+            <p className="text-sm font-bold text-red-800">{fetchError}</p>
+            <button
+              onClick={fetchAds}
+              className="inline-flex items-center gap-1.5 px-4 py-2 bg-[#015BB3] hover:bg-[#0B4EA2] text-white rounded-xl text-xs font-bold transition-colors cursor-pointer"
+            >
+              <RefreshCw className="w-3.5 h-3.5" />
+              <span>Retry · మళ్ళీ ప్రయత్నించండి</span>
+            </button>
           </div>
         ) : ads.length === 0 ? (
           <div className="bg-white rounded-2xl border border-gray-200/80 p-8 text-center space-y-3 shadow-sm">

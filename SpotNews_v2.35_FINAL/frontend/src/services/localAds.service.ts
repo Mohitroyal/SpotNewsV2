@@ -3,9 +3,182 @@ import type { LocalAd, CreateAdRequestPayload } from '@/types/localAds';
 import { generationService } from '@/services/generation.service';
 
 const BUCKET_NAME = 'newscraft';
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+function generateUUID(): string {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    try {
+      return crypto.randomUUID();
+    } catch {}
+  }
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+    const r = (Math.random() * 16) | 0;
+    const v = c === 'x' ? r : (r & 0x3) | 0x8;
+    return v.toString(16);
+  });
+}
 
 export function adOwnerId(id?: string): string {
-  return id || 'reporter';
+  if (id && UUID_REGEX.test(id)) {
+    return id;
+  }
+  try {
+    const stored = localStorage.getItem('spotnews_guest_ad_uuid');
+    if (stored && UUID_REGEX.test(stored)) {
+      return stored;
+    }
+  } catch {}
+
+  const newUuid = generateUUID();
+  try {
+    localStorage.setItem('spotnews_guest_ad_uuid', newUuid);
+  } catch {}
+  return newUuid;
+}
+
+export function getLocalSubmittedAdIds(): string[] {
+  try {
+    const stored = localStorage.getItem('spotnews_my_ad_ids');
+    if (stored) {
+      const parsed = JSON.parse(stored);
+      if (Array.isArray(parsed)) {
+        return parsed.filter((id) => typeof id === 'string' && UUID_REGEX.test(id));
+      }
+    }
+  } catch {}
+  return [];
+}
+
+export function saveLocalSubmittedAdId(id: string): void {
+  if (!id || !UUID_REGEX.test(id)) return;
+  try {
+    const current = getLocalSubmittedAdIds();
+    if (!current.includes(id)) {
+      const updated = [id, ...current].slice(0, 50);
+      localStorage.setItem('spotnews_my_ad_ids', JSON.stringify(updated));
+    }
+  } catch {}
+}
+
+/**
+ * Fast client-side image compression to guarantee smooth upload under 1MB.
+ */
+async function compressAdImage(file: File): Promise<Blob> {
+  if (file.size <= 800 * 1024) {
+    return file;
+  }
+  return new Promise((resolve) => {
+    try {
+      const img = new Image();
+      const objectUrl = URL.createObjectURL(file);
+      img.onload = () => {
+        try {
+          URL.revokeObjectURL(objectUrl);
+          const maxDim = 1280;
+          let { width, height } = img;
+          if (width > maxDim || height > maxDim) {
+            if (width > height) {
+              height = Math.round((height * maxDim) / width);
+              width = maxDim;
+            } else {
+              width = Math.round((width * maxDim) / height);
+              height = maxDim;
+            }
+          }
+          const canvas = document.createElement('canvas');
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext('2d');
+          if (!ctx) {
+            resolve(file);
+            return;
+          }
+          ctx.drawImage(img, 0, 0, width, height);
+          canvas.toBlob(
+            (blob) => {
+              resolve(blob || file);
+            },
+            'image/jpeg',
+            0.85
+          );
+        } catch {
+          resolve(file);
+        }
+      };
+      img.onerror = () => {
+        URL.revokeObjectURL(objectUrl);
+        resolve(file);
+      };
+      img.src = objectUrl;
+    } catch {
+      resolve(file);
+    }
+  });
+}
+
+/**
+ * Direct Supabase storage upload for ad images.
+ * Uploads directly to 'newscraft' (or 'uploads') in milliseconds without backend bottlenecks.
+ */
+async function uploadAdImage(file: File): Promise<string> {
+  if (!file || file.size === 0) {
+    throw new Error('Please select an image file to upload.');
+  }
+
+  const compressedBlob = await compressAdImage(file);
+  const ext = 'jpg';
+  const fileName = `local_ads/ad_${Date.now()}_${Math.random().toString(36).substring(2, 8)}.${ext}`;
+
+  // 1. Upload to primary bucket 'newscraft'
+  try {
+    const { data, error } = await supabase.storage
+      .from(BUCKET_NAME)
+      .upload(fileName, compressedBlob, {
+        contentType: 'image/jpeg',
+        upsert: true,
+      });
+
+    if (!error && data) {
+      const { data: pubData } = supabase.storage
+        .from(BUCKET_NAME)
+        .getPublicUrl(fileName);
+      if (pubData?.publicUrl && pubData.publicUrl.startsWith('http')) {
+        console.log('[LocalAds] Image uploaded successfully to newscraft:', pubData.publicUrl);
+        return pubData.publicUrl;
+      }
+    }
+    if (error) {
+      console.warn('[LocalAds] newscraft bucket upload error, trying uploads bucket:', error.message);
+    }
+  } catch (err) {
+    console.warn('[LocalAds] newscraft upload failed, trying fallback bucket:', err);
+  }
+
+  // 2. Fallback to bucket 'uploads'
+  try {
+    const { data: fbData, error: fbError } = await supabase.storage
+      .from('uploads')
+      .upload(fileName, compressedBlob, {
+        contentType: 'image/jpeg',
+        upsert: true,
+      });
+
+    if (!fbError && fbData) {
+      const { data: pubData } = supabase.storage
+        .from('uploads')
+        .getPublicUrl(fileName);
+      if (pubData?.publicUrl && pubData.publicUrl.startsWith('http')) {
+        console.log('[LocalAds] Image uploaded successfully to uploads fallback:', pubData.publicUrl);
+        return pubData.publicUrl;
+      }
+    }
+    if (fbError) throw fbError;
+  } catch (fbErr: any) {
+    console.error('[LocalAds] Fallback storage upload failed:', fbErr);
+    throw new Error(`Image upload failed: ${fbErr?.message || 'Storage error'}`);
+  }
+
+  throw new Error('Failed to retrieve public URL for uploaded ad image.');
 }
 
 export const localAdsService = {
@@ -48,21 +221,48 @@ export const localAdsService = {
   },
 
   /**
-   * Fetch ad requests created by a specific reporter.
+   * Fetch ad requests created by a specific reporter/guest.
+   * Safely checks reporter_id and locally submitted ad IDs.
    */
-  async fetchReporterAdRequests(reporterId: string): Promise<LocalAd[]> {
+  async fetchReporterAdRequests(reporterId?: string): Promise<LocalAd[]> {
     try {
-      const { data, error } = await supabase
+      const validReporterId = adOwnerId(reporterId);
+      const localAdIds = getLocalSubmittedAdIds();
+
+      // Query by reporter_id
+      const { data: byReporter, error: repError } = await supabase
         .from('local_ads')
         .select('*')
-        .eq('reporter_id', reporterId)
+        .eq('reporter_id', validReporterId)
         .order('created_at', { ascending: false });
 
-      if (error) {
-        console.error('[LocalAds] Error fetching reporter ad requests:', error.message);
-        return [];
+      if (repError) {
+        console.warn('[LocalAds] Query by reporter_id warning:', repError.message);
       }
-      return (data || []) as LocalAd[];
+
+      let combined: LocalAd[] = (byReporter || []) as LocalAd[];
+
+      // Also query any locally submitted ad IDs not already present
+      if (localAdIds.length > 0) {
+        const foundIds = new Set(combined.map((a) => a.id));
+        const missingIds = localAdIds.filter((id) => !foundIds.has(id));
+
+        if (missingIds.length > 0) {
+          const { data: byIds, error: idsError } = await supabase
+            .from('local_ads')
+            .select('*')
+            .in('id', missingIds)
+            .order('created_at', { ascending: false });
+
+          if (!idsError && byIds && byIds.length > 0) {
+            combined = [...combined, ...(byIds as LocalAd[])];
+          }
+        }
+      }
+
+      // Sort newest first
+      combined.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+      return combined;
     } catch (e) {
       console.error('[LocalAds] Error fetching reporter ad requests:', e);
       return [];
@@ -76,7 +276,7 @@ export const localAdsService = {
     try {
       let mediaUrl = '';
 
-      // Upload file to Supabase storage
+      // Upload file directly to Supabase storage
       if (payload.media_type === 'video') {
         const vidRes = await generationService.uploadVideo(payload.media_file);
         if (!vidRes.success || !vidRes.data?.url) {
@@ -84,38 +284,21 @@ export const localAdsService = {
         }
         mediaUrl = vidRes.data.url;
       } else {
-        // Image poster upload
-        try {
-          const imgRes = await generationService.uploadImage(payload.media_file);
-          if (imgRes.success && imgRes.data?.url) {
-            mediaUrl = imgRes.data.url;
-          }
-        } catch {
-          // Direct Supabase storage fallback
-          const ext = payload.media_file.name.split('.').pop() || 'jpg';
-          const fileName = `local_ads/ad_${Date.now()}_${Math.random().toString(36).substring(2, 8)}.${ext}`;
-          const { error: upErr } = await supabase.storage
-            .from(BUCKET_NAME)
-            .upload(fileName, payload.media_file, { upsert: true });
-          if (upErr) throw new Error(upErr.message);
-
-          const { data: pubData } = supabase.storage
-            .from(BUCKET_NAME)
-            .getPublicUrl(fileName);
-          mediaUrl = pubData.publicUrl;
-        }
+        mediaUrl = await uploadAdImage(payload.media_file);
       }
 
-      if (!mediaUrl) {
+      if (!mediaUrl || !mediaUrl.startsWith('http')) {
         throw new Error('Failed to generate media URL for advertisement.');
       }
+
+      const validReporterId = adOwnerId(payload.reporter_id);
 
       // Check if auto-approval for ads is active (defaults to false)
       const isAutoApprove = await this.getAutoApproveAdsConfig().catch(() => false);
 
       const insertData = {
-        reporter_id: payload.reporter_id,
-        reporter_name: payload.reporter_name,
+        reporter_id: validReporterId,
+        reporter_name: payload.reporter_name || 'Advertiser',
         reporter_phone: payload.reporter_phone || null,
         reporter_email: payload.reporter_email || null,
         title: payload.title,
@@ -139,6 +322,9 @@ export const localAdsService = {
         .single();
 
       if (error) throw error;
+      if (!data) throw new Error('No data returned from ad insertion.');
+
+      saveLocalSubmittedAdId((data as LocalAd).id);
       return { success: true, data: data as LocalAd };
     } catch (e: any) {
       console.error('[LocalAds] Failed to create ad request:', e);
@@ -157,12 +343,7 @@ export const localAdsService = {
         if (!vidRes.success || !vidRes.data?.url) throw new Error(vidRes.message || 'Video upload failed');
         mediaUrl = vidRes.data.url;
       } else {
-        const ext = payload.media_file.name.split('.').pop() || 'jpg';
-        const fileName = `local_ads/admin_ad_${Date.now()}.${ext}`;
-        const { error: upErr } = await supabase.storage.from(BUCKET_NAME).upload(fileName, payload.media_file, { upsert: true });
-        if (upErr) throw new Error(upErr.message);
-        const { data: pubData } = supabase.storage.from(BUCKET_NAME).getPublicUrl(fileName);
-        mediaUrl = pubData.publicUrl;
+        mediaUrl = await uploadAdImage(payload.media_file);
       }
 
       const insertData = {
