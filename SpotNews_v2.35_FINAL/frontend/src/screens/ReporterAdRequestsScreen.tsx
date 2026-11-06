@@ -630,7 +630,7 @@ export const ReporterAdRequestsScreen: React.FC = () => {
                   ? <><Loader2 className="w-6 h-6 animate-spin" /> {submittingStep || 'పోస్ట్ అవుతోంది… · Posting…'}</>
                   : <><CheckCircle2 className="w-6 h-6" /> ప్రకటన పోస్ట్ చేయండి · Post Ad</>}
               </button>
-              <p className="text-center text-[13.5px] text-[#64748B] m-0">v2.44 · ఉచితం · వెంటనే లైవ్ · Free · Live at once</p>
+              <p className="text-center text-[13.5px] text-[#64748B] m-0">v2.45 · ఉచితం · వెంటనే లైవ్ · Free · Live at once</p>
             </form>
           </div>
         </div>

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { useAuthStore, useUIStore } from '@/store';
-import { supabase } from '@/lib/supabase';
+import { useAuthStore, useUIStore, isSuperAdminUser } from '@/store';
+import { supabase, publicClient } from '@/lib/supabase';
 import {
   Eye, Heart, MessageSquare, TrendingUp, X, CheckCircle2, AlertCircle, Share2, ChevronRight, Send, Clock, Loader2
 } from 'lucide-react';
@@ -20,13 +20,32 @@ interface Comment {
 export const StatsScreen: React.FC = () => {
   const { user } = useAuthStore();
   const setIsFullScreenFeed = useUIStore((state) => state.setIsFullScreenFeed);
-  const [clippings, setClippings] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [clippings, setClippings] = useState<any[]>(() => {
+    try {
+      const saved = localStorage.getItem('spotnews_stats_cache');
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
+  const [loading, setLoading] = useState(() => clippings.length === 0);
 
   // Stats aggregates
-  const [totalViews, setTotalViews] = useState(0);
-  const [totalLikes, setTotalLikes] = useState(0);
-  const [totalComments, setTotalComments] = useState(0);
+  const [totalViews, setTotalViews] = useState(() => {
+    let v = 0;
+    clippings.forEach((c) => { v += Number(c.views_count || c.views || 0); });
+    return v;
+  });
+  const [totalLikes, setTotalLikes] = useState(() => {
+    let l = 0;
+    clippings.forEach((c) => { l += Number(c.likes_count || c.likes || 0); });
+    return l;
+  });
+  const [totalComments, setTotalComments] = useState(() => {
+    let m = 0;
+    clippings.forEach((c) => { m += Number(c.comments_count || c.comments || 0); });
+    return m;
+  });
   const [totalShares, setTotalShares] = useState(0);
 
   // Full Screen News Detail Pager
@@ -93,27 +112,51 @@ export const StatsScreen: React.FC = () => {
   } | null>(null);
 
   useEffect(() => {
+    let alive = true;
     const fetchStats = async () => {
-      if (!user?.id) {
-        setLoading(false);
-        return;
-      }
       setLoading(true);
-      // Safety timeout so user is never stuck on "Loading stats..."
-      const safetyTimer = setTimeout(() => setLoading(false), 3500);
+      // Safety timeout: ensure loading spinner never hangs indefinitely
+      const safetyTimer = setTimeout(() => {
+        if (alive) setLoading(false);
+      }, 6000);
 
       try {
-        // Fetch clippings for this reporter (by user_id or owner_id)
-        let query = supabase.from('clippings').select('*');
-        if (user?.id) {
-          query = query.or(`user_id.eq.${user.id},owner_id.eq.${user.id}`);
+        const client = publicClient || supabase;
+        const STATS_COLUMNS = 'id, headline, created_at, status, is_posted, views_count, likes_count, comments_count, shares_count, png_url, image_url, custom_layout';
+        const targetUserId = user?.id || (user as any)?.sub || (user as any)?.user_metadata?.sub;
+
+        let query = client.from('clippings').select(STATS_COLUMNS);
+        if (targetUserId) {
+          query = query.or(`user_id.eq.${targetUserId},owner_id.eq.${targetUserId}`);
         }
 
-        const { data, error } = await query.order('created_at', { ascending: false });
+        const withTimeout = async <T = any>(thenable: any, ms = 5000): Promise<T> =>
+          Promise.race([
+            Promise.resolve(thenable),
+            new Promise<never>((_, reject) => setTimeout(() => reject(new Error('timeout')), ms)),
+          ]);
 
-        if (error) throw error;
+        let { data, error } = await withTimeout(query.order('created_at', { ascending: false }).limit(200));
 
-        // CRITICAL: Aligned with FeedScreen: clippings that are approved/published or is_posted
+        // If specific user has 0 posts and is Superadmin/Admin, fallback to latest platform news
+        if ((!data || data.length === 0) && isSuperAdminUser(user)) {
+          const fallbackRes = await withTimeout(
+            client
+              .from('clippings')
+              .select(STATS_COLUMNS)
+              .eq('is_posted', true)
+              .neq('status', 'rejected')
+              .order('created_at', { ascending: false })
+              .limit(100)
+          );
+          if (fallbackRes?.data) {
+            data = fallbackRes.data;
+          }
+        }
+
+        if (error && (!data || data.length === 0)) throw error;
+
+        // Filter approved or published clippings
         const feed = (data || []).filter((c: any) => {
           const isPosted = c.is_posted === true || c.is_posted === 1 || String(c.is_posted) === 'true';
           const status = String(c.status || '').toLowerCase().trim();
@@ -121,74 +164,53 @@ export const StatsScreen: React.FC = () => {
           return (isPosted || isApproved) && status !== 'rejected';
         });
 
-        // Fetch actual comment counts safely (support both lipping_comments and clipping_comments)
-        const clippingIds = feed.map((c: any) => c.id);
-        let commentCountMap: Record<string, number> = {};
-
-        if (clippingIds.length > 0) {
+        if (alive) {
+          setClippings(feed);
           try {
-            const { data: commentRows } = await supabase
-              .from('lipping_comments')
-              .select('clipping_id')
-              .in('clipping_id', clippingIds);
+            localStorage.setItem('spotnews_stats_cache', JSON.stringify(feed));
+          } catch {}
 
-            (commentRows || []).forEach((row: any) => {
-              commentCountMap[row.clipping_id] = (commentCountMap[row.clipping_id] || 0) + 1;
-            });
-          } catch (e1) {
-            try {
-              const { data: fallbackRows } = await supabase
-                .from('clipping_comments')
-                .select('clipping_id')
-                .in('clipping_id', clippingIds);
-              (fallbackRows || []).forEach((row: any) => {
-                commentCountMap[row.clipping_id] = (commentCountMap[row.clipping_id] || 0) + 1;
-              });
-            } catch {}
-          }
+          let views = 0, likes = 0, comments = 0, shares = 0;
+          feed.forEach((c: any) => {
+            views += Number(c.views_count || c.views || 0);
+            likes += Number(c.likes_count || c.likes || 0);
+            comments += Number(c.comments_count || c.comments || 0);
+            shares += Number(c.shares_count || c.shares || 0);
+          });
+
+          setTotalViews(views);
+          setTotalLikes(likes);
+          setTotalComments(comments);
+          setTotalShares(shares);
         }
 
-        // Merge real comment counts into clippings
-        const enriched = feed.map((c: any) => ({
-          ...c,
-          comments_count: commentCountMap[c.id] ?? c.comments_count ?? 0,
-        }));
-
-        setClippings(enriched);
-
-        let views = 0, likes = 0, comments = 0, shares = 0;
-        enriched.forEach((c: any) => {
-          views += Number(c.views_count || c.views || 0);
-          likes += Number(c.likes_count || c.likes || 0);
-          comments += Number(c.comments_count || c.comments || 0);
-          shares += Number(c.shares_count || c.shares || 0);
-        });
-
-        setTotalViews(views);
-        setTotalLikes(likes);
-        setTotalComments(comments);
-        setTotalShares(shares);
-
         // Fetch real deducted coins in background (non-blocking)
-        Promise.all([
-          redeemService.getUserDeductedCoins(user.id),
-          redeemService.fetchUserRedeems(user.id),
-        ]).then(([deducted, history]) => {
-          setRedeemedTotal(deducted);
-          setRedeemHistory(history);
-          localStorage.setItem(`spotnews_redeemed_total_${user.id}`, String(deducted));
-        }).catch((redeemErr) => {
-          console.warn('[StatsScreen] Background redeem history note:', redeemErr);
-        });
+        if (targetUserId) {
+          Promise.all([
+            redeemService.getUserDeductedCoins(targetUserId),
+            redeemService.fetchUserRedeems(targetUserId),
+          ]).then(([deducted, history]) => {
+            if (alive) {
+              setRedeemedTotal(deducted);
+              setRedeemHistory(history);
+              localStorage.setItem(`spotnews_redeemed_total_${targetUserId}`, String(deducted));
+            }
+          }).catch((redeemErr) => {
+            console.warn('[StatsScreen] Background redeem history note:', redeemErr);
+          });
+        }
       } catch (err) {
         console.error('Failed to fetch stats', err);
       } finally {
         clearTimeout(safetyTimer);
-        setLoading(false);
+        if (alive) setLoading(false);
       }
     };
 
     fetchStats();
+    return () => {
+      alive = false;
+    };
   }, [user?.id]);
 
   // Toggle full-screen mode to hide masthead and bottom nav when news viewer is open
