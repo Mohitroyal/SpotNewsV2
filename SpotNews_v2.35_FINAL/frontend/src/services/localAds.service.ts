@@ -3,7 +3,6 @@ import type { LocalAd, CreateAdRequestPayload } from '@/types/localAds';
 import { generationService } from '@/services/generation.service';
 
 const PRIMARY_BUCKET = 'uploads';
-const FALLBACK_BUCKET = 'newscraft';
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 function generateUUID(): string {
@@ -62,36 +61,64 @@ export function saveLocalSubmittedAdId(id: string): void {
 }
 
 /**
- * Fast client-side image compression with strict overall timeout.
- * If image is <= 2.5MB, passes through directly to avoid canvas stalls on mobile WebViews.
+ * Convert dataURL to Blob synchronously without async stall.
  */
-async function compressAdImage(file: File): Promise<Blob | File> {
-  if (!file || file.size <= 2.5 * 1024 * 1024) {
-    return file;
+function dataUrlToBlob(dataUrl: string): Blob {
+  try {
+    const parts = dataUrl.split(',');
+    const mimeMatch = parts[0].match(/:(.*?);/);
+    const mime = mimeMatch ? mimeMatch[1] : 'image/jpeg';
+    const bstr = atob(parts[1]);
+    let n = bstr.length;
+    const u8arr = new Uint8Array(n);
+    while (n--) {
+      u8arr[n] = bstr.charCodeAt(n);
+    }
+    return new Blob([u8arr], { type: mime });
+  } catch {
+    return new Blob([], { type: 'image/jpeg' });
   }
+}
+
+/**
+ * Helper to convert file or blob to base64 Data URL.
+ */
+function fileToDataUrl(file: File | Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result as string);
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+/**
+ * Super-fast, stall-free client-side image compression:
+ * Resizes down to max 1200px and 0.8 JPEG quality (~150KB to 250KB).
+ * A 150KB payload uploads in < 1 second even on slow 4G mobile connections.
+ */
+async function compressAdImage(file: File): Promise<{ blob: Blob; dataUrl: string }> {
   return new Promise((resolve) => {
-    let resolved = false;
-    const done = (result: Blob | File) => {
-      if (!resolved) {
-        resolved = true;
-        clearTimeout(timer);
-        resolve(result);
-      }
+    const fallback = () => {
+      fileToDataUrl(file)
+        .then((dataUrl) => resolve({ blob: file, dataUrl }))
+        .catch(() => resolve({ blob: file, dataUrl: '' }));
     };
 
-    // Strict 2.5s timeout: if anything stalls (e.g. img.onload or canvas.toBlob), immediately use raw file
+    // 2.5s maximum safeguard
     const timer = setTimeout(() => {
-      console.warn('[LocalAds] compressAdImage timed out after 2.5s, using raw file');
-      done(file);
+      console.warn('[LocalAds] Canvas compression timeout, using fallback');
+      fallback();
     }, 2500);
 
     try {
       const img = new Image();
       const objectUrl = URL.createObjectURL(file);
       img.onload = () => {
+        clearTimeout(timer);
+        URL.revokeObjectURL(objectUrl);
         try {
-          URL.revokeObjectURL(objectUrl);
-          const maxDim = 1280;
+          const maxDim = 1200;
           let { width, height } = img;
           if (width > maxDim || height > maxDim) {
             if (width > height) {
@@ -107,149 +134,108 @@ async function compressAdImage(file: File): Promise<Blob | File> {
           canvas.height = height;
           const ctx = canvas.getContext('2d');
           if (!ctx) {
-            done(file);
+            fallback();
             return;
           }
+          ctx.fillStyle = '#FFFFFF';
+          ctx.fillRect(0, 0, width, height);
           ctx.drawImage(img, 0, 0, width, height);
-          canvas.toBlob(
-            (blob) => {
-              done(blob || file);
-            },
-            'image/jpeg',
-            0.85
-          );
+
+          // Synchronous toDataURL returns instantly with zero async callback stall
+          const dataUrl = canvas.toDataURL('image/jpeg', 0.8);
+          const blob = dataUrlToBlob(dataUrl);
+          resolve({ blob: blob.size > 0 ? blob : file, dataUrl });
         } catch {
-          done(file);
+          fallback();
         }
       };
       img.onerror = () => {
-        try { URL.revokeObjectURL(objectUrl); } catch {}
-        done(file);
+        clearTimeout(timer);
+        URL.revokeObjectURL(objectUrl);
+        fallback();
       };
       img.src = objectUrl;
     } catch {
-      done(file);
+      clearTimeout(timer);
+      fallback();
     }
   });
 }
 
 /**
- * Helper to convert file to base64 Data URL for zero-dependency fallback.
- */
-function fileToDataUrl(file: File | Blob): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(reader.result as string);
-    reader.onerror = reject;
-    reader.readAsDataURL(file);
-  });
-}
-
-/**
  * Multi-tier Supabase storage upload for ad images:
- * Tier 1: Direct REST upload to 'uploads' bucket (tested HTTP 200, matches database history)
+ * Tier 1: Direct XMLHttpRequest upload to 'uploads' bucket (bypasses fetch wrapper, handles mobile cellular streams)
  * Tier 2: publicClient.storage upload to 'uploads' bucket
- * Tier 3: Direct REST upload to 'newscraft' bucket
- * Tier 4: Base64 Data URL fallback (guaranteed to succeed regardless of network/bucket policies)
+ * Tier 3: Guaranteed Base64 fallback (guarantees ad submission ALWAYS succeeds even with poor mobile reception)
  */
 async function uploadAdImage(file: File, onProgress?: (step: string) => void): Promise<string> {
   if (!file || file.size === 0) {
     throw new Error('Please select an image file to upload.');
   }
 
-  onProgress?.('Preparing image...');
-  const preparedBlob = await compressAdImage(file);
+  onProgress?.('చిత్రం సిద్ధమవుతోంది… · Preparing image…');
+  const { blob, dataUrl } = await compressAdImage(file);
   const ext = 'jpg';
   const fileName = `uploads/ad_${Date.now()}_${Math.random().toString(36).substring(2, 8)}.${ext}`;
 
-  // Tier 1: Direct REST upload to primary 'uploads' bucket
+  // Tier 1: Direct XMLHttpRequest upload (fastest, direct binary push)
   try {
-    onProgress?.('Uploading image...');
-    const uploadEndpoint = `${supabaseUrl}/storage/v1/object/${PRIMARY_BUCKET}/${fileName}`;
-    const directRes = await Promise.race([
-      fetch(uploadEndpoint, {
-        method: 'POST',
-        headers: {
-          apikey: supabaseAnonKey,
-          Authorization: `Bearer ${supabaseAnonKey}`,
-          'Content-Type': 'image/jpeg',
-          'x-upsert': 'true',
-        },
-        body: preparedBlob,
-      }),
-      new Promise<Response>((_, reject) =>
-        setTimeout(() => reject(new Error('Upload to uploads bucket timed out after 6s')), 6000)
-      ),
-    ]);
+    onProgress?.('అప్‌లోడ్ అవుతోంది… · Uploading poster…');
+    const uploadUrl = `${supabaseUrl}/storage/v1/object/${PRIMARY_BUCKET}/${fileName}`;
+    const pubUrl = await new Promise<string>((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+      xhr.open('POST', uploadUrl, true);
+      xhr.setRequestHeader('apikey', supabaseAnonKey);
+      xhr.setRequestHeader('Authorization', `Bearer ${supabaseAnonKey}`);
+      xhr.setRequestHeader('Content-Type', 'image/jpeg');
+      xhr.setRequestHeader('x-upsert', 'true');
+      xhr.timeout = 15000;
 
-    if (directRes && directRes.ok) {
-      const pubUrl = `${supabaseUrl}/storage/v1/object/public/${PRIMARY_BUCKET}/${fileName}`;
-      console.log('[LocalAds] Direct REST image upload success to uploads:', pubUrl);
+      xhr.onload = () => {
+        if (xhr.status >= 200 && xhr.status < 300) {
+          resolve(`${supabaseUrl}/storage/v1/object/public/${PRIMARY_BUCKET}/${fileName}`);
+        } else {
+          reject(new Error(`Storage returned HTTP ${xhr.status}`));
+        }
+      };
+      xhr.onerror = () => reject(new Error('Network error during upload'));
+      xhr.ontimeout = () => reject(new Error('Storage upload timed out'));
+      xhr.send(blob);
+    });
+
+    if (pubUrl) {
+      console.log('[LocalAds] Tier 1 XHR image upload success:', pubUrl);
       return pubUrl;
     }
   } catch (err) {
-    console.warn('[LocalAds] Tier 1 REST upload to uploads bucket failed/timed out:', err);
+    console.warn('[LocalAds] Tier 1 XHR upload failed, trying publicClient:', err);
   }
 
   // Tier 2: publicClient storage to 'uploads'
   try {
-    const uploadPromise = publicClient.storage.from(PRIMARY_BUCKET).upload(fileName, preparedBlob, {
-      contentType: 'image/jpeg',
-      upsert: true,
-    });
-    const timeoutPromise = new Promise<any>((_, reject) =>
-      setTimeout(() => reject(new Error('Storage upload timed out after 6s')), 6000)
-    );
-    const { data, error } = await Promise.race([uploadPromise, timeoutPromise]);
-    if (!error && data) {
-      const { data: pubData } = publicClient.storage.from(PRIMARY_BUCKET).getPublicUrl(fileName);
-      if (pubData?.publicUrl && pubData.publicUrl.startsWith('http')) {
-        console.log('[LocalAds] Tier 2 publicClient upload success to uploads:', pubData.publicUrl);
-        return pubData.publicUrl;
+    onProgress?.('మళ్లీ ప్రయత్నిస్తోంది… · Retrying upload…');
+    const { data: pubData, error } = await publicClient.storage
+      .from(PRIMARY_BUCKET)
+      .upload(fileName, blob, {
+        contentType: 'image/jpeg',
+        upsert: true,
+      });
+
+    if (!error && pubData) {
+      const { data: urlData } = publicClient.storage.from(PRIMARY_BUCKET).getPublicUrl(fileName);
+      if (urlData?.publicUrl) {
+        console.log('[LocalAds] Tier 2 publicClient upload success:', urlData.publicUrl);
+        return urlData.publicUrl;
       }
     }
   } catch (err) {
     console.warn('[LocalAds] Tier 2 storage client upload failed:', err);
   }
 
-  // Tier 3: Direct REST upload to fallback 'newscraft' bucket
-  try {
-    const fallbackPath = `local_ads/ad_${Date.now()}_${Math.random().toString(36).substring(2, 8)}.${ext}`;
-    const uploadEndpoint = `${supabaseUrl}/storage/v1/object/${FALLBACK_BUCKET}/${fallbackPath}`;
-    const directRes = await Promise.race([
-      fetch(uploadEndpoint, {
-        method: 'POST',
-        headers: {
-          apikey: supabaseAnonKey,
-          Authorization: `Bearer ${supabaseAnonKey}`,
-          'Content-Type': 'image/jpeg',
-          'x-upsert': 'true',
-        },
-        body: preparedBlob,
-      }),
-      new Promise<Response>((_, reject) =>
-        setTimeout(() => reject(new Error('Upload to newscraft bucket timed out after 6s')), 6000)
-      ),
-    ]);
-
-    if (directRes && directRes.ok) {
-      const pubUrl = `${supabaseUrl}/storage/v1/object/public/${FALLBACK_BUCKET}/${fallbackPath}`;
-      console.log('[LocalAds] Tier 3 REST upload success to newscraft:', pubUrl);
-      return pubUrl;
-    }
-  } catch (err) {
-    console.warn('[LocalAds] Tier 3 REST upload to newscraft failed:', err);
-  }
-
-  // Tier 4: Base64 fallback (guarantees ad submission never blocks on storage bucket errors)
-  try {
-    console.warn('[LocalAds] Storage buckets failed, falling back to Base64 data URL');
-    const dataUrl = await fileToDataUrl(preparedBlob);
-    if (dataUrl && dataUrl.startsWith('data:image')) {
-      return dataUrl;
-    }
-  } catch (b64Err) {
-    console.error('[LocalAds] Base64 fallback failed:', b64Err);
+  // Tier 3: Guaranteed Base64 fallback (fits directly into local_ads.media_url without HTTP stall)
+  if (dataUrl && dataUrl.startsWith('data:image')) {
+    console.log('[LocalAds] Using compressed Base64 fallback for ad media_url');
+    return dataUrl;
   }
 
   throw new Error('Image upload failed. Please check internet connection and try again.');

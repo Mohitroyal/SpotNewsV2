@@ -109,12 +109,12 @@ export const ReporterAdRequestsScreen: React.FC = () => {
     setSubmittingStep('ప్రారంభమవుతోంది… · Starting…');
     setFormError('');
 
-    // Hard 15-second safety timer guarantees button never stays stuck on "Posting..."
+    // Generous 45-second safety timer protects slow mobile connections while preventing infinite hang
     const safetyTimer = setTimeout(() => {
       setSubmitting(false);
       setSubmittingStep('');
       setFormError('Request timed out. Please check your connection and try again.');
-    }, 15000);
+    }, 45000);
 
     try {
       const ownerId = adOwnerId(user?.id);
@@ -352,7 +352,7 @@ export const ReporterAdRequestsScreen: React.FC = () => {
         {/* Requests List */}
         <div className="flex items-center justify-between pt-1">
           <h2 className="text-sm font-black text-[#0A2540] uppercase tracking-wider">
-            నా ప్రకటనలు · My ads ({ads.length}) <span className="text-[11px] font-bold text-gray-400">· v2.42</span>
+            నా ప్రకటనలు · My ads ({ads.length}) <span className="text-[11px] font-bold text-gray-400">· v2.43</span>
           </h2>
           <button
             onClick={fetchAds}
@@ -630,7 +630,7 @@ export const ReporterAdRequestsScreen: React.FC = () => {
                   ? <><Loader2 className="w-6 h-6 animate-spin" /> {submittingStep || 'పోస్ట్ అవుతోంది… · Posting…'}</>
                   : <><CheckCircle2 className="w-6 h-6" /> ప్రకటన పోస్ట్ చేయండి · Post Ad</>}
               </button>
-              <p className="text-center text-[13.5px] text-[#64748B] m-0">v2.42 · ఉచితం · వెంటనే లైవ్ · Free · Live at once</p>
+              <p className="text-center text-[13.5px] text-[#64748B] m-0">v2.43 · ఉచితం · వెంటనే లైవ్ · Free · Live at once</p>
             </form>
           </div>
         </div>
