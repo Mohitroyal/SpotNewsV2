@@ -45,6 +45,7 @@ export const ReporterAdRequestsScreen: React.FC = () => {
   const [ctaType, setCtaType] = useState<LocalAdCtaType>('call');
   const [ctaValue, setCtaValue] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [submittingStep, setSubmittingStep] = useState('');
   const [formError, setFormError] = useState('');
   const [fetchError, setFetchError] = useState('');
 
@@ -105,38 +106,55 @@ export const ReporterAdRequestsScreen: React.FC = () => {
     }
 
     setSubmitting(true);
+    setSubmittingStep('ప్రారంభమవుతోంది… · Starting…');
     setFormError('');
+
+    // Hard 15-second safety timer guarantees button never stays stuck on "Posting..."
+    const safetyTimer = setTimeout(() => {
+      setSubmitting(false);
+      setSubmittingStep('');
+      setFormError('Request timed out. Please check your connection and try again.');
+    }, 15000);
 
     try {
       const ownerId = adOwnerId(user?.id);
-      const res = await localAdsService.createAdRequest({
-        reporter_id: ownerId,
-        reporter_name: String(user?.id || '').startsWith('guest_') ? (title.trim() || 'Reader') : (user?.full_name || 'Reporter'),
-        reporter_phone: (user as any)?.phone_number || '',
-        reporter_email: user?.email || '',
-        title: title.trim(),
-        description: description.trim(),
-        media_type: mediaType,
-        media_file: selectedFile,
-        target_district: targetDistrict.split(' / ')[0],
-        target_state: findDistrict(targetDistrict.split(' / ')[0])?.state || 'All',
-        cta_type: ctaType,
-        cta_value: ctaValue.trim(),
-      });
+      const res = await localAdsService.createAdRequest(
+        {
+          reporter_id: ownerId,
+          reporter_name: String(user?.id || '').startsWith('guest_') ? (title.trim() || 'Reader') : (user?.full_name || 'Reporter'),
+          reporter_phone: (user as any)?.phone_number || '',
+          reporter_email: user?.email || '',
+          title: title.trim(),
+          description: description.trim(),
+          media_type: mediaType,
+          media_file: selectedFile,
+          target_district: targetDistrict.split(' / ')[0],
+          target_state: findDistrict(targetDistrict.split(' / ')[0])?.state || 'All',
+          cta_type: ctaType,
+          cta_value: ctaValue.trim(),
+        },
+        (step) => setSubmittingStep(step)
+      );
 
-      if (res.success) {
+      clearTimeout(safetyTimer);
+
+      if (res.success && res.data) {
         setIsModalOpen(false);
         resetForm();
-        await fetchAds();
+        setAds((prev) => [res.data!, ...prev.filter((a) => a.id !== res.data!.id)]);
         alert('🎉 మీ ప్రకటన సమర్పించబడింది! వార్తల్లో కనిపిస్తుంది. / Your ad has been submitted successfully.');
+        fetchAds().catch(() => {});
       } else {
         setFormError(res.error || 'Failed to submit ad request. Please try again.');
       }
     } catch (err: any) {
+      clearTimeout(safetyTimer);
       console.error('[ReporterAdRequestsScreen] Submission exception:', err);
       setFormError(err.message || 'An error occurred while submitting your ad. Please try again.');
     } finally {
+      clearTimeout(safetyTimer);
       setSubmitting(false);
+      setSubmittingStep('');
     }
   };
 
@@ -148,6 +166,7 @@ export const ReporterAdRequestsScreen: React.FC = () => {
     setTargetDistrict(districtOption(myDistrict));
     setCtaValue('');
     setFormError('');
+    setSubmittingStep('');
   };
 
   const handlePayNow = async (ad: LocalAd) => {
@@ -333,7 +352,7 @@ export const ReporterAdRequestsScreen: React.FC = () => {
         {/* Requests List */}
         <div className="flex items-center justify-between pt-1">
           <h2 className="text-sm font-black text-[#0A2540] uppercase tracking-wider">
-            నా ప్రకటనలు · My ads ({ads.length}) <span className="text-[11px] font-bold text-gray-400">· v2.40</span>
+            నా ప్రకటనలు · My ads ({ads.length}) <span className="text-[11px] font-bold text-gray-400">· v2.41</span>
           </h2>
           <button
             onClick={fetchAds}
@@ -608,10 +627,10 @@ export const ReporterAdRequestsScreen: React.FC = () => {
                 className="w-full rounded-2xl py-4 text-[19px] font-extrabold text-white border-0 cursor-pointer flex items-center justify-center gap-2 disabled:opacity-60 shadow-[0_10px_22px_rgba(225,29,46,0.3)]"
                 style={{ background: 'linear-gradient(180deg,#F0202F,#B30F1C)' }}>
                 {submitting
-                  ? <><Loader2 className="w-6 h-6 animate-spin" /> పోస్ట్ అవుతోంది… · Posting…</>
+                  ? <><Loader2 className="w-6 h-6 animate-spin" /> {submittingStep || 'పోస్ట్ అవుతోంది… · Posting…'}</>
                   : <><CheckCircle2 className="w-6 h-6" /> ప్రకటన పోస్ట్ చేయండి · Post Ad</>}
               </button>
-              <p className="text-center text-[13.5px] text-[#64748B] m-0">v2.40 · ఉచితం · వెంటనే లైవ్ · Free · Live at once</p>
+              <p className="text-center text-[13.5px] text-[#64748B] m-0">v2.41 · ఉచితం · వెంటనే లైవ్ · Free · Live at once</p>
             </form>
           </div>
         </div>
