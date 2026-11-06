@@ -2,7 +2,7 @@ import api from "@/lib/axios";
 
 import type { ApiResponse, PaginatedResponse, Generation, GenerationConfig } from "@/types";
 
-import { supabase, publicClient } from "@/lib/supabase";
+import { supabase, publicClient, supabaseUrl, supabaseAnonKey } from "@/lib/supabase";
 
 import { useAuthStore } from "@/store";
 
@@ -859,7 +859,7 @@ export const generationService = {
 
       const fileName = `uploads/${Date.now()}_${Math.random().toString(36).substring(2, 9)}.${fileExt}`;
 
-      const { data: uploadData, error: uploadErr } = await supabase.storage
+      const { data: uploadData, error: uploadErr } = await publicClient.storage
 
         .from('uploads')
 
@@ -869,7 +869,7 @@ export const generationService = {
 
       if (!uploadErr && uploadData) {
 
-        const { data: pubData } = supabase.storage.from('uploads').getPublicUrl(fileName);
+        const { data: pubData } = publicClient.storage.from('uploads').getPublicUrl(fileName);
 
         if (pubData?.publicUrl) {
 
@@ -939,58 +939,133 @@ export const generationService = {
 
 
 
-  async uploadVideo(file: File): Promise<ApiResponse<{ url: string }>> {
-
+  async uploadVideo(
+    file: File,
+    onProgress?: (progressPercent: number, message: string) => void
+  ): Promise<ApiResponse<{ url: string }>> {
     log("Video Upload Started", `name=${file.name} size=${(file.size / 1024).toFixed(0)} KB`);
+    if (!file || file.size === 0) {
+      return {
+        success: false,
+        data: { url: '' },
+        message: "No video file provided or file is empty",
+      };
+    }
 
+    const fileExt = file.name.split('.').pop() || 'mp4';
+    const safeExt = fileExt.toLowerCase().replace(/[^a-z0-9]/g, '') || 'mp4';
+    const fileName = `videos/${Date.now()}_${Math.random().toString(36).substring(2, 9)}.${safeExt}`;
+    const contentType = file.type || 'video/mp4';
+
+    // Tier 1: Direct XMLHttpRequest with live progress tracking (bypasses fetch wrapper, handles large binary)
     try {
+      onProgress?.(5, 'Connecting to server...');
+      const uploadUrl = `${supabaseUrl}/storage/v1/object/uploads/${fileName}`;
 
-      const fileExt = file.name.split('.').pop() || 'mp4';
+      const resUrl = await new Promise<string>((resolve, reject) => {
+        const xhr = new XMLHttpRequest();
+        xhr.open('POST', uploadUrl, true);
+        xhr.setRequestHeader('apikey', supabaseAnonKey);
+        xhr.setRequestHeader('Authorization', `Bearer ${supabaseAnonKey}`);
+        xhr.setRequestHeader('Content-Type', contentType);
+        xhr.setRequestHeader('x-upsert', 'true');
+        xhr.timeout = 180000; // 3 min timeout for video
 
-      const fileName = `videos/${Date.now()}_${Math.random().toString(36).substring(2, 9)}.${fileExt}`;
+        xhr.upload.onprogress = (evt) => {
+          if (evt.lengthComputable) {
+            const pct = Math.min(99, Math.round((evt.loaded / evt.total) * 100));
+            onProgress?.(pct, `Uploading video… ${pct}%`);
+          }
+        };
 
-      const { data: uploadData, error: uploadErr } = await supabase.storage
+        xhr.onload = () => {
+          if (xhr.status >= 200 && xhr.status < 300) {
+            const pubUrl = `${supabaseUrl}/storage/v1/object/public/uploads/${fileName}`;
+            resolve(pubUrl);
+          } else {
+            reject(new Error(`Storage returned HTTP ${xhr.status}: ${xhr.statusText}`));
+          }
+        };
 
+        xhr.onerror = () => reject(new Error('Network error during video upload'));
+        xhr.ontimeout = () => reject(new Error('Video upload timed out. Please try a smaller video.'));
+        xhr.send(file);
+      });
+
+      if (resUrl) {
+        onProgress?.(100, 'Video uploaded successfully');
+        log("Video Upload Complete (Direct XHR)", resUrl);
+        return {
+          success: true,
+          data: { url: resUrl },
+          message: "Video uploaded successfully",
+        };
+      }
+    } catch (xhrErr: any) {
+      log("Direct XHR video upload failed, trying publicClient storage:", String(xhrErr?.message || xhrErr));
+    }
+
+    // Tier 2: publicClient.storage upload to 'uploads' bucket
+    try {
+      onProgress?.(50, 'Uploading video (fallback)...');
+      const { data: uploadData, error: uploadErr } = await publicClient.storage
         .from('uploads')
-
-        .upload(fileName, file, { contentType: file.type || 'video/mp4', upsert: true });
-
-
+        .upload(fileName, file, { contentType, upsert: true });
 
       if (!uploadErr && uploadData) {
-
-        const { data: pubData } = supabase.storage.from('uploads').getPublicUrl(fileName);
-
+        const { data: pubData } = publicClient.storage.from('uploads').getPublicUrl(fileName);
         if (pubData?.publicUrl) {
-
+          onProgress?.(100, 'Video uploaded successfully');
+          log("Video Upload Complete (publicClient)", pubData.publicUrl);
           return {
-
             success: true,
-
             data: { url: pubData.publicUrl },
-
-            message: "Video uploaded successfully"
-
+            message: "Video uploaded successfully",
           };
-
         }
-
       }
+      if (uploadErr) {
+        log("publicClient upload failed:", uploadErr.message);
+      }
+    } catch (sbErr: any) {
+      log("publicClient storage upload failed:", String(sbErr?.message || sbErr));
+    }
 
-    } catch {}
+    // Tier 3: Direct fetch to 'newscraft' bucket fallback
+    try {
+      onProgress?.(75, 'Uploading to alternate storage...');
+      const fallbackName = `local_videos/${Date.now()}_${Math.random().toString(36).substring(2, 9)}.${safeExt}`;
+      const fallbackUrl = `${supabaseUrl}/storage/v1/object/newscraft/${fallbackName}`;
+      const fbRes = await fetch(fallbackUrl, {
+        method: 'POST',
+        headers: {
+          apikey: supabaseAnonKey,
+          Authorization: `Bearer ${supabaseAnonKey}`,
+          'Content-Type': contentType,
+          'x-upsert': 'true',
+        },
+        body: file,
+      });
 
-
+      if (fbRes.ok) {
+        const pubUrl = `${supabaseUrl}/storage/v1/object/public/newscraft/${fallbackName}`;
+        onProgress?.(100, 'Video uploaded successfully');
+        log("Video Upload Complete (newscraft fallback)", pubUrl);
+        return {
+          success: true,
+          data: { url: pubUrl },
+          message: "Video uploaded successfully",
+        };
+      }
+    } catch (fbErr: any) {
+      log("Alternate bucket video upload failed:", String(fbErr?.message || fbErr));
+    }
 
     return {
-
-      success: true,
-
-      data: { url: URL.createObjectURL(file) },
-
-      message: "Video uploaded"
-
+      success: false,
+      data: { url: '' },
+      message: "Video upload failed. Please check your internet connection and try again.",
     };
-
   },
 
 

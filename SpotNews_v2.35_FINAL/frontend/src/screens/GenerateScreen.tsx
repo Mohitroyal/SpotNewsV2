@@ -134,6 +134,8 @@ export const GenerateScreen = () => {
 
   const [cropFile, setCropFile] = useState<File | null>(null);
   const [isUploadingImage, setIsUploadingImage] = useState(false);
+  const [isUploadingVideo, setIsUploadingVideo] = useState(false);
+  const [videoUploadStatus, setVideoUploadStatus] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
   const videoInputRef = useRef<HTMLInputElement>(null);
 
@@ -278,20 +280,24 @@ export const GenerateScreen = () => {
       return;
     }
 
-    setLoading(true);
+    setIsUploadingVideo(true);
+    setVideoUploadStatus('Uploading video…');
     try {
-      const uploadRes = await generationService.uploadVideo(file);
+      const uploadRes = await generationService.uploadVideo(file, (_pct, msg) => {
+        setVideoUploadStatus(msg);
+      });
       if (uploadRes.success && uploadRes.data?.url) {
         setVideoUrl(uploadRes.data.url);
       } else {
-        alert(`Upload Failed: ${(uploadRes as any).message || 'Unknown error'}`);
+        alert(`Upload Failed: ${uploadRes.message || 'Unknown error'}`);
       }
     } catch (err: any) {
       alert(`Upload Error\n\n${err.message || 'Unknown error'}`);
     } finally {
-      setLoading(false);
+      setIsUploadingVideo(false);
+      setVideoUploadStatus('');
+      e.target.value = '';
     }
-    e.target.value = '';
   };
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -614,15 +620,19 @@ export const GenerateScreen = () => {
               {!videoUrl && (
                 <button
                   onClick={handleVideoUpload}
-                  disabled={loading}
+                  disabled={loading || isUploadingVideo || isUploadingImage}
                   style={{
                     flex: 1, border: '1.5px dashed #CBD9E8', borderRadius: '10px',
                     background: '#ffffff', padding: '12px 8px', cursor: 'pointer',
                     display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '3px',
                   }}
                 >
-                  <Video style={{ width: 20, height: 20, color: '#0F487F', opacity: 0.8 }} strokeWidth={2.2} />
-                  <span style={{ color: '#475569', fontSize: '14px', fontWeight: 600 }}>Upload video</span>
+                  {isUploadingVideo
+                    ? <Loader2 style={{ width: 20, height: 20, color: '#0F487F', animation: 'spin 1s linear infinite' }} strokeWidth={2.2} />
+                    : <Video style={{ width: 20, height: 20, color: '#0F487F', opacity: 0.8 }} strokeWidth={2.2} />}
+                  <span style={{ color: '#475569', fontSize: '14px', fontWeight: 600 }}>
+                    {isUploadingVideo ? (videoUploadStatus || 'Uploading video…') : 'Upload video'}
+                  </span>
                 </button>
               )}
             </div>
@@ -678,7 +688,7 @@ export const GenerateScreen = () => {
         type="file"
         ref={videoInputRef}
         style={{ display: 'none' }}
-        accept="video/mp4,video/webm,video/quicktime"
+        accept="video/*"
         onChange={handleVideoChange}
       />
 
