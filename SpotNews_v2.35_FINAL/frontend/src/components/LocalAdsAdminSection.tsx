@@ -142,6 +142,19 @@ export const LocalAdsAdminSection: React.FC<LocalAdsAdminSectionProps> = ({ isSu
     }
   };
 
+  const handlePublishToFeed = async (ad: LocalAd) => {
+    setActionLoading(true);
+    const res = await localAdsService.publishAdToFeed(ad.id);
+    setActionLoading(false);
+
+    if (res.success) {
+      alert(`🎉 Ad "${ad.title}" has been published and is now active in the live feed!`);
+      loadAds();
+    } else {
+      alert(res.error || 'Failed to publish ad to feed.');
+    }
+  };
+
   const handleToggleStatus = async (ad: LocalAd) => {
     const res = await localAdsService.toggleAdStatus(ad.id, ad.status);
     if (res.success) loadAds();
@@ -468,20 +481,31 @@ export const LocalAdsAdminSection: React.FC<LocalAdsAdminSectionProps> = ({ isSu
 
               {/* Action Buttons for Superadmin */}
               <div className="border-t border-gray-100 pt-3 flex items-center justify-between flex-wrap gap-2">
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 flex-wrap">
+                  {ad.status !== 'active' && (
+                    <button
+                      onClick={() => handlePublishToFeed(ad)}
+                      disabled={actionLoading}
+                      className="px-3.5 py-1.5 bg-gradient-to-r from-[#128842] to-[#0e6f36] hover:from-[#0e6f36] hover:to-[#094c25] text-white rounded-xl text-xs font-black flex items-center gap-1.5 shadow-xs active:scale-95 transition-all cursor-pointer"
+                    >
+                      <Zap className="w-3.5 h-3.5 fill-white" />
+                      <span>Publish to Feed</span>
+                    </button>
+                  )}
+
                   {ad.status === 'pending' && (
                     <>
                       <button
                         onClick={() => { setAcceptingAd(ad); setPriceAmount('0'); }}
-                        className="px-3.5 py-1.5 bg-[#128842] hover:bg-[#0e6f36] text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-xs active:scale-95 transition-all"
+                        className="px-3 py-1.5 bg-blue-50 hover:bg-blue-100 text-[#015BB3] rounded-xl text-xs font-bold flex items-center gap-1.5 active:scale-95 transition-all"
                       >
                         <Check className="w-3.5 h-3.5 stroke-[3]" />
-                        <span>Accept & Set Price</span>
+                        <span>Set Paid Fee</span>
                       </button>
 
                       <button
                         onClick={() => setRejectingAd(ad)}
-                        className="px-3.5 py-1.5 bg-red-50 hover:bg-red-100 text-red-700 rounded-xl text-xs font-bold flex items-center gap-1.5 active:scale-95 transition-all"
+                        className="px-3 py-1.5 bg-red-50 hover:bg-red-100 text-red-700 rounded-xl text-xs font-bold flex items-center gap-1.5 active:scale-95 transition-all"
                       >
                         <X className="w-3.5 h-3.5" />
                         <span>Reject</span>
@@ -492,7 +516,7 @@ export const LocalAdsAdminSection: React.FC<LocalAdsAdminSectionProps> = ({ isSu
                   {ad.status === 'active' && (
                     <button
                       onClick={() => handleToggleStatus(ad)}
-                      className="px-3 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl text-xs font-bold flex items-center gap-1.5"
+                      className="px-3 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer"
                     >
                       <Pause className="w-3.5 h-3.5" />
                       <span>Pause Ad</span>
@@ -502,7 +526,7 @@ export const LocalAdsAdminSection: React.FC<LocalAdsAdminSectionProps> = ({ isSu
                   {ad.status === 'expired' && (
                     <button
                       onClick={() => handleToggleStatus(ad)}
-                      className="px-3 py-1.5 bg-blue-50 hover:bg-blue-100 text-[#015BB3] rounded-xl text-xs font-bold flex items-center gap-1.5"
+                      className="px-3 py-1.5 bg-blue-50 hover:bg-blue-100 text-[#015BB3] rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer"
                     >
                       <Play className="w-3.5 h-3.5" />
                       <span>Re-activate</span>

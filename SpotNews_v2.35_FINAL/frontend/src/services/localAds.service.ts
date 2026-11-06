@@ -248,7 +248,8 @@ export const localAdsService = {
    */
   async fetchActiveLocalAds(district?: string): Promise<LocalAd[]> {
     try {
-      let query = supabase
+      const client = publicClient || supabase;
+      let query = client
         .from('local_ads')
         .select('*')
         .eq('status', 'active')
@@ -262,7 +263,7 @@ export const localAdsService = {
       const { data, error } = await query;
       if (error || !data || data.length === 0) {
         // Fallback: fetch all active ads so ads always show in feed
-        const fallback = await supabase
+        const fallback = await client
           .from('local_ads')
           .select('*')
           .eq('status', 'active')
@@ -367,6 +368,10 @@ export const localAdsService = {
       onProgress?.('Saving ad details...');
       const validReporterId = adOwnerId(payload.reporter_id);
 
+      // Check if auto-approve ads is enabled in Superadmin config
+      const isAutoApprove = await localAdsService.getAutoApproveAdsConfig();
+      const nowIso = new Date().toISOString();
+
       const insertData = {
         reporter_id: validReporterId,
         reporter_name: payload.reporter_name || 'Advertiser',
@@ -381,9 +386,10 @@ export const localAdsService = {
         cta_type: payload.cta_type || 'call',
         cta_value: payload.cta_value || '',
         amount_inr: 0,
-        status: 'pending',
-        approval_type: 'manual',
-        approved_at: null,
+        status: isAutoApprove ? 'active' : 'pending',
+        approval_type: isAutoApprove ? 'auto' : 'manual',
+        approved_at: isAutoApprove ? nowIso : null,
+        paid_at: isAutoApprove ? nowIso : null,
       };
 
       const insertPromise = publicClient
@@ -410,6 +416,38 @@ export const localAdsService = {
   },
 
   /**
+   * Publish an ad directly to the live feed (for Superadmin or Reporter).
+   * Sets status to 'active', updates approval timestamp, and marks as live.
+   */
+  async publishAdToFeed(adId: string): Promise<{ success: boolean; error?: string }> {
+    try {
+      const client = publicClient || supabase;
+      const nowIso = new Date().toISOString();
+      const updatePromise = client
+        .from('local_ads')
+        .update({
+          status: 'active',
+          paid_at: nowIso,
+          approved_at: nowIso,
+          amount_inr: 0,
+          rejection_reason: null,
+        })
+        .eq('id', adId);
+
+      const timeoutPromise = new Promise<any>((_, reject) =>
+        setTimeout(() => reject(new Error('Publishing to feed timed out. Please retry.')), 5000)
+      );
+
+      const { error } = await Promise.race([updatePromise, timeoutPromise]);
+      if (error) throw error;
+      return { success: true };
+    } catch (e: any) {
+      console.error('[LocalAds] Error publishing ad to feed:', e);
+      return { success: false, error: e.message || 'Failed to publish ad to feed.' };
+    }
+  },
+
+  /**
    * Superadmin directly creates an active ad without payment.
    */
   async createSuperadminDirectAd(payload: Omit<CreateAdRequestPayload, 'reporter_id'> & { reporter_name?: string }): Promise<{ success: boolean; data?: LocalAd; error?: string }> {
@@ -423,6 +461,8 @@ export const localAdsService = {
         mediaUrl = await uploadAdImage(payload.media_file);
       }
 
+      const client = publicClient || supabase;
+      const nowIso = new Date().toISOString();
       const insertData = {
         reporter_name: payload.reporter_name || 'SpotNews Superadmin',
         title: payload.title,
@@ -435,10 +475,12 @@ export const localAdsService = {
         cta_value: payload.cta_value || '',
         amount_inr: 0,
         status: 'active',
-        paid_at: new Date().toISOString(),
+        paid_at: nowIso,
+        approved_at: nowIso,
+        approval_type: 'manual',
       };
 
-      const { data, error } = await supabase
+      const { data, error } = await client
         .from('local_ads')
         .insert(insertData)
         .select()
@@ -456,7 +498,8 @@ export const localAdsService = {
    */
   async fetchAllAdRequestsForAdmin(): Promise<LocalAd[]> {
     try {
-      const { data, error } = await supabase
+      const client = publicClient || supabase;
+      const { data, error } = await client
         .from('local_ads')
         .select('*')
         .order('created_at', { ascending: false });
@@ -471,18 +514,24 @@ export const localAdsService = {
 
   /**
    * Superadmin accepts an ad request and assigns a price to pay.
+   * If price is ₹0 (free), immediately marks active so it appears in the feed.
    */
   async acceptAdRequest(adId: string, amountInr: number): Promise<{ success: boolean; error?: string }> {
     try {
+      const client = publicClient || supabase;
       const cleanAmount = typeof amountInr === 'number' && !isNaN(amountInr) ? Math.max(0, amountInr) : 0;
-      const { error } = await supabase
+      const nowIso = new Date().toISOString();
+      const status = cleanAmount === 0 ? 'active' : 'accepted_payment_pending';
+
+      const { error } = await client
         .from('local_ads')
         .update({
-          status: 'accepted_payment_pending',
+          status,
           amount_inr: cleanAmount,
           rejection_reason: null,
           approval_type: 'manual',
-          approved_at: new Date().toISOString(),
+          approved_at: nowIso,
+          ...(cleanAmount === 0 ? { paid_at: nowIso } : {}),
         })
         .eq('id', adId);
 
@@ -498,7 +547,8 @@ export const localAdsService = {
    */
   async rejectAdRequest(adId: string, reason: string): Promise<{ success: boolean; error?: string }> {
     try {
-      const { error } = await supabase
+      const client = publicClient || supabase;
+      const { error } = await client
         .from('local_ads')
         .update({
           status: 'rejected',
@@ -518,7 +568,8 @@ export const localAdsService = {
    */
   async deleteLocalAd(adId: string): Promise<{ success: boolean; error?: string }> {
     try {
-      const { error } = await supabase
+      const client = publicClient || supabase;
+      const { error } = await client
         .from('local_ads')
         .delete()
         .eq('id', adId);
@@ -535,8 +586,9 @@ export const localAdsService = {
    */
   async toggleAdStatus(adId: string, currentStatus: string): Promise<{ success: boolean; error?: string }> {
     try {
+      const client = publicClient || supabase;
       const nextStatus = currentStatus === 'active' ? 'expired' : 'active';
-      const { error } = await supabase
+      const { error } = await client
         .from('local_ads')
         .update({ status: nextStatus })
         .eq('id', adId);
@@ -568,13 +620,16 @@ export const localAdsService = {
    */
   async confirmPaymentAndActivate(adId: string, paymentRef?: string): Promise<{ success: boolean; error?: string }> {
     try {
+      const client = publicClient || supabase;
       const paymentId = paymentRef || `upi_pay_${Date.now()}`;
-      const { error: updateError } = await supabase
+      const nowIso = new Date().toISOString();
+      const { error: updateError } = await client
         .from('local_ads')
         .update({
           status: 'active',
           razorpay_payment_id: paymentId,
-          paid_at: new Date().toISOString(),
+          paid_at: nowIso,
+          approved_at: nowIso,
         })
         .eq('id', adId);
 
