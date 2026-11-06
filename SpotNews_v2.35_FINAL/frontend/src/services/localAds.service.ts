@@ -1,4 +1,4 @@
-import { supabase } from '@/lib/supabase';
+import { supabase, publicClient, supabaseUrl, supabaseAnonKey } from '@/lib/supabase';
 import type { LocalAd, CreateAdRequestPayload } from '@/types/localAds';
 import { generationService } from '@/services/generation.service';
 
@@ -137,7 +137,7 @@ async function compressAdImage(file: File): Promise<Blob | File> {
 
 /**
  * Direct Supabase storage upload for ad images.
- * Uploads directly to 'newscraft' (or 'uploads') in milliseconds without backend bottlenecks.
+ * Uses direct REST fetch as primary (bypassing SDK wrapper overhead), with fallback to publicClient.
  */
 async function uploadAdImage(file: File): Promise<string> {
   if (!file || file.size === 0) {
@@ -148,45 +148,67 @@ async function uploadAdImage(file: File): Promise<string> {
   const ext = 'jpg';
   const fileName = `local_ads/ad_${Date.now()}_${Math.random().toString(36).substring(2, 8)}.${ext}`;
 
-  // Helper with 10s bounded timeout
-  const uploadWithTimeout = async (bucket: string) => {
-    return Promise.race([
-      supabase.storage.from(bucket).upload(fileName, compressedBlob, {
-        contentType: 'image/jpeg',
-        upsert: true,
+  // 1. Direct REST upload (fastest & most reliable on all Android WebViews)
+  try {
+    const uploadEndpoint = `${supabaseUrl}/storage/v1/object/${BUCKET_NAME}/${fileName}`;
+    const directRes = await Promise.race([
+      fetch(uploadEndpoint, {
+        method: 'POST',
+        headers: {
+          apikey: supabaseAnonKey,
+          Authorization: `Bearer ${supabaseAnonKey}`,
+          'Content-Type': 'image/jpeg',
+          'x-upsert': 'true',
+        },
+        body: compressedBlob,
       }),
-      new Promise<any>((_, reject) =>
-        setTimeout(() => reject(new Error(`Storage upload to ${bucket} timed out after 10s`)), 10000)
+      new Promise<Response>((_, reject) =>
+        setTimeout(() => reject(new Error('Storage upload timed out after 8s')), 8000)
       ),
     ]);
-  };
 
-  // 1. Upload to primary bucket 'newscraft'
+    if (directRes && directRes.ok) {
+      const pubUrl = `${supabaseUrl}/storage/v1/object/public/${BUCKET_NAME}/${fileName}`;
+      console.log('[LocalAds] Direct REST image upload success:', pubUrl);
+      return pubUrl;
+    }
+  } catch (directErr) {
+    console.warn('[LocalAds] Direct REST upload failed, trying publicClient storage:', directErr);
+  }
+
+  // 2. Storage client upload to primary bucket 'newscraft'
   try {
-    const { data, error } = await uploadWithTimeout(BUCKET_NAME);
+    const uploadPromise = publicClient.storage.from(BUCKET_NAME).upload(fileName, compressedBlob, {
+      contentType: 'image/jpeg',
+      upsert: true,
+    });
+    const timeoutPromise = new Promise<any>((_, reject) =>
+      setTimeout(() => reject(new Error('Storage upload timed out after 8s')), 8000)
+    );
+    const { data, error } = await Promise.race([uploadPromise, timeoutPromise]);
     if (!error && data) {
-      const { data: pubData } = supabase.storage
-        .from(BUCKET_NAME)
-        .getPublicUrl(fileName);
+      const { data: pubData } = publicClient.storage.from(BUCKET_NAME).getPublicUrl(fileName);
       if (pubData?.publicUrl && pubData.publicUrl.startsWith('http')) {
-        console.log('[LocalAds] Image uploaded successfully to newscraft:', pubData.publicUrl);
+        console.log('[LocalAds] publicClient upload success to newscraft:', pubData.publicUrl);
         return pubData.publicUrl;
       }
     }
-    if (error) {
-      console.warn('[LocalAds] newscraft bucket upload error, trying uploads bucket:', error.message);
-    }
   } catch (err) {
-    console.warn('[LocalAds] newscraft upload failed, trying fallback bucket:', err);
+    console.warn('[LocalAds] publicClient newscraft upload failed, trying uploads fallback:', err);
   }
 
-  // 2. Fallback to bucket 'uploads'
+  // 3. Fallback to bucket 'uploads'
   try {
-    const { data: fbData, error: fbError } = await uploadWithTimeout('uploads');
+    const uploadPromise = publicClient.storage.from('uploads').upload(fileName, compressedBlob, {
+      contentType: 'image/jpeg',
+      upsert: true,
+    });
+    const timeoutPromise = new Promise<any>((_, reject) =>
+      setTimeout(() => reject(new Error('Uploads bucket upload timed out after 8s')), 8000)
+    );
+    const { data: fbData, error: fbError } = await Promise.race([uploadPromise, timeoutPromise]);
     if (!fbError && fbData) {
-      const { data: pubData } = supabase.storage
-        .from('uploads')
-        .getPublicUrl(fileName);
+      const { data: pubData } = publicClient.storage.from('uploads').getPublicUrl(fileName);
       if (pubData?.publicUrl && pubData.publicUrl.startsWith('http')) {
         console.log('[LocalAds] Image uploaded successfully to uploads fallback:', pubData.publicUrl);
         return pubData.publicUrl;
@@ -194,8 +216,8 @@ async function uploadAdImage(file: File): Promise<string> {
     }
     if (fbError) throw fbError;
   } catch (fbErr: any) {
-    console.error('[LocalAds] Fallback storage upload failed:', fbErr);
-    throw new Error(`Image upload failed: ${fbErr?.message || 'Storage error'}`);
+    console.error('[LocalAds] All storage upload attempts failed:', fbErr);
+    throw new Error(`Image upload failed: ${fbErr?.message || 'Network/Storage error'}`);
   }
 
   throw new Error('Failed to retrieve public URL for uploaded ad image.');
@@ -249,8 +271,8 @@ export const localAdsService = {
       const validReporterId = adOwnerId(reporterId);
       const localAdIds = getLocalSubmittedAdIds();
 
-      // Query by reporter_id with 8s timeout
-      const queryPromise = supabase
+      // Query by reporter_id with 8s timeout using publicClient
+      const queryPromise = publicClient
         .from('local_ads')
         .select('*')
         .eq('reporter_id', validReporterId)
@@ -277,7 +299,7 @@ export const localAdsService = {
         const missingIds = localAdIds.filter((id) => !foundIds.has(id));
 
         if (missingIds.length > 0) {
-          const { data: byIds, error: idsError } = await supabase
+          const { data: byIds, error: idsError } = await publicClient
             .from('local_ads')
             .select('*')
             .in('id', missingIds)
@@ -344,7 +366,7 @@ export const localAdsService = {
         approved_at: isAutoApprove ? new Date().toISOString() : null,
       };
 
-      const insertPromise = supabase
+      const insertPromise = publicClient
         .from('local_ads')
         .insert(insertData)
         .select()

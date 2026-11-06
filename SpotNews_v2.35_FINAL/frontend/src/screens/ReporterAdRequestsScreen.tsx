@@ -333,7 +333,7 @@ export const ReporterAdRequestsScreen: React.FC = () => {
         {/* Requests List */}
         <div className="flex items-center justify-between pt-1">
           <h2 className="text-sm font-black text-[#0A2540] uppercase tracking-wider">
-            నా ప్రకటనలు · My ads ({ads.length})
+            నా ప్రకటనలు · My ads ({ads.length}) <span className="text-[11px] font-bold text-gray-400">· v2.40</span>
           </h2>
           <button
             onClick={fetchAds}
@@ -597,6 +597,13 @@ export const ReporterAdRequestsScreen: React.FC = () => {
                   className="w-full px-4 py-3 rounded-2xl border-2 border-[#D9E5F2] focus:outline-none focus:border-[#0B4EA2] text-[16px]" />
               </div>
 
+              {formError && (
+                <div className="bg-red-50 border border-red-200 text-red-700 p-3 rounded-xl text-[15px] flex items-center gap-2">
+                  <AlertCircle className="w-5 h-5 shrink-0" />
+                  <span>{formError}</span>
+                </div>
+              )}
+
               <button type="submit" disabled={submitting}
                 className="w-full rounded-2xl py-4 text-[19px] font-extrabold text-white border-0 cursor-pointer flex items-center justify-center gap-2 disabled:opacity-60 shadow-[0_10px_22px_rgba(225,29,46,0.3)]"
                 style={{ background: 'linear-gradient(180deg,#F0202F,#B30F1C)' }}>
@@ -604,7 +611,7 @@ export const ReporterAdRequestsScreen: React.FC = () => {
                   ? <><Loader2 className="w-6 h-6 animate-spin" /> పోస్ట్ అవుతోంది… · Posting…</>
                   : <><CheckCircle2 className="w-6 h-6" /> ప్రకటన పోస్ట్ చేయండి · Post Ad</>}
               </button>
-              <p className="text-center text-[13.5px] text-[#64748B] m-0">ఉచితం · వెంటనే లైవ్ · Free · Live at once</p>
+              <p className="text-center text-[13.5px] text-[#64748B] m-0">v2.40 · ఉచితం · వెంటనే లైవ్ · Free · Live at once</p>
             </form>
           </div>
         </div>
