@@ -3,7 +3,7 @@ import { Newspaper, X, Send, ChevronDown, ChevronRight } from 'lucide-react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import locationMapPinIcon from '@/assets/location_map_pin.png';
 import { useAuthStore, useUIStore } from '@/store';
-import { supabase } from '@/lib/supabase';
+import { publicClient, supabase } from '@/lib/supabase';
 import { NewsDetailCardStack } from '@/components/NewsDetailCardStack';
 import { localAdsService } from '@/services/localAds.service';
 import { LocalAdFeedCard } from '@/components/LocalAdFeedCard';
@@ -188,7 +188,8 @@ export const FeedScreen: React.FC = () => {
     try {
       const FEED_COLUMNS = 'id, headline, article_content, png_url, mp4_url, image_url, image_urls, likes_count, views_count, comments_count, created_at, district, state, user_id, status, is_posted, custom_layout';
 
-      let query = supabase
+      const client = publicClient || supabase;
+      let query = client
         .from('clippings')
         .select(FEED_COLUMNS)
         .eq('is_posted', true)
@@ -196,11 +197,14 @@ export const FeedScreen: React.FC = () => {
         .order('created_at', { ascending: false })
         .limit(40);
 
-      if (userState && userState !== 'All' && userState !== 'Both states') {
-        query = query.or(`state.eq.${userState},state.eq.All,state.eq.Both states,state.is.null`);
+      const cleanState = userState ? userState.split('/')[0]?.split('·')[0]?.trim() : '';
+      const cleanDistrict = district ? district.split('/')[0]?.split('·')[0]?.trim() : '';
+
+      if (cleanState && cleanState !== 'All' && cleanState !== 'Both states') {
+        query = query.or(`state.eq."${cleanState}",state.eq.All,state.eq."Both states",state.is.null`);
       }
-      if (district && district !== 'All districts' && district !== 'All' && district !== 'All Regions') {
-        query = query.or(`district.eq.${district},district.eq.All,district.is.null`);
+      if (cleanDistrict && cleanDistrict !== 'All districts' && cleanDistrict !== 'All' && cleanDistrict !== 'All Regions') {
+        query = query.or(`district.eq."${cleanDistrict}",district.eq.All,district.is.null`);
       }
 
       const { data, error } = await query;
@@ -214,7 +218,7 @@ export const FeedScreen: React.FC = () => {
 
       // If user's specific district has no news yet, fallback to latest news across all regions
       if (postedClippings.length === 0) {
-        const { data: allData } = await supabase
+        const { data: allData } = await client
           .from('clippings')
           .select(FEED_COLUMNS)
           .eq('is_posted', true)
@@ -236,7 +240,7 @@ export const FeedScreen: React.FC = () => {
           setIsFullScreenFeed(true);
         } else {
           try {
-            const { data: directClip } = await supabase
+            const { data: directClip } = await client
               .from('clippings')
               .select(FEED_COLUMNS)
               .eq('id', targetClip)

@@ -59,7 +59,10 @@ export const ReaderHomeScreen: React.FC = () => {
   }, []);
 
   const { items, loading } = useLatestClippings(district, userState, 20);
-  const breaking = useMemo(() => items.filter((c) => clipPhoto(c)).slice(0, 5), [items]);
+  const breaking = useMemo(() => {
+    const withPhotos = items.filter((c) => clipPhoto(c));
+    return (withPhotos.length > 0 ? withPhotos : items).slice(0, 5);
+  }, [items]);
   const quick = useMemo(() => items.slice(0, 8), [items]);
 
   const { data: weather } = useWeather({ state: userState, district });
