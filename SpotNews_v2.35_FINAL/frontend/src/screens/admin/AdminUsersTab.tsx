@@ -175,10 +175,13 @@ export const AdminUsersTab: React.FC<AdminUsersTabProps> = ({
   const handleSaveEdit = async () => {
     if (!editingUser) return;
     setEditSaving(true);
-    const success = await onSaveUserEdit(editingUser, editRole, editPlan, editPhone, editDistrict);
-    setEditSaving(false);
-    if (success) {
-      setEditingUser(null);
+    try {
+      const success = await onSaveUserEdit(editingUser, editRole, editPlan, editPhone, editDistrict);
+      if (success) {
+        setEditingUser(null);
+      }
+    } finally {
+      setEditSaving(false);
     }
   };
 
@@ -579,7 +582,16 @@ export const AdminUsersTab: React.FC<AdminUsersTabProps> = ({
                   </label>
                   <select
                     value={editRole}
-                    onChange={(e) => setEditRole(e.target.value)}
+                    onChange={(e) => {
+                      const newR = e.target.value;
+                      setEditRole(newR);
+                      if (newR === 'reporter') setEditPlan('reporter');
+                      else if (newR === 'admin') setEditPlan('admin');
+                      else if (newR === 'superadmin') setEditPlan('superadmin');
+                      else if (newR === 'user' && (editPlan === 'reporter' || editPlan === 'admin' || editPlan === 'superadmin')) {
+                        setEditPlan('free');
+                      }
+                    }}
                     className="w-full bg-[var(--adm-chip-bg)] border border-[var(--adm-card-border)] rounded-xl px-3 py-2 text-xs font-bold text-[var(--adm-text-primary)] focus:outline-none cursor-pointer"
                   >
                     <option value="user">User</option>

@@ -691,20 +691,15 @@ export const AdminScreen = () => {
 
       if (targetEmail) {
         if (status === 'approved') {
-          await supabase
-            .from('profiles')
-            .update({
-              role: 'reporter',
-              ...(app?.state ? { state: app.state } : {}),
-              ...(app?.district ? { district: app.district } : {})
-            })
-            .ilike('email', targetEmail);
-
           try {
-            await supabase
-              .from('users')
-              .update({ role: 'reporter' })
-              .ilike('email', targetEmail);
+            await publicClient.rpc('admin_set_user_permissions', {
+              target_user_id: app?.user_id || '',
+              new_role: 'reporter',
+              new_plan: 'reporter',
+              new_phone: app?.phone || null,
+              new_district: app?.district || null,
+              target_email: targetEmail,
+            });
           } catch {}
 
           if (user?.email && user.email.toLowerCase() === targetEmail) {
@@ -715,16 +710,13 @@ export const AdminScreen = () => {
             } as any);
           }
         } else if (status === 'rejected') {
-          await supabase
-            .from('profiles')
-            .update({ role: 'user' })
-            .ilike('email', targetEmail);
-
           try {
-            await supabase
-              .from('users')
-              .update({ role: 'user' })
-              .ilike('email', targetEmail);
+            await publicClient.rpc('admin_set_user_permissions', {
+              target_user_id: app?.user_id || '',
+              new_role: 'user',
+              new_plan: 'free',
+              target_email: targetEmail,
+            });
           } catch {}
         }
       }

@@ -191,29 +191,30 @@ def admin_user_role(request, user_id):
                     else:
                         target_plan = plan or 'free'
 
-                # 3. Update profiles table
+                # 3. Update using central database function
                 try:
+                    cursor.execute("""
+                        SELECT public.admin_set_user_permissions(
+                            target_user_id => %s,
+                            new_role => %s,
+                            new_plan => %s,
+                            new_phone => %s,
+                            new_district => %s,
+                            target_email => %s
+                        )
+                    """, [target_user_id, role, target_plan, phone_number, cleaned_district, target_email])
+                except Exception as pe:
+                    print("admin_set_user_permissions RPC notice in Django:", pe)
+                    # Fallback direct updates
                     cursor.execute("""
                         UPDATE profiles 
                         SET role = %s, 
                             plan = %s, 
                             district = COALESCE(%s, district),
+                            phone = COALESCE(%s, phone),
                             phone_number = COALESCE(%s, phone_number)
                         WHERE id::text = %s OR (LOWER(COALESCE(email, '')) = LOWER(%s) AND %s != '')
-                    """, [role, target_plan, cleaned_district, phone_number, target_user_id, target_email or '', target_email or ''])
-                    
-                    if cursor.rowcount == 0:
-                        cursor.execute("""
-                            INSERT INTO profiles (id, email, role, plan, district, phone_number)
-                            VALUES (%s, %s, %s, %s, %s, %s)
-                            ON CONFLICT (id) DO UPDATE 
-                            SET role = EXCLUDED.role, 
-                                plan = EXCLUDED.plan, 
-                                district = COALESCE(EXCLUDED.district, profiles.district), 
-                                phone_number = COALESCE(EXCLUDED.phone_number, profiles.phone_number)
-                        """, [target_user_id, target_email, role, target_plan, cleaned_district, phone_number])
-                except Exception as pe:
-                    print("Profiles update notice:", pe)
+                    """, [role, target_plan, cleaned_district, phone_number, phone_number, target_user_id, target_email or '', target_email or ''])
 
                 # 4. If role is reporter, activate reporter_applications
                 if role == 'reporter':

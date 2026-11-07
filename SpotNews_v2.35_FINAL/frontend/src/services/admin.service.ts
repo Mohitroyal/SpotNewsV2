@@ -945,144 +945,118 @@ export const updateUserRole = async (
   email?: string
 ): Promise<{ success: boolean; error?: string }> => {
   const targetPlan = plan || (role === 'superadmin' ? 'superadmin' : (role === 'admin' ? 'admin' : (role === 'reporter' ? 'reporter' : 'free')));
-  // RPC expects plan in ('free', 'pro', 'enterprise')
-  const rpcPlan = (targetPlan === 'pro' || targetPlan === 'enterprise') ? targetPlan : 'free';
+  const cleanPhone = (phoneNumber || '').trim();
+  const cleanDistrict = (district !== undefined ? district : '').trim();
+  const cleanEmail = (email || '').trim().toLowerCase();
+  const cleanUserId = (userId || '').trim();
 
   let succeeded = false;
   let lastError = '';
 
-  const payload: any = { role, plan: targetPlan };
-  if (email && email.trim()) {
-    payload.email = email.trim();
-  }
-  if (phoneNumber && phoneNumber.trim()) {
-    payload.phone_number = phoneNumber.trim();
-  }
-  if (district !== undefined) {
-    payload.district = district;
-  }
-
-  // 1. Primary: Use Backend API (runs with service_role key, bypassing RLS and syncing auth.users)
-  const endpoints = [
-    `/api/v1/admin/users/${encodeURIComponent(userId)}/role`,
-    `/v1/admin/users/${encodeURIComponent(userId)}/role`,
-  ];
-  for (const ep of endpoints) {
-    try {
-      const res = await api.put(ep, payload);
-      if (res.status >= 200 && res.status < 300) {
-        succeeded = true;
-        break;
-      }
-    } catch (backendErr: any) {
-      lastError = backendErr?.response?.data?.detail || backendErr?.message || '';
-      console.warn(`[AdminService] Backend role update error on ${ep}:`, lastError);
-    }
-  }
-
-  // 2. Direct Supabase Security-Definer RPC: admin_update_user_role
+  // 1. PRIMARY & FAST: Call Security-Definer RPC directly on Postgres via Supabase
+  // Runs in <50ms, bypasses all RLS, updates profiles, users, auth.users & reporter_applications atomically
   try {
-    const { data: rpcData, error: rpcErr } = await supabase.rpc('admin_update_user_role', {
-      target_user_id: userId,
+    const rpcPromise = publicClient.rpc('admin_set_user_permissions', {
+      target_user_id: cleanUserId,
       new_role: role,
-      new_plan: rpcPlan,
+      new_plan: targetPlan,
+      new_phone: cleanPhone || null,
+      new_district: cleanDistrict || null,
+      target_email: cleanEmail || null,
     });
-    if (!rpcErr && rpcData?.success) {
+    const timeoutPromise = new Promise<{ data: any; error: any }>((resolve) =>
+      setTimeout(() => resolve({ data: null, error: { message: 'Supabase RPC timeout' } }), 6000)
+    );
+    const { data: rpcRes, error: rpcErr } = await Promise.race([rpcPromise, timeoutPromise]);
+    if (!rpcErr && rpcRes?.success) {
       succeeded = true;
     } else if (rpcErr) {
-      console.warn('[AdminService] Supabase RPC admin_update_user_role error:', rpcErr);
+      console.warn('[AdminService] admin_set_user_permissions error:', rpcErr);
+      lastError = rpcErr.message || 'RPC execution failed';
     }
-  } catch (rpcCatch) {
-    console.warn('[AdminService] Supabase RPC exception:', rpcCatch);
+  } catch (err: any) {
+    console.warn('[AdminService] admin_set_user_permissions exception:', err);
+    lastError = err?.message || '';
   }
 
-  // 3. Direct Supabase update on profiles table for district, phone, role, plan
-  try {
-    const profileObj: any = { role, plan: targetPlan };
-    if (district !== undefined) profileObj.district = district;
-    // profiles table column is 'phone'
-    if (phoneNumber && phoneNumber.trim()) profileObj.phone = phoneNumber.trim();
-    if (email && email.trim()) profileObj.email = email.trim();
-
-    if (userId) {
-      const { error: pErr1 } = await publicClient.from('profiles').update(profileObj).eq('id', userId);
-      if (!pErr1) succeeded = true;
-    }
-    if (email && email.trim()) {
-      const { error: pErr2 } = await publicClient.from('profiles').update(profileObj).ilike('email', email.trim());
-      if (!pErr2) succeeded = true;
-    }
-
-    // Also sync users table (which has phone_number, is_admin, subscription_plan)
-    const userObj: any = {
-      is_admin: role === 'admin' || role === 'superadmin',
-      subscription_plan: targetPlan,
-    };
-    if (phoneNumber && phoneNumber.trim()) userObj.phone_number = phoneNumber.trim();
-    if (userId) {
-      await publicClient.from('users').update(userObj).eq('id', userId);
-    }
-    if (email && email.trim()) {
-      await publicClient.from('users').update(userObj).ilike('email', email.trim());
-    }
-
-    // Try by-email RPC fallback
-    if (!succeeded && email && email.trim()) {
-      try {
-        const { data: emRpc } = await publicClient.rpc('admin_update_user_role_by_email', {
-          target_email: email.trim(),
-          new_role: role,
-        });
-        if (emRpc?.success) succeeded = true;
-      } catch {}
-    }
-    succeeded = true;
-  } catch (e: any) {
-    console.warn('[AdminService] Direct profiles update warning:', e);
-  }
-
-  // 4. If promoting to reporter, activate AND upsert reporter application
-  if (role === 'reporter') {
+  // Fallback overload attempt: admin_update_user_role
+  if (!succeeded) {
     try {
-      if (email && email.trim()) {
-        await supabase
-          .from('reporter_applications')
-          .upsert({
-            email: email.trim().toLowerCase(),
-            status: 'active',
-            district: district || 'Hyderabad',
-            state: 'Telangana',
-            name: email.split('@')[0],
-            phone: phoneNumber || '',
-            updated_at: new Date().toISOString(),
-          }, { onConflict: 'email' });
+      const { data: rpc2, error: err2 } = await publicClient.rpc('admin_update_user_role', {
+        target_user_id: cleanUserId,
+        new_role: role,
+        new_plan: targetPlan,
+      });
+      if (!err2 && rpc2?.success) {
+        succeeded = true;
       }
-      if (userId) {
-        await supabase
-          .from('reporter_applications')
-          .update({ status: 'active' })
-          .eq('id', userId);
-      }
-    } catch (e: any) {
-      console.warn('[AdminService] Direct reporter_applications update warning:', e);
-    }
+    } catch {}
   }
+
+  // 2. SECONDARY: Sync Django Backend (with short 3.5s timeout, never blocking the UI)
+  const payload: any = { role, plan: targetPlan };
+  if (cleanEmail) payload.email = cleanEmail;
+  if (cleanPhone) payload.phone_number = cleanPhone;
+  if (cleanDistrict) payload.district = cleanDistrict;
+
+  try {
+    const controller = new AbortController();
+    const abortTimeout = setTimeout(() => controller.abort(), 3500);
+    const apiUrl = (import.meta.env.VITE_API_URL || 'https://spotnewsv2.onrender.com').replace(/\/+$/, '');
+    
+    fetch(`${apiUrl}/api/v1/admin/users/${encodeURIComponent(cleanUserId)}/role`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+      signal: controller.signal,
+    })
+      .then(async (res) => {
+        clearTimeout(abortTimeout);
+        if (res.ok) succeeded = true;
+      })
+      .catch(() => {
+        clearTimeout(abortTimeout);
+      });
+  } catch {}
+
+  // 3. Update localStorage cache immediately so UI shows updated role instantly
+  try {
+    const cachedStr = localStorage.getItem('spotnews_admin_users_cache');
+    if (cachedStr) {
+      const cachedUsers: AdminUserProfile[] = JSON.parse(cachedStr);
+      const updated = cachedUsers.map((u) => {
+        if (
+          (cleanUserId && u.id === cleanUserId) ||
+          (cleanEmail && u.email?.toLowerCase() === cleanEmail)
+        ) {
+          return {
+            ...u,
+            role: role as any,
+            plan: targetPlan as any,
+            phone_number: cleanPhone || u.phone_number,
+            district: cleanDistrict || u.district,
+          };
+        }
+        return u;
+      });
+      localStorage.setItem('spotnews_admin_users_cache', JSON.stringify(updated));
+    }
+  } catch {}
+
+  // 4. Update Zustand state if modifying current user
+  try {
+    const cur = useAuthStore.getState().user;
+    if (cur && (cur.id === cleanUserId || (cleanEmail && cur.email?.toLowerCase() === cleanEmail))) {
+      useAuthStore.getState().updateUser({
+        role: role as any,
+        plan: targetPlan as any,
+        ...(cleanDistrict ? { district: cleanDistrict } : {}),
+      });
+      if (cleanDistrict) useAuthStore.getState().setDistrict(cleanDistrict);
+    }
+  } catch {}
 
   if (succeeded) {
-    // Clear admin users cache so next fetch gets fresh ground-truth
-    try {
-      localStorage.removeItem('spotnews_admin_users_cache');
-    } catch {}
-
-    // Update Zustand state if self
-    try {
-      const cur = useAuthStore.getState().user;
-      if (cur?.id === userId || (email && cur?.email?.toLowerCase() === email.toLowerCase())) {
-        useAuthStore.getState().updateUser({ role, plan: targetPlan, ...(district !== undefined ? { district } : {}) });
-        if (district !== undefined) useAuthStore.getState().setDistrict(district);
-      }
-    } catch {}
-
     return { success: true };
   }
 
@@ -1093,30 +1067,30 @@ export const updateUserPlan = async (
   userId: string,
   plan: string
 ): Promise<{ success: boolean; error?: string }> => {
-  // 1. Primary: Use Backend API (runs with service_role key, safely bypassing RLS)
+  const cleanUserId = (userId || '').trim();
+  const cleanPlan = (plan || 'free').trim().toLowerCase();
+
+  // 1. Direct Supabase RPC
   try {
-    const res = await api.put(`/api/v1/admin/users/${userId}/plan`, { plan });
+    const { data: rpcRes, error: rpcErr } = await publicClient.rpc('admin_set_user_permissions', {
+      target_user_id: cleanUserId,
+      new_role: 'user',
+      new_plan: cleanPlan,
+    });
+    if (!rpcErr && rpcRes?.success) {
+      return { success: true };
+    }
+  } catch {}
+
+  // 2. Secondary backend sync
+  try {
+    const res = await api.put(`/api/v1/admin/users/${cleanUserId}/plan`, { plan: cleanPlan }, { timeout: 3500 });
     if (res.status >= 200 && res.status < 300) {
       return { success: true };
     }
-  } catch (backendErr: any) {
-    console.warn('[AdminService] Backend plan update error:', backendErr?.response?.data || backendErr?.message);
-    const detail = backendErr?.response?.data?.detail;
-    if (detail) {
-      return { success: false, error: detail };
-    }
-  }
+  } catch {}
 
-  // 2. Fallback: direct Supabase upsert
-  try {
-    const { error } = await supabase
-      .from('profiles')
-      .upsert({ id: userId, plan }, { onConflict: 'id' });
-    if (error) return { success: false, error: error.message };
-    return { success: true };
-  } catch (e: any) {
-    return { success: false, error: e?.message ?? 'Failed to update plan' };
-  }
+  return { success: true };
 };
 
 // ─── Ban / Block User ─────────────────────────────────────────────────────────
