@@ -1,27 +1,29 @@
-// One place for every link we print or share. "ref" tells us which reporter's share brought the reader.
+// One place for every link we print or share.
 //
-// Share links are short: https://spotnewsv2.onrender.com/n/<22-letter code>
-// That page (already on the Django backend) shows the WhatsApp preview, opens the app if it
-// is installed, and otherwise sends the reader to the Play Store to download it.
-// To use your own domain or the Vercel page (share-landing/), set VITE_SHARE_BASE.
-import { shortenId } from "./shortId";
+// Shared clipping links use the official GoDaddy domain:
+// https://rtiexpressnews.godaddysites.com/?clipId=<id>&ref=<reporterSlug>
+// When opened on a phone with the app installed, Android deep links open the story in the app.
+// If the app is not installed, the domain landing page displays the clipping preview and download prompt.
 
-const ENV_BASE = (import.meta.env.VITE_SHARE_BASE as string | undefined)?.trim().replace(/\/$/, '');
-export const SHARE_BASE = ENV_BASE || "https://spotnewsv2.onrender.com";
+export const SHARE_BASE = "https://rtiexpressnews.godaddysites.com";
 export const PLAY_STORE_URL = "https://play.google.com/store/apps/details?id=com.newscraft.mobile";
 
-const isLegacyBase = SHARE_BASE.includes("godaddysites.com");
+export const newsLink = (postId: number | string, reporterSlug?: string) => {
+  const cleanId = String(postId || "").trim();
+  const cleanRef = (reporterSlug || "")
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9_-]+/g, "-")
+    .replace(/^-+|-+$/g, "");
 
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-export const newsLink = (postId: number | string, _reporterSlug?: string) => {
-  if (isLegacyBase) return `${SHARE_BASE}/?clipId=${postId}`;
-  return `${SHARE_BASE}/n/${shortenId(String(postId))}`;
+  const refParam = cleanRef && cleanRef !== "reporter" && cleanRef !== "user" ? `&ref=${encodeURIComponent(cleanRef)}` : "";
+  return `${SHARE_BASE}/?clipId=${encodeURIComponent(cleanId)}${refParam}`;
 };
 
-export const reporterLink = (slug: string) =>
-  isLegacyBase
-    ? `${SHARE_BASE}/?reporter=${encodeURIComponent(slug)}`
-    : `${SHARE_BASE}/r/${encodeURIComponent(slug)}`;
+export const reporterLink = (slug: string) => {
+  const clean = encodeURIComponent((slug || "").trim().toLowerCase().replace(/[^a-z0-9_-]+/g, "-").replace(/^-+|-+$/g, ""));
+  return `${SHARE_BASE}/?reporter=${clean}`;
+};
 
 export const shareCaption = (headline: string, link: string) =>
   `${headline}\n\n📲 పూర్తి వార్త చదవండి: ${link}\n\nRTI Express Spot News 24x7`;
