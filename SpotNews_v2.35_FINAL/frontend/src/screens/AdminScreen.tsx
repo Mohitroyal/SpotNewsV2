@@ -605,17 +605,25 @@ export const AdminScreen = () => {
     setApplicationsLoading(true);
     const safetyTimer = setTimeout(() => setApplicationsLoading(false), 5000);
     try {
-      const { data, error } = await supabase
+      const { data, error } = await publicClient
         .from('reporter_applications')
         .select('*')
         .order('created_at', { ascending: false });
-      if (error) throw error;
-      const fetched = data || [];
-      setApplications(fetched);
+      if (error) {
+        const { data: fallbackData, error: fbErr } = await supabase
+          .from('reporter_applications')
+          .select('*')
+          .order('created_at', { ascending: false });
+        if (fbErr) throw fbErr;
+        setApplications(fallbackData || []);
+      } else {
+        const fetched = data || [];
+        setApplications(fetched);
+      }
 
       // ─── Auto-approve pending reporter applications in background (superadmin) ───
       if (autoApproveReportersRef.current) {
-        const pending = fetched.filter(a => (a.status || 'pending').toLowerCase() === 'pending');
+        const pending = (data || []).filter(a => (a.status || 'pending').toLowerCase() === 'pending');
         if (pending.length > 0) {
           (async () => {
             try {
@@ -627,7 +635,7 @@ export const AdminScreen = () => {
               const approvedCount = approveResults.filter(r => r.status === 'fulfilled' && (r as any).value).length;
               if (approvedCount > 0) {
                 showToast('⚡ Auto-approved ' + approvedCount + ' pending reporter applications', 'success');
-                const { data: refetched } = await supabase
+                const { data: refetched } = await publicClient
                   .from('reporter_applications')
                   .select('*')
                   .order('created_at', { ascending: false });

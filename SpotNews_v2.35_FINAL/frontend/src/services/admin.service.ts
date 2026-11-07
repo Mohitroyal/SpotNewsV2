@@ -970,6 +970,52 @@ export const updateUserRole = async (
     const { data: rpcRes, error: rpcErr } = await Promise.race([rpcPromise, timeoutPromise]);
     if (!rpcErr && rpcRes?.success) {
       succeeded = true;
+
+      // Dispatch real-time notification to this member when promoted to reporter
+      if (role === 'reporter') {
+        try {
+          const apiUrl = (import.meta.env.VITE_API_URL || 'https://spotnewsv2.onrender.com').replace(/\/+$/, '');
+          const directTokens: string[] = Array.isArray(rpcRes?.tokens) ? rpcRes.tokens : [];
+          const notifPayload = {
+            user_id: rpcRes?.target_id || cleanUserId || undefined,
+            email: cleanEmail || undefined,
+            phone: cleanPhone || undefined,
+            title: '🎉 రిపోర్టర్ దరఖాస్తు ఆమోదించబడింది!',
+            body: 'అభినందనలు! మీ Spot News 24x7 రిపోర్టర్ దరఖాస్తు ఆమోదించబడింది. మీ ఉచిత ప్రెస్ ID కార్డును సెట్ చేసుకోండి.',
+            image_url: 'https://rffrqokpnqoycpozrjuc.supabase.co/storage/v1/object/public/newscraft-clippings/assets/app_logo.png',
+            url: '/reporter/payment',
+            channel_id: 'reporter',
+          };
+
+          if (directTokens.length > 0) {
+            for (const t of directTokens) {
+              fetch(`${apiUrl}/api/v1/notifications/send`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ ...notifPayload, token: t }),
+              }).catch(() => {});
+            }
+          }
+
+          fetch(`${apiUrl}/api/v1/notifications/send`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(notifPayload),
+          }).catch(() => {});
+
+          if (cleanPhone) {
+            fetch(`${apiUrl}/api/v1/reporter/send-approval-sms`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                phone: cleanPhone,
+                name: 'Reporter',
+                message: 'Spot News 24x7: Congratulations! Your reporter application has been APPROVED. Open Spot News app and set up your Press ID Card to complete login.'
+              }),
+            }).catch(() => {});
+          }
+        } catch {}
+      }
     } else if (rpcErr) {
       console.warn('[AdminService] admin_set_user_permissions error:', rpcErr);
       lastError = rpcErr.message || 'RPC execution failed';
