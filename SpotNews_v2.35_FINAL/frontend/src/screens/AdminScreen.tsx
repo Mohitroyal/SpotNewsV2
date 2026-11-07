@@ -724,47 +724,45 @@ export const AdminScreen = () => {
       // Send real-time push notification & create in-app notification for the user if approved
       if (status === 'approved') {
         try {
-          const cleanEmail = (email || app?.email || '').trim().toLowerCase();
-          const cleanPhone = (phone || app?.phone || '').trim();
+          const cleanEmail = (email || app?.email || res?.data?.email || '').trim().toLowerCase();
+          const cleanPhone = (phone || app?.phone || res?.data?.phone || '').trim();
+          let targetUserId = res?.data?.user_id || app?.user_id || null;
+          let directDeviceTokens: string[] = Array.isArray(res?.data?.tokens) ? res.data.tokens : [];
 
-          // 1. Resolve user_id from app or profiles table (checking both email and phone)
-          let targetUserId = app?.user_id || null;
-          if (!targetUserId && cleanEmail) {
+          // 1. Resolve user_id from profiles table if not returned by RPC
+          if (!targetUserId) {
             try {
-              const { data: profile } = await supabase
-                .from('profiles')
-                .select('id')
-                .ilike('email', cleanEmail)
-                .maybeSingle();
-              if (profile?.id) {
-                targetUserId = profile.id;
+              if (cleanEmail) {
+                const { data: profile } = await publicClient
+                  .from('profiles')
+                  .select('id')
+                  .ilike('email', cleanEmail)
+                  .maybeSingle();
+                if (profile?.id) {
+                  targetUserId = profile.id;
+                }
+              }
+
+              if (!targetUserId && cleanPhone) {
+                const digits = cleanPhone.replace(/\D/g, '').slice(-10);
+                const { data: profile } = await publicClient
+                  .from('profiles')
+                  .select('id')
+                  .or(`phone.ilike.%${digits}%,phone_number.ilike.%${digits}%`)
+                  .maybeSingle();
+                if (profile?.id) {
+                  targetUserId = profile.id;
+                }
               }
             } catch (pErr) {
-              console.warn('Could not resolve user_id by email:', pErr);
+              console.warn('Could not resolve user_id by email/phone:', pErr);
             }
           }
 
-          if (!targetUserId && cleanPhone) {
+          // 2. Fetch specific device token(s) directly if not already provided
+          if (directDeviceTokens.length === 0 && targetUserId) {
             try {
-              const digits = cleanPhone.replace(/\D/g, '').slice(-10);
-              const { data: profile } = await supabase
-                .from('profiles')
-                .select('id')
-                .ilike('phone', `%${digits}%`)
-                .maybeSingle();
-              if (profile?.id) {
-                targetUserId = profile.id;
-              }
-            } catch (pErr) {
-              console.warn('Could not resolve user_id by phone:', pErr);
-            }
-          }
-
-          // 2. Fetch specific device token(s) directly from Supabase device_tokens table
-          let directDeviceTokens: string[] = [];
-          if (targetUserId) {
-            try {
-              const { data: dtRows } = await supabase
+              const { data: dtRows } = await publicClient
                 .from('device_tokens')
                 .select('token')
                 .eq('user_id', targetUserId);
@@ -776,20 +774,30 @@ export const AdminScreen = () => {
             }
           }
 
-          // 3. Insert in-app notification row specifically for this user
+          // 3. Fallback: ensure in-app notification row exists specifically for this user
           try {
-            await supabase.from('notifications').insert([
-              {
-                user_id: targetUserId || null,
-                user_email: cleanEmail || null,
-                title: '🎉 రిపోర్టర్ దరఖాస్తు ఆమోదించబడింది!',
-                message: 'అభినందనలు! మీ Spot News 24x7 రిపోర్టర్ దరఖాస్తు ఆమోదించబడింది. మీ ఉచిత ID కార్డును సెట్ చేసుకుని లాగిన్ పూర్తి చేయండి.',
-                notification_type: 'reporter_approval',
-                is_read: false
-              }
-            ]);
+            const { data: existingNotif } = await publicClient
+              .from('notifications')
+              .select('id')
+              .eq('notification_type', 'reporter_approval')
+              .or(`user_email.eq.${cleanEmail}${targetUserId ? `,user_id.eq.${targetUserId}` : ''}`)
+              .gte('created_at', new Date(Date.now() - 30000).toISOString())
+              .maybeSingle();
+
+            if (!existingNotif) {
+              await publicClient.from('notifications').insert([
+                {
+                  user_id: targetUserId || null,
+                  user_email: cleanEmail || null,
+                  title: '🎉 రిపోర్టర్ దరఖాస్తు ఆమోదించబడింది!',
+                  message: 'అభినందనలు! మీ Spot News 24x7 రిపోర్టర్ దరఖాస్తు ఆమోదించబడింది. మీ ఉచిత ID కార్డును సెట్ చేసుకుని రిపోర్టర్ హోమ్‌లోకి ప్రవేశించండి.',
+                  notification_type: 'reporter_approval',
+                  is_read: false
+                }
+              ]);
+            }
           } catch (notifDbErr) {
-            console.warn('Failed to insert in-app notification:', notifDbErr);
+            console.warn('Failed to insert in-app notification fallback:', notifDbErr);
           }
 
           // 4. Dispatch native push notification to THAT USER ONLY (not broadcast)
@@ -816,12 +824,26 @@ export const AdminScreen = () => {
                 body: JSON.stringify({ ...notifPayload, token: t }),
               }).catch((err) => console.warn('Direct token push error:', err));
             }
-          } else {
-            await fetch(`${apiUrl}/api/v1/notifications/send`, {
+          }
+
+          // Also dispatch user/phone targeted notification to backend
+          await fetch(`${apiUrl}/api/v1/notifications/send`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(notifPayload),
+          }).catch((err) => console.warn('Approval push error:', err));
+
+          // Also trigger SMS notification if phone number exists
+          if (cleanPhone) {
+            fetch(`${apiUrl}/api/v1/reporter/send-approval-sms`, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify(notifPayload),
-            }).catch((err) => console.warn('Approval push error:', err));
+              body: JSON.stringify({
+                phone: cleanPhone,
+                name: reporterName || 'Reporter',
+                message: `Spot News 24x7: Congratulations ${reporterName || ''}! Your reporter application has been APPROVED. Open Spot News app and set up your Press ID Card to complete login.`
+              }),
+            }).catch((smsErr) => console.warn('Approval SMS error:', smsErr));
           }
         } catch (e) {
           console.warn('Failed to trigger approval push notification:', e);

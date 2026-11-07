@@ -317,7 +317,8 @@ def _get_all_device_tokens() -> List[str]:
 
 def _get_tokens_for_user(user_id: Optional[str] = None, email: Optional[str] = None, phone: Optional[str] = None) -> List[str]:
     """
-    Fetch device tokens from PostgreSQL public.device_tokens by user_id, email, or phone
+    Fetch device tokens from PostgreSQL public.device_tokens by user_id, email, or phone.
+    Checks auth.users, public.profiles, and direct user_id.
     """
     tokens = []
     conn = None
@@ -325,47 +326,35 @@ def _get_tokens_for_user(user_id: Optional[str] = None, email: Optional[str] = N
         conn = get_pg_conn()
         cur = conn.cursor()
 
-        if user_id:
-            cur.execute("SELECT token FROM public.device_tokens WHERE user_id::text = %s;", (str(user_id),))
-            rows = cur.fetchall()
-            tokens = [r[0] for r in rows if r[0]]
+        clean_email = email.strip().lower() if email else None
+        clean_phone = "".join(filter(str.isdigit, str(phone)))[-10:] if phone else None
+        target_uid = str(user_id).strip() if user_id else None
 
-            # If no token by direct user_id, enrich email/phone from profiles
-            if not tokens:
-                try:
-                    cur.execute("SELECT email, phone FROM public.profiles WHERE id::text = %s;", (str(user_id),))
-                    p_row = cur.fetchone()
-                    if p_row:
-                        if not email and p_row[0]:
-                            email = p_row[0]
-                        if not phone and p_row[1]:
-                            phone = p_row[1]
-                except Exception as p_err:
-                    logger.warning("Could not enrich user email/phone from profiles: %s", p_err)
-
-        if not tokens and email:
-            clean_email = email.strip().lower()
-            cur.execute("""
-                SELECT dt.token 
-                FROM public.device_tokens dt
-                JOIN public.profiles p ON dt.user_id = p.id
-                WHERE LOWER(p.email) = %s;
-            """, (clean_email,))
-            rows = cur.fetchall()
-            tokens = [r[0] for r in rows if r[0]]
-
-        if not tokens and phone:
-            clean_phone = "".join(filter(str.isdigit, str(phone)))[-10:]
-            if clean_phone:
-                cur.execute("""
-                    SELECT dt.token 
-                    FROM public.device_tokens dt
-                    JOIN public.profiles p ON dt.user_id = p.id
-                    WHERE p.phone LIKE %s;
-                """, (f"%{clean_phone}%",))
-                rows = cur.fetchall()
-                tokens = [r[0] for r in rows if r[0]]
-
+        cur.execute("""
+            SELECT DISTINCT dt.token
+            FROM public.device_tokens dt
+            WHERE 
+                (%(user_id)s IS NOT NULL AND dt.user_id::text = %(user_id)s)
+                OR dt.user_id IN (
+                    SELECT id FROM auth.users 
+                    WHERE (%(email)s IS NOT NULL AND LOWER(email) = %(email)s)
+                       OR (%(phone)s IS NOT NULL AND phone LIKE '%%' || %(phone)s)
+                )
+                OR dt.user_id IN (
+                    SELECT id FROM public.profiles 
+                    WHERE (%(email)s IS NOT NULL AND LOWER(email) = %(email)s)
+                       OR (%(phone)s IS NOT NULL AND (
+                           phone LIKE '%%' || %(phone)s 
+                           OR phone_number LIKE '%%' || %(phone)s
+                       ))
+                );
+        """, {
+            'user_id': target_uid,
+            'email': clean_email,
+            'phone': clean_phone,
+        })
+        rows = cur.fetchall()
+        tokens = [r[0] for r in rows if r[0]]
         conn.close()
     except Exception as e:
         if conn:
