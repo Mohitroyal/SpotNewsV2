@@ -7,7 +7,7 @@ import { Filesystem, Directory } from "@capacitor/filesystem";
 import { Share } from "@capacitor/share";
 import { Clipboard } from "@capacitor/clipboard";
 import { supabase } from "@/lib/supabase";
-import { newsLink, shareCaption } from "./links";
+import { newsLink, videoNewsLink, shareCaption } from "./links";
 
 export type Channel = "whatsapp" | "instagram" | "facebook" | "x" | "other";
 
@@ -400,7 +400,8 @@ export async function directShareClipping(options: {
   }
 
   const headline = options.headline || "Spot News 24x7 - తాజా వార్తలు";
-  const link = newsLink(options.id, options.reporterSlug);
+  const isVideo = Boolean(options.videoUrl);
+  const link = isVideo ? videoNewsLink(options.id, options.reporterSlug) : newsLink(options.id, options.reporterSlug);
   const caption = shareCaption(headline, link);
 
   // 1. Direct video share

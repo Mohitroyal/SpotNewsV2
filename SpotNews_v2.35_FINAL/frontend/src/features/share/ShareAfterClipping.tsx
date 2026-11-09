@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { ReporterCard, type ReporterCardData } from "./ReporterCard";
 import { nodeToImage, shareImage, shareVideo, captureVideoFrame, type Channel } from "./shareImage";
-import { newsLink, shareCaption } from "./links";
+import { newsLink, videoNewsLink, shareCaption } from "./links";
 import "./shareSheet.css";
 
 type Tab = "clipping" | "square" | "story";
@@ -112,7 +112,7 @@ export function ShareAfterClipping(props: {
       try {
         await shareVideo({
           videoUrl: post.videoUrl,
-          caption: shareCaption(post.headline, link),
+          caption: shareCaption(post.headline, videoNewsLink(post.id, reporter.slug)),
           channel,
           postId: post.id,
           reporterId: reporter.id,

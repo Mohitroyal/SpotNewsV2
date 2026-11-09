@@ -6,6 +6,7 @@
 // If the app is not installed, the domain landing page displays the clipping preview and download prompt.
 
 export const SHARE_BASE = "https://rtiexpressnews.godaddysites.com";
+export const VIDEO_SHARE_BASE = "https://spotnewsv2.onrender.com/n";
 export const PLAY_STORE_URL = "https://play.google.com/store/apps/details?id=com.newscraft.mobile";
 
 export const newsLink = (postId: number | string, reporterSlug?: string) => {
@@ -18,6 +19,18 @@ export const newsLink = (postId: number | string, reporterSlug?: string) => {
 
   const refParam = cleanRef && cleanRef !== "reporter" && cleanRef !== "user" ? `&ref=${encodeURIComponent(cleanRef)}` : "";
   return `${SHARE_BASE}/?clipId=${encodeURIComponent(cleanId)}${refParam}`;
+};
+
+export const videoNewsLink = (postId: number | string, reporterSlug?: string) => {
+  const cleanId = String(postId || "").trim();
+  const cleanRef = (reporterSlug || "")
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9_-]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+
+  const refParam = cleanRef && cleanRef !== "reporter" && cleanRef !== "user" ? `?ref=${encodeURIComponent(cleanRef)}` : "";
+  return `${VIDEO_SHARE_BASE}/${encodeURIComponent(cleanId)}${refParam}`;
 };
 
 export const reporterLink = (slug: string) => {
