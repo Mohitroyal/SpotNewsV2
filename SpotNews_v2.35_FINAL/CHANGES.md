@@ -37,7 +37,7 @@ OTP-logged-in reporters have no Supabase session, so the upload had no token and
 
 ### Short share links
 - Before: `https://rtiexpressnews.godaddysites.com/?clipId=63ff0648-7853-42d8-9fb9-c312218caa82&ref=…` (130+ characters)
-- Now: `https://spotnewsv2.onrender.com/n/32gmmtZOvU3L9bwPmUw9Cc`
+- Now: `https://spotnewsv2-ew09.onrender.com/n/32gmmtZOvU3L9bwPmUw9Cc`
 - App installed → opens the story in the app. Not installed → Play Store page after ~1.8 s (also works from WhatsApp's in-app browser).
 - Render's free plan sleeps; the first link opened after a quiet period can take 30–50 s to show its preview. A paid Render plan or the Vercel `share-landing` page (also updated for short codes) avoids that — set `VITE_SHARE_BASE` to switch.
 
