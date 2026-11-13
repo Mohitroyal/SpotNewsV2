@@ -196,7 +196,7 @@ export const DailyPostCard: React.FC<{ post: DailyPost }> = ({ post }) => {
             </span>
           </span>
           <span className="text-[12.5px] font-extrabold px-2.5 py-1 rounded-full flex items-center gap-1 min-w-0 truncate" style={{ background: dark ? 'rgba(255,255,255,0.16)' : 'rgba(255,255,255,0.78)', color: dark ? '#fff' : '#0B3E8A' }}>
-            <Sparkles className="w-3.5 h-3.5 shrink-0" style={{ color: '#F59E0B' }} /> <span className="truncate">AI · {label}</span>
+            <Sparkles className="w-3.5 h-3.5 shrink-0" style={{ color: '#F59E0B' }} /> <span className="truncate">RTI Desk · {label}</span>
           </span>
         </div>
         <div className="px-4 pt-1 text-[12px] font-bold relative z-[2] shrink-0 truncate" style={{ color: sub }}>
@@ -211,7 +211,7 @@ export const DailyPostCard: React.FC<{ post: DailyPost }> = ({ post }) => {
             <img src={logoUrl} alt="" className="w-7 h-7 rounded-full bg-white object-contain shrink-0" />
             <span className="leading-tight min-w-0">
               <span className="block text-[12.5px] font-extrabold truncate" style={{ color: dark ? '#fff' : '#0A2540' }}>RTI Express Spot News 24x7</span>
-              <span className="block text-[10.5px] font-bold truncate" style={{ color: sub }}>AI తో మీ జిల్లా కోసం ప్రత్యేకం</span>
+              <span className="block text-[10.5px] font-bold truncate" style={{ color: sub }}>RTI Desk తో మీ జిల్లా కోసం ప్రత్యేకం</span>
             </span>
           </span>
           <button type="button" onClick={share}

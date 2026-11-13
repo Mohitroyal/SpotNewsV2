@@ -194,7 +194,7 @@ export const ReaderHomeScreen: React.FC = () => {
             <div className="flex items-start justify-between gap-2">
               <div className="min-w-0">
                 <div className="text-[13px] font-extrabold flex items-center gap-1" style={{ color: sky.sub }}>
-                  <Sparkles className="w-4 h-4 text-[#F59E0B]" /> AI Spot · {T(lang, 'మీ జిల్లా కోసం', 'for your district')[0]}
+                  <Sparkles className="w-4 h-4 text-[#F59E0B]" /> RTI Desk · {T(lang, 'మీ జిల్లా కోసం', 'for your district')[0]}
                 </div>
                 <div className="text-[25px] font-black leading-tight" style={{ textShadow: sky.dark ? '0 2px 10px rgba(0,0,0,.35)' : 'none' }}>{T(lang, greet[0], greet[1])[0]}</div>
                 <button type="button" onClick={() => setPickerOpen(true)}
