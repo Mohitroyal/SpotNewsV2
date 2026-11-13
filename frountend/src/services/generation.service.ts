@@ -220,9 +220,9 @@ export const generationService = {
 
       const endpoints = [
 
-        'https://spotnewsv2.onrender.com/api/v1/generate',
+        'https://spotnewsv2-ew09.onrender.com/api/v1/generate',
 
-        'https://spotnewsv2.onrender.com/v1/generate'
+        'https://spotnewsv2-ew09.onrender.com/v1/generate'
 
       ];
 
@@ -607,7 +607,7 @@ export const generationService = {
   async getById(id: string): Promise<ApiResponse<Generation>> {
     // 1. Try dedicated Backend Status API endpoint directly (standard GET with cache-busting timestamp, no CORS preflight)
     try {
-      const url = `https://spotnewsv2.onrender.com/api/v1/generate/${id}?_t=${Date.now()}`;
+      const url = `https://spotnewsv2-ew09.onrender.com/api/v1/generate/${id}?_t=${Date.now()}`;
       const fetchRes = await fetch(url);
       if (fetchRes.ok) {
         const resJson = await fetchRes.json();
@@ -786,7 +786,7 @@ export const generationService = {
 
 
 
-      let res = await fetch(`https://spotnewsv2.onrender.com/v1/uploads/image`, {
+      let res = await fetch(`https://spotnewsv2-ew09.onrender.com/v1/uploads/image`, {
 
         method: "POST",
 

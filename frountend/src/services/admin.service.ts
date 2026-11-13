@@ -572,7 +572,7 @@ export const dispatchClippingApprovalNotifications = async (
     const targetDistrict = claimData.district || details?.district;
     const targetPngUrl = claimData.png_url || details?.png_url;
 
-    const apiUrl = (import.meta.env.VITE_API_URL || import.meta.env.VITE_DJANGO_API_URL || 'https://spotnewsv2.onrender.com').replace(/\/+$/, '');
+    const apiUrl = (import.meta.env.VITE_API_URL || import.meta.env.VITE_DJANGO_API_URL || 'https://spotnewsv2-ew09.onrender.com').replace(/\/+$/, '');
     const defaultLogo = 'https://rffrqokpnqoycpozrjuc.supabase.co/storage/v1/object/public/newscraft-clippings/assets/app_logo.png';
     const displayHeadline = (targetHeadline || 'Spot News 24x7 - తాజా వార్తలు').trim();
     const clipUrl = `/?clipId=${clippingId}`;

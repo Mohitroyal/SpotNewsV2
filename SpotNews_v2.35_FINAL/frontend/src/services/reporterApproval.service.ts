@@ -1,7 +1,7 @@
 import { supabase } from '@/lib/supabase';
 import type { ReporterApplicationDetails, PaymentOrder, ReporterApplicationStatus } from '@/types/reporterApproval';
 
-const API_BASE = (import.meta.env.VITE_API_URL || import.meta.env.VITE_DJANGO_API_URL || 'http://127.0.0.1:8000').replace(/\/+$/, '');
+const API_BASE = (import.meta.env.VITE_API_URL || import.meta.env.VITE_DJANGO_API_URL || 'https://spotnewsv2-ew09.onrender.com').replace(/\/+$/, '');
 const API_URL = API_BASE.endsWith('/api') ? API_BASE : `${API_BASE}/api`;
 
 const MOCK_STORAGE_KEY = 'spotnews_reporter_app_data';

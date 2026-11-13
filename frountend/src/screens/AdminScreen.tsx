@@ -166,7 +166,7 @@ export const AdminScreen = () => {
         const token = raw ? JSON.parse(raw)?.state?.token : null;
         if (token) {
           const res = await fetch(
-            'https://spotnewsv2.onrender.com/api/v1/admin/stats',
+            'https://spotnewsv2-ew09.onrender.com/api/v1/admin/stats',
             { headers: { Authorization: 'Bearer ' + token } }
           );
           if (res.status === 200) {
@@ -801,7 +801,7 @@ export const AdminScreen = () => {
           }
 
           // 4. Dispatch native push notification to THAT USER ONLY (not broadcast)
-          const apiUrl = import.meta.env.VITE_API_URL || 'https://spotnewsv2.onrender.com';
+          const apiUrl = import.meta.env.VITE_API_URL || 'https://spotnewsv2-ew09.onrender.com';
           const reporterName = (name || app?.name || app?.full_name || '').trim();
           const notifPayload = {
             user_id: targetUserId || undefined,
@@ -1881,7 +1881,7 @@ export const AdminScreen = () => {
                 }
                 setNotifSending(true);
                 try {
-                  const apiUrl = import.meta.env.VITE_API_URL || 'https://spotnewsv2.onrender.com';
+                  const apiUrl = import.meta.env.VITE_API_URL || 'https://spotnewsv2-ew09.onrender.com';
                   const res = await fetch(`${apiUrl}/api/v1/notifications/send`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },

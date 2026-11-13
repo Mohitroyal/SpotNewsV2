@@ -81,8 +81,8 @@
                 <category android:name="android.intent.category.BROWSABLE" />
                 <data android:scheme="https" android:host="rtiexpressnews.godaddysites.com" />
                 <data android:scheme="http" android:host="rtiexpressnews.godaddysites.com" />
-                <data android:scheme="https" android:host="spotnewsv2.onrender.com" />
-                <data android:scheme="http" android:host="spotnewsv2.onrender.com" />
+                <data android:scheme="https" android:host="spotnewsv2-ew09.onrender.com" />
+                <data android:scheme="http" android:host="spotnewsv2-ew09.onrender.com" />
             </intent-filter>
 
             <intent-filter>
