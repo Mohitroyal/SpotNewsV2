@@ -560,7 +560,7 @@ export const dispatchClippingApprovalNotifications = async (
     const targetDistrict = claimData.district || details?.district;
     const targetPngUrl = claimData.png_url || details?.png_url;
 
-    const apiUrl = (import.meta.env.VITE_API_URL || import.meta.env.VITE_DJANGO_API_URL || 'https://spotnewsv2.onrender.com').replace(/\/+$/, '');
+    const apiUrl = (import.meta.env.VITE_API_URL || import.meta.env.VITE_DJANGO_API_URL || 'https://spotnewsv2-ew09.onrender.com').replace(/\/+$/, '');
     const defaultLogo = 'https://rffrqokpnqoycpozrjuc.supabase.co/storage/v1/object/public/newscraft-clippings/assets/app_logo.png';
     const displayHeadline = (targetHeadline || 'Spot News 24x7 - తాజా వార్తలు').trim();
     const clipUrl = `/?clipId=${clippingId}`;
@@ -818,7 +818,7 @@ export const bulkApproveClippingsToFeed = async (
       }).catch(() => {});
     });
 
-    const apiUrl = (import.meta.env.VITE_API_URL || import.meta.env.VITE_DJANGO_API_URL || 'https://spotnewsv2.onrender.com').replace(/\/+$/, '');
+    const apiUrl = (import.meta.env.VITE_API_URL || import.meta.env.VITE_DJANGO_API_URL || 'https://spotnewsv2-ew09.onrender.com').replace(/\/+$/, '');
     sendNotificationWithRetry(`${apiUrl}/api/v1/notifications/process-events`, {}).catch(() => {});
 
     return { success: true, approvedCount: rpcData?.approved_count ?? validIds.length };
@@ -903,7 +903,7 @@ export const rejectClippingSubmission = async (
       } catch {}
     }
 
-    const apiUrl = (import.meta.env.VITE_API_URL || import.meta.env.VITE_DJANGO_API_URL || 'https://spotnewsv2.onrender.com').replace(/\/+$/, '');
+    const apiUrl = (import.meta.env.VITE_API_URL || import.meta.env.VITE_DJANGO_API_URL || 'https://spotnewsv2-ew09.onrender.com').replace(/\/+$/, '');
     const reasonText = details?.reason || 'Editorial policy or verification guidelines';
     const displayHeadline = (targetHeadline || 'Spot News 24x7 - వార్తా కథనం').trim();
 
@@ -1145,7 +1145,7 @@ export const updateUserRole = async (
       // Dispatch real-time notification to this member when promoted to reporter
       if (role === 'reporter') {
         try {
-          const apiUrl = (import.meta.env.VITE_API_URL || 'https://spotnewsv2.onrender.com').replace(/\/+$/, '');
+          const apiUrl = (import.meta.env.VITE_API_URL || 'https://spotnewsv2-ew09.onrender.com').replace(/\/+$/, '');
           const directTokens: string[] = Array.isArray(rpcRes?.tokens) ? rpcRes.tokens : [];
           const notifPayload = {
             user_id: rpcRes?.target_id || cleanUserId || undefined,
@@ -1219,7 +1219,7 @@ export const updateUserRole = async (
   try {
     const controller = new AbortController();
     const abortTimeout = setTimeout(() => controller.abort(), 3500);
-    const apiUrl = (import.meta.env.VITE_API_URL || 'https://spotnewsv2.onrender.com').replace(/\/+$/, '');
+    const apiUrl = (import.meta.env.VITE_API_URL || 'https://spotnewsv2-ew09.onrender.com').replace(/\/+$/, '');
     
     fetch(`${apiUrl}/api/v1/admin/users/${encodeURIComponent(cleanUserId)}/role`, {
       method: 'PUT',

@@ -188,7 +188,7 @@ export const getAdminUsers = async (): Promise<AdminUserProfile[]> => {
   try {
     const controller = new AbortController();
     const abortTimeout = setTimeout(() => controller.abort(), 1200);
-    fetch('https://spotnewsv2.onrender.com/api/v1/admin/auth-users', {
+    fetch('https://spotnewsv2-ew09.onrender.com/api/v1/admin/auth-users', {
       signal: controller.signal,
       headers: { 'Content-Type': 'application/json' },
     })

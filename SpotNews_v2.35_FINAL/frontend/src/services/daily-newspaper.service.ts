@@ -266,7 +266,7 @@ export async function generateClientSidePreviewHtml(config: DailyNewspaperConfig
 }
 
 const getDjangoClient = () => {
-  const djangoUrl = import.meta.env.VITE_DJANGO_API_URL || import.meta.env.VITE_API_URL || 'https://spotnewsv2.onrender.com';
+  const djangoUrl = import.meta.env.VITE_DJANGO_API_URL || import.meta.env.VITE_API_URL || 'https://spotnewsv2-ew09.onrender.com';
   const instance = axios.create({
     baseURL: djangoUrl,
     headers: { "Content-Type": "application/json" }

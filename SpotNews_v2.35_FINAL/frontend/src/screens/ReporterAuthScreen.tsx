@@ -56,7 +56,7 @@ export const ReporterAuthScreen: React.FC = () => {
 
   // Wake the (free-tier) server early so OTP and uploads respond fast
   useEffect(() => {
-    const api = (import.meta.env.VITE_API_URL || 'https://spotnewsv2.onrender.com').replace(/\/+$/, '');
+    const api = (import.meta.env.VITE_API_URL || 'https://spotnewsv2-ew09.onrender.com').replace(/\/+$/, '');
     fetch(`${api}/health`).catch(() => {});
     fetch(`${OTP_API_URL}/health`).catch(() => {});
   }, []);

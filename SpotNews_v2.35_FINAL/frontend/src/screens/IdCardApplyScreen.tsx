@@ -21,7 +21,7 @@ export const IdCardApplyScreen: React.FC = () => {
   useEffect(() => {
     if (!user) return;
     reporterAccountService.findMyApplication(user.id, user.phone_number).then(setApp);
-    const api = (import.meta.env.VITE_API_URL || 'https://spotnewsv2.onrender.com').replace(/\/+$/, '');
+    const api = (import.meta.env.VITE_API_URL || 'https://spotnewsv2-ew09.onrender.com').replace(/\/+$/, '');
     fetch(`${api}/v1/reporter/payment/config`).then((r) => r.json()).then((c) => { if (c?.amount_inr) setPrice(Number(c.amount_inr)); }).catch(() => {});
   }, [user]);
 

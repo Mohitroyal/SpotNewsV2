@@ -6,7 +6,7 @@ import { supabase, publicClient } from '@/lib/supabase';
 import { useAuthStore } from '@/store';
 import { generationService } from '@/services/generation.service';
 
-const API_URL = (import.meta.env.VITE_API_URL || 'https://spotnewsv2.onrender.com').replace(/\/+$/, '');
+const API_URL = (import.meta.env.VITE_API_URL || 'https://spotnewsv2-ew09.onrender.com').replace(/\/+$/, '');
 
 export type AppStatus = 'none' | 'pending' | 'approved' | 'active' | 'rejected';
 

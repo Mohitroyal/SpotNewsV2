@@ -238,9 +238,9 @@ export const generationService = {
 
       const endpoints = [
 
-        'https://spotnewsv2.onrender.com/api/v1/generate',
+        'https://spotnewsv2-ew09.onrender.com/api/v1/generate',
 
-        'https://spotnewsv2.onrender.com/v1/generate'
+        'https://spotnewsv2-ew09.onrender.com/v1/generate'
 
       ];
 
@@ -803,7 +803,7 @@ export const generationService = {
 
 
 
-      let res = await fetch(`https://spotnewsv2.onrender.com/v1/uploads/image`, {
+      let res = await fetch(`https://spotnewsv2-ew09.onrender.com/v1/uploads/image`, {
 
         method: "POST",
 
