@@ -13,6 +13,8 @@ import {
   Smartphone,
   X,
   RefreshCw,
+  Trash2,
+  AlertTriangle,
 } from 'lucide-react';
 import type { AdminUserProfile } from '@/services/admin.service';
 import { isProtectedSuperAdminAccount } from '@/store';
@@ -27,6 +29,7 @@ interface AdminUsersTabProps {
   onSaveUserEdit: (user: AdminUserProfile, newRole: string, newPlan: string, newPhone: string, newDistrict: string) => Promise<boolean>;
   onToggleBan: (user: AdminUserProfile) => Promise<boolean>;
   onViewUserClippings: (userIdentifier: string) => void;
+  onDeleteUser?: (user: AdminUserProfile) => Promise<boolean>;
 }
 
 function formatDate(dateStr?: string) {
@@ -72,6 +75,7 @@ export const AdminUsersTab: React.FC<AdminUsersTabProps> = ({
   onSaveUserEdit,
   onToggleBan,
   onViewUserClippings,
+  onDeleteUser,
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [sortField, setSortField] = useState<'created_at' | 'last_sign_in_at' | 'full_name' | 'total_generations'>('created_at');
@@ -87,6 +91,9 @@ export const AdminUsersTab: React.FC<AdminUsersTabProps> = ({
   const [editPhone, setEditPhone] = useState('');
   const [editDistrict, setEditDistrict] = useState('');
   const [editSaving, setEditSaving] = useState(false);
+
+  // Delete User Confirmation Modal State
+  const [deletingUser, setDeletingUser] = useState<AdminUserProfile | null>(null);
 
   // Action loading state
   const [actionLoadingId, setActionLoadingId] = useState<string | null>(null);
@@ -511,6 +518,18 @@ export const AdminUsersTab: React.FC<AdminUsersTabProps> = ({
                       <span>{isBlocked ? 'Unblock' : 'Block'}</span>
                     </button>
                   )}
+
+                  {/* Delete button (Superadmin only, cannot delete admins, protected accounts, or self) */}
+                  {isSuperAdmin && !isAdmin && !isProtected && !isSelf && onDeleteUser && (
+                    <button
+                      onClick={() => setDeletingUser(u)}
+                      disabled={actionLoadingId === u.id}
+                      className="p-1.5 rounded-xl border border-[var(--adm-card-border)] text-gray-400 hover:text-[var(--adm-red)] hover:border-red-200 transition cursor-pointer"
+                      title="Permanently delete user"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  )}
                 </div>
               </div>
             );
@@ -647,6 +666,63 @@ export const AdminUsersTab: React.FC<AdminUsersTabProps> = ({
                 >
                   {editSaving && <RefreshCw className="w-3.5 h-3.5 animate-spin" />}
                   <span>Save Changes</span>
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* ── Delete User Confirmation Modal ── */}
+      <AnimatePresence>
+        {deletingUser && (
+          <div
+            className="fixed inset-0 z-[220] flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs"
+            onClick={() => setDeletingUser(null)}
+          >
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              onClick={(e) => e.stopPropagation()}
+              className="bg-[var(--adm-card-bg)] border border-[var(--adm-card-border)] rounded-3xl p-6 w-full max-w-sm shadow-2xl space-y-4"
+            >
+              <div className="flex items-center gap-2.5 text-[var(--adm-red)]">
+                <AlertTriangle className="w-5 h-5 shrink-0" />
+                <h3 className="text-base font-bold text-[var(--adm-text-primary)]">Delete User Account</h3>
+              </div>
+              <p className="text-xs text-[var(--adm-text-secondary)]">
+                Are you sure you want to permanently delete this user? Their profile, clippings, and application records will be removed.
+              </p>
+              <div className="bg-[var(--adm-chip-bg)] p-3 rounded-xl space-y-1 text-xs">
+                <p className="font-bold text-[var(--adm-text-primary)]">{deletingUser.full_name || 'User'}</p>
+                <p className="text-[var(--adm-text-muted)]">{deletingUser.email || deletingUser.phone_number}</p>
+              </div>
+              <div className="flex items-center justify-end gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setDeletingUser(null)}
+                  className="px-4 py-2 rounded-xl text-xs font-bold bg-[var(--adm-chip-bg)] text-[var(--adm-text-secondary)] cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={async () => {
+                    if (!onDeleteUser || !deletingUser) return;
+                    setActionLoadingId(deletingUser.id);
+                    try {
+                      await onDeleteUser(deletingUser);
+                    } finally {
+                      setActionLoadingId(null);
+                      setDeletingUser(null);
+                    }
+                  }}
+                  disabled={actionLoadingId === deletingUser.id}
+                  className="px-4 py-2 rounded-xl text-xs font-bold bg-[var(--adm-red)] text-white hover:bg-red-700 transition flex items-center gap-1.5 cursor-pointer shadow-sm"
+                >
+                  {actionLoadingId === deletingUser.id && <RefreshCw className="w-3.5 h-3.5 animate-spin" />}
+                  <span>Delete User</span>
                 </button>
               </div>
             </motion.div>

@@ -99,7 +99,12 @@ export const TemplatesScreen = () => {
 
   const handleApply = () => {
     if (!selectedPatternId) return;
-    setConfig({ layoutPattern: selectedPatternId as any });
+    setConfig({
+      layoutPattern: selectedPatternId as any,
+      ...(selectedCategory === 'double' || ['C', 'D'].includes(selectedPatternId)
+        ? { templateCategory: 'double' }
+        : { templateCategory: selectedCategory }),
+    });
     navigate('/generate');
   };
 

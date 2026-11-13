@@ -3,6 +3,9 @@ import { Capacitor } from "@capacitor/core";
 import { PushNotifications } from "@capacitor/push-notifications";
 import { FCM } from "@capacitor-community/fcm";
 import { supabase } from "@/lib/supabase";
+import { expandId } from "@/features/share/shortId";
+
+let activeNavigate: ((path: string) => void) | null = null;
 
 let currentDistrict: number | null = null;
 let currentDistrictTopic: string | null = null;
@@ -101,6 +104,13 @@ export async function initPush(opts: {
     }).catch(() => {});
 
     // 3. Register native push listener
+    PushNotifications.addListener("registration", async (tokenResult) => {
+      if (tokenResult?.value) {
+        console.log("[Push] Native registration event token:", tokenResult.value.substring(0, 15) + "...");
+        await saveTokenToDatabase(tokenResult.value, opts.userId, opts.districtId);
+      }
+    });
+
     await PushNotifications.register().catch((err) => {
       console.warn("[Push] PushNotifications.register failed:", err);
     });
@@ -124,15 +134,71 @@ export async function initPush(opts: {
     await FCM.unsubscribeFrom({ topic: "district_1" }).catch(() => {});
     await setPushDistrictName(opts.districtName).catch(() => {});
 
+    if (opts.navigate) {
+      activeNavigate = opts.navigate;
+    }
+
     // 6. Register listeners once
     if (!isInitialized) {
       // Tap on notification
       PushNotifications.addListener("pushNotificationActionPerformed", (action) => {
         console.log("[Push] Notification tapped:", action);
-        const data = action.notification.data as Record<string, any> | undefined;
-        const targetUrl = data?.url || data?.link || data?.path;
-        if (targetUrl && opts.navigate) {
-          opts.navigate(targetUrl);
+        const notif = action.notification || {};
+        const data = (notif.data || (notif as any).extra || {}) as Record<string, any>;
+        
+        // 1. Check direct clipping ID fields
+        const directId = data.clipId || data.clipping_id || data.clippingId || data.clip_id || data.story_id || data.storyId || data.id;
+        const targetUrl = data.url || data.link || data.path || (notif as any).url || (notif as any).link || '';
+
+        let resolvedClipId: string | null = null;
+        if (directId && typeof directId === 'string' && directId.trim().length > 3 && !['news', 'reporter', 'tap'].includes(directId.trim().toLowerCase())) {
+          resolvedClipId = expandId(directId.trim());
+        }
+
+        // 2. Parse URL if clipId not found in direct keys
+        if (!resolvedClipId && targetUrl) {
+          const qMatch = String(targetUrl).match(/[?&](?:clipId|id|n)=([^&#]+)/i);
+          if (qMatch) {
+            resolvedClipId = expandId(decodeURIComponent(qMatch[1]));
+          } else {
+            const pMatch = String(targetUrl).match(/(?:spotnews:\/\/|newscraft:\/\/|\/|^)(?:n|story|preview|clip)\/([^/?#]+)/i);
+            if (pMatch) {
+              resolvedClipId = expandId(decodeURIComponent(pMatch[1]));
+            }
+          }
+        }
+
+        if (resolvedClipId) {
+          console.log("[Push] Successfully resolved clipping ID to open:", resolvedClipId);
+          try {
+            localStorage.setItem('spotnews_pending_clip_id', resolvedClipId);
+            sessionStorage.setItem('spotnews_pending_clip_id', resolvedClipId);
+          } catch {}
+
+          window.dispatchEvent(
+            new CustomEvent("spotnews-open-clipping", { detail: { clipId: resolvedClipId } })
+          );
+
+          const nav = activeNavigate || opts.navigate;
+          if (nav) {
+            nav(`/feed?clipId=${encodeURIComponent(resolvedClipId)}&t=${Date.now()}`);
+          } else {
+            window.location.href = `/feed?clipId=${encodeURIComponent(resolvedClipId)}`;
+          }
+          return;
+        }
+
+        // 3. Fallback for generic non-clipping URLs
+        if (targetUrl) {
+          const nav = activeNavigate || opts.navigate;
+          if (nav) {
+            try {
+              const parsed = new URL(String(targetUrl), window.location.origin);
+              nav(parsed.pathname + parsed.search);
+            } catch {
+              nav(String(targetUrl));
+            }
+          }
         }
       });
 

@@ -316,8 +316,9 @@
         if (clip.headline && titleEl) {
           titleEl.textContent = clip.headline;
         }
-        if (clip.png_url && previewBox && previewImg) {
-          previewImg.src = clip.png_url;
+        var previewSrc = clip.png_url || "https://rffrqokpnqoycpozrjuc.supabase.co/storage/v1/object/public/newscraft-clippings/assets/rti_express_logo.png";
+        if (previewSrc && previewBox && previewImg) {
+          previewImg.src = previewSrc;
           previewBox.style.display = "block";
           previewBox.style.cursor = "pointer";
           previewBox.title = "వార్త యాప్‌లో తెరవండి (Open in App)";

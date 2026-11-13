@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useAuthStore, useUIStore, isSuperAdminUser } from '@/store';
+import { useAuthStore, useUIStore } from '@/store';
 import { supabase, publicClient } from '@/lib/supabase';
 import {
   Eye, Heart, MessageSquare, TrendingUp, X, CheckCircle2, AlertCircle, Share2, ChevronRight, Send, Clock, Loader2
@@ -50,7 +50,39 @@ export const StatsScreen: React.FC = () => {
 
   // Full Screen News Detail Pager
   const [activeDetailIndex, setActiveDetailIndex] = useState<number | null>(null);
-  const [likedIds, setLikedIds] = useState<Set<string>>(new Set());
+  const [likedIds, setLikedIds] = useState<Set<string>>(() => {
+    try {
+      const cached = localStorage.getItem('spotnews_liked_ids');
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        if (Array.isArray(parsed)) {
+          const ids = parsed
+            .map((item: any) => (typeof item === 'string' ? item : item?.clipping_id || item?.id || ''))
+            .filter(Boolean);
+          return new Set<string>(ids);
+        }
+      }
+    } catch {}
+    return new Set<string>();
+  });
+
+  useEffect(() => {
+    const effectiveUserId = user?.id || localStorage.getItem('spotnews_guest_user_id');
+    if (effectiveUserId) {
+      publicClient.rpc('get_user_liked_clippings', { p_user_id: effectiveUserId }).then(({ data, error }) => {
+        if (!error && Array.isArray(data)) {
+          const ids = data
+            .map((item: any) => (typeof item === 'string' ? item : item?.clipping_id || item?.id || ''))
+            .filter(Boolean);
+          const s = new Set<string>(ids);
+          setLikedIds(s);
+          try {
+            localStorage.setItem('spotnews_liked_ids', JSON.stringify(ids));
+          } catch {}
+        }
+      });
+    }
+  }, [user?.id]);
   const handleShare = async (clip: any) => {
     if (!clip?.id) return;
     try {
@@ -122,35 +154,77 @@ export const StatsScreen: React.FC = () => {
 
       try {
         const client = publicClient || supabase;
-        const STATS_COLUMNS = 'id, headline, created_at, status, is_posted, views_count, likes_count, comments_count, shares_count, png_url, image_url, custom_layout';
-        const targetUserId = user?.id || (user as any)?.sub || (user as any)?.user_metadata?.sub;
+        const STATS_COLUMNS = 'id, headline, article_content, png_url, mp4_url, image_url, image_urls, likes_count, views_count, comments_count, shares_count, created_at, district, state, user_id, status, is_posted, custom_layout';
+        
+        const isValidUuid = (id?: string | null): boolean =>
+          Boolean(id && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id));
 
-        let query = client.from('clippings').select(STATS_COLUMNS);
-        if (targetUserId) {
-          query = query.or(`user_id.eq.${targetUserId},owner_id.eq.${targetUserId}`);
+        let targetUserId: string | null = isValidUuid(user?.id) ? user!.id : null;
+        if (!targetUserId) {
+          try {
+            const { data: sessData } = await supabase.auth.getSession();
+            if (isValidUuid(sessData?.session?.user?.id)) {
+              targetUserId = sessData.session!.user.id;
+            }
+          } catch {}
+          if (!targetUserId) {
+            const email = (user?.email || (user as any)?.user_metadata?.email || '').toLowerCase().trim();
+            if (email) {
+              try {
+                const { data: prof } = await client.from('profiles').select('id').ilike('email', email).maybeSingle();
+                if (isValidUuid(prof?.id)) {
+                  targetUserId = prof!.id;
+                }
+              } catch {}
+            }
+          }
         }
 
-        const withTimeout = async <T = any>(thenable: any, ms = 5000): Promise<T> =>
+        const withTimeout = async <T = any>(thenable: any, ms = 8000): Promise<T> =>
           Promise.race([
             Promise.resolve(thenable),
             new Promise<never>((_, reject) => setTimeout(() => reject(new Error('timeout')), ms)),
           ]);
 
-        let { data, error } = await withTimeout(query.order('created_at', { ascending: false }).limit(200));
+        let data: any[] | null = null;
+        let error: any = null;
 
-        // If specific user has 0 posts and is Superadmin/Admin, fallback to latest platform news
-        if ((!data || data.length === 0) && isSuperAdminUser(user)) {
-          const fallbackRes = await withTimeout(
-            client
-              .from('clippings')
-              .select(STATS_COLUMNS)
-              .eq('is_posted', true)
-              .neq('status', 'rejected')
-              .order('created_at', { ascending: false })
-              .limit(100)
-          );
-          if (fallbackRes?.data) {
-            data = fallbackRes.data;
+        if (targetUserId) {
+          try {
+            const res = await withTimeout(
+              client
+                .from('clippings')
+                .select(STATS_COLUMNS)
+                .eq('user_id', targetUserId)
+                .order('created_at', { ascending: false })
+                .limit(200),
+              8000
+            );
+            data = res?.data || null;
+            error = res?.error || null;
+          } catch (e) {
+            console.warn('[StatsScreen] User clippings fetch timeout/error, checking fallback:', e);
+          }
+        }
+
+        // If specific user has 0 posts, fallback to latest platform news
+        if (!data || data.length === 0) {
+          try {
+            const fallbackRes = await withTimeout(
+              client
+                .from('clippings')
+                .select(STATS_COLUMNS)
+                .eq('is_posted', true)
+                .neq('status', 'rejected')
+                .order('created_at', { ascending: false })
+                .limit(100),
+              8000
+            );
+            if (fallbackRes?.data) {
+              data = fallbackRes.data;
+            }
+          } catch (e) {
+            console.warn('[StatsScreen] Fallback news fetch timeout/error:', e);
           }
         }
 
@@ -213,6 +287,113 @@ export const StatsScreen: React.FC = () => {
     };
   }, [user?.id]);
 
+  // ── Auto-update views and metrics every half second (500ms) ──
+  useEffect(() => {
+    let alive = true;
+    let inFlight = false;
+
+    const syncLiveViews = async () => {
+      if (inFlight || !alive) return;
+      inFlight = true;
+
+      try {
+        const client = publicClient || supabase;
+        const isValidUuid = (id?: string | null): boolean =>
+          Boolean(id && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id));
+
+        let targetUserId: string | null = isValidUuid(user?.id) ? user!.id : null;
+        if (!targetUserId) {
+          try {
+            const { data: sessData } = await supabase.auth.getSession();
+            if (isValidUuid(sessData?.session?.user?.id)) {
+              targetUserId = sessData.session!.user.id;
+            }
+          } catch {}
+        }
+
+        let query = client
+          .from('clippings')
+          .select('id, views_count, likes_count, comments_count, shares_count');
+
+        if (targetUserId) {
+          query = query.eq('user_id', targetUserId);
+        } else {
+          query = query.eq('is_posted', true).neq('status', 'rejected').limit(100);
+        }
+
+        const { data, error } = await query;
+        if (!error && data && Array.isArray(data) && alive) {
+          const statsMap = new Map<string, any>(data.map((item: any) => [item.id, item]));
+
+          setClippings((prev) => {
+            let changed = false;
+            let sumViews = 0;
+            let sumLikes = 0;
+            let sumComments = 0;
+            let sumShares = 0;
+
+            const updated = prev.map((clip) => {
+              const live = statsMap.get(clip.id);
+              if (live) {
+                const newViews = Number(live.views_count || 0);
+                const newLikes = Number(live.likes_count || 0);
+                const newComments = Number(live.comments_count || 0);
+                const newShares = Number(live.shares_count || 0);
+
+                sumViews += newViews;
+                sumLikes += newLikes;
+                sumComments += newComments;
+                sumShares += newShares;
+
+                if (
+                  clip.views_count !== newViews ||
+                  clip.likes_count !== newLikes ||
+                  clip.comments_count !== newComments ||
+                  clip.shares_count !== newShares
+                ) {
+                  changed = true;
+                  return {
+                    ...clip,
+                    views_count: newViews,
+                    likes_count: newLikes,
+                    comments_count: newComments,
+                    shares_count: newShares,
+                  };
+                }
+              } else {
+                sumViews += Number(clip.views_count || 0);
+                sumLikes += Number(clip.likes_count || 0);
+                sumComments += Number(clip.comments_count || 0);
+                sumShares += Number(clip.shares_count || 0);
+              }
+              return clip;
+            });
+
+            if (changed) {
+              setTotalViews(sumViews);
+              setTotalLikes(sumLikes);
+              setTotalComments(sumComments);
+              setTotalShares(sumShares);
+              return updated;
+            }
+            return prev;
+          });
+        }
+      } catch {
+        // Silently handle background polling
+      } finally {
+        inFlight = false;
+      }
+    };
+
+    const intervalId = setInterval(syncLiveViews, 500);
+
+    return () => {
+      alive = false;
+      clearInterval(intervalId);
+    };
+  }, [user?.id]);
+
   // Toggle full-screen mode to hide masthead and bottom nav when news viewer is open
   useEffect(() => {
     if (activeDetailIndex !== null) {
@@ -236,11 +417,37 @@ export const StatsScreen: React.FC = () => {
     setLikedIds((prev) => {
       const next = new Set(prev);
       alreadyLiked ? next.delete(id) : next.add(id);
+      try {
+        localStorage.setItem('spotnews_liked_ids', JSON.stringify(Array.from(next)));
+      } catch {}
       return next;
     });
 
     try {
-      await supabase.from('clippings').update({ likes_count: newCount }).eq('id', id);
+      let effectiveUserId = user?.id || localStorage.getItem('spotnews_guest_user_id');
+      if (!effectiveUserId) {
+        effectiveUserId = 'guest_' + Math.random().toString(36).substring(2, 10);
+        localStorage.setItem('spotnews_guest_user_id', effectiveUserId);
+      }
+      const { data, error } = await publicClient.rpc('toggle_clipping_like', {
+        p_clipping_id: id,
+        p_user_id: effectiveUserId,
+      });
+      if (!error && data && data.success && typeof data.likes_count === 'number') {
+        setClippings((prev) =>
+          prev.map((c) => (c.id === id ? { ...c, likes_count: data.likes_count } : c))
+        );
+        if (typeof data.liked === 'boolean') {
+          setLikedIds((prev) => {
+            const next = new Set(prev);
+            data.liked ? next.add(id) : next.delete(id);
+            try {
+              localStorage.setItem('spotnews_liked_ids', JSON.stringify(Array.from(next)));
+            } catch {}
+            return next;
+          });
+        }
+      }
     } catch (err) {
       console.error('Like toggle error:', err);
     }
@@ -254,11 +461,14 @@ export const StatsScreen: React.FC = () => {
       user?.full_name || user?.firstName || (user as any)?.user_metadata?.full_name || 'Reporter';
 
     try {
-      let res = await supabase
-        .from('lipping_comments')
+      const client = publicClient || supabase;
+      const effectiveUserId = user?.id || localStorage.getItem('spotnews_guest_user_id') || null;
+
+      let res = await client
+        .from('clipping_comments')
         .insert({
           clipping_id: commentDrawer.clipId,
-          user_id: user?.id || null,
+          user_id: effectiveUserId,
           user_name: userName,
           text,
         })
@@ -266,11 +476,11 @@ export const StatsScreen: React.FC = () => {
         .single();
 
       if (res.error) {
-        res = await supabase
-          .from('clipping_comments')
+        res = await client
+          .from('lipping_comments')
           .insert({
             clipping_id: commentDrawer.clipId,
-            user_id: user?.id || null,
+            user_id: effectiveUserId && /^[0-9a-f-]{36}$/i.test(effectiveUserId) ? effectiveUserId : null,
             user_name: userName,
             text,
           })
@@ -299,20 +509,44 @@ export const StatsScreen: React.FC = () => {
     setDrawerLoading(true);
     setDrawerComments([]);
     try {
-      let { data } = await supabase
-        .from('lipping_comments')
-        .select('*')
-        .eq('clipping_id', clipId)
-        .order('created_at', { ascending: true });
-      if (!data) {
-        const fallback = await supabase
-          .from('clipping_comments')
-          .select('*')
-          .eq('clipping_id', clipId)
-          .order('created_at', { ascending: true });
-        data = fallback.data;
+      const client = publicClient || supabase;
+      const withTimeout = async <T = any>(thenable: any, ms = 4000): Promise<T> =>
+        Promise.race([
+          Promise.resolve(thenable),
+          new Promise<never>((_, reject) => setTimeout(() => reject(new Error('timeout')), ms)),
+        ]);
+
+      let fetched: Comment[] = [];
+      try {
+        const { data, error } = await withTimeout(
+          client
+            .from('clipping_comments')
+            .select('*')
+            .eq('clipping_id', clipId)
+            .order('created_at', { ascending: true })
+        );
+        if (!error && Array.isArray(data)) {
+          fetched = data;
+        }
+      } catch {}
+
+      if (fetched.length === 0) {
+        try {
+          const { data: fbData } = await withTimeout(
+            client
+              .from('lipping_comments')
+              .select('*')
+              .eq('clipping_id', clipId)
+              .order('created_at', { ascending: true }),
+            2000
+          );
+          if (Array.isArray(fbData) && fbData.length > 0) {
+            fetched = fbData;
+          }
+        } catch {}
       }
-      setDrawerComments(data || []);
+
+      setDrawerComments(fetched);
     } catch {
       setDrawerComments([]);
     } finally {
@@ -654,42 +888,44 @@ export const StatsScreen: React.FC = () => {
                     </div>
 
                     <div className="flex items-center justify-between pt-2 mt-1 border-t border-slate-100">
-                      {/* Left: Views, Likes, Comments */}
-                      <div className="flex items-center gap-4">
-                        <div className="flex items-center gap-1.5">
-                          <Eye className="w-3.5 h-3.5 text-slate-500" />
-                          <span className="text-[14.5px] font-bold text-slate-700">{postViews}</span>
+                      {/* Left: Prominent Views Badge per clipping, Likes, Comments, Shares */}
+                      <div className="flex items-center gap-2.5">
+                        <div className="flex items-center gap-1.5 bg-[#EFF6FF] border border-[#BFDBFE] px-2.5 py-0.5 rounded-full shadow-2xs">
+                          <Eye className="w-4 h-4 text-[#145AB1]" />
+                          <span className="text-[14px] font-extrabold text-[#145AB1]">
+                            {postViews} <span className="text-[11.5px] font-semibold text-[#2563EB]">Views</span>
+                          </span>
                         </div>
-                        <div className="flex items-center gap-1.5">
-                          <Heart className="w-3.5 h-3.5 text-slate-500 fill-slate-700" />
-                          <span className="text-[14.5px] font-bold text-slate-700">{postLikes}</span>
+                        <div className="flex items-center gap-1">
+                          <Heart className="w-3.5 h-3.5 text-rose-500 fill-rose-500" />
+                          <span className="text-[13.5px] font-bold text-slate-700">{postLikes}</span>
                         </div>
 
                         {/* Tappable comment count → opens comment drawer */}
                         <button
                           type="button"
-                          className="flex items-center gap-1.5 active:scale-95 transition-transform bg-transparent border-0 p-0 cursor-pointer"
+                          className="flex items-center gap-1 active:scale-95 transition-transform bg-transparent border-0 p-0 cursor-pointer"
                           onClick={(e) => {
                             e.stopPropagation();
                             openCommentDrawer(clip.id, clip.headline || 'Breaking News');
                           }}
                         >
-                          <MessageSquare className="w-3.5 h-3.5 text-slate-400" />
-                          <span className="text-[14.5px] font-bold text-slate-700">
+                          <MessageSquare className="w-3.5 h-3.5 text-slate-500" />
+                          <span className="text-[13.5px] font-bold text-slate-700">
                             {postComments}
                           </span>
                         </button>
 
                         <button
                           type="button"
-                          className="flex items-center gap-1.5 active:scale-95 transition-transform bg-transparent border-0 p-0 cursor-pointer"
+                          className="flex items-center gap-1 active:scale-95 transition-transform bg-transparent border-0 p-0 cursor-pointer"
                           onClick={(e) => {
                             e.stopPropagation();
                             handleShare(clip);
                           }}
                         >
                           <Share2 className="w-3.5 h-3.5 text-slate-500" />
-                          <span className="text-[14.5px] font-bold text-slate-700">{clip.shares_count ?? clip.shares ?? 0}</span>
+                          <span className="text-[13.5px] font-bold text-slate-700">{clip.shares_count ?? clip.shares ?? 0}</span>
                         </button>
                       </div>
 

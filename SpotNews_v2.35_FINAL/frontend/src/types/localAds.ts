@@ -23,6 +23,7 @@ export interface LocalAd {
   cta_value?: string;
   amount_inr: number;
   status: LocalAdStatus;
+  views_count?: number;
   approval_type?: 'manual' | 'auto';
   approved_at?: string;
   rejection_reason?: string;

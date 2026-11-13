@@ -737,4 +737,21 @@ export const localAdsService = {
       return false;
     }
   },
+
+  /**
+   * Increment view counter for a local advertisement
+   */
+  async incrementAdView(adId: string): Promise<number | null> {
+    if (!adId) return null;
+    try {
+      const client = publicClient || supabase;
+      const { data, error } = await client.rpc('increment_local_ad_view', { p_ad_id: adId });
+      if (!error && data && data.success && typeof data.views_count === 'number') {
+        return data.views_count;
+      }
+    } catch (e) {
+      console.warn('[LocalAds] Error incrementing ad view:', e);
+    }
+    return null;
+  },
 };

@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
-import { Megaphone, Phone, MessageSquare, Volume2, VolumeX, Share2, Sparkles, ExternalLink } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { Megaphone, Phone, MessageSquare, Volume2, VolumeX, Share2, Sparkles, ExternalLink, Eye } from 'lucide-react';
 import type { LocalAd } from '@/types/localAds';
+import { localAdsService } from '@/services/localAds.service';
 
 interface LocalAdFeedCardProps {
   ad: LocalAd;
@@ -9,6 +10,18 @@ interface LocalAdFeedCardProps {
 
 export const LocalAdFeedCard: React.FC<LocalAdFeedCardProps> = ({ ad, index }) => {
   const [isMuted, setIsMuted] = useState(true);
+  const [viewsCount, setViewsCount] = useState<number>(ad.views_count ?? 0);
+  const viewedRef = useRef(false);
+
+  useEffect(() => {
+    if (!ad?.id || viewedRef.current) return;
+    viewedRef.current = true;
+    localAdsService.incrementAdView(ad.id).then((v) => {
+      if (typeof v === 'number') {
+        setViewsCount(v);
+      }
+    });
+  }, [ad?.id]);
 
   const cleanPhone = (ad.cta_value || '').replace(/[^0-9]/g, '');
 
@@ -65,6 +78,15 @@ export const LocalAdFeedCard: React.FC<LocalAdFeedCardProps> = ({ ad, index }) =
               📍 {ad.target_district}
             </span>
           )}
+
+          {/* Small eye button / badge showing ad views */}
+          <div
+            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-black/60 backdrop-blur-md text-white/95 text-[13px] font-bold border border-white/10 shadow-sm"
+            title="వీక్షణలు / Views"
+          >
+            <Eye className="w-3.5 h-3.5 text-white/80" />
+            <span>{viewsCount}</span>
+          </div>
         </div>
 
         {ad.media_type === 'video' && (
@@ -127,13 +149,23 @@ export const LocalAdFeedCard: React.FC<LocalAdFeedCardProps> = ({ ad, index }) =
             )}
           </div>
 
-          <button
-            onClick={handleShare}
-            className="w-10 h-10 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center shrink-0 border border-white/20 active:scale-95 transition-all"
-            title="Share Advertisement"
-          >
-            <Share2 className="w-4 h-4" />
-          </button>
+          <div className="flex items-center gap-2">
+            <div
+              className="h-10 px-3 rounded-full bg-white/10 text-white/95 flex items-center gap-1.5 border border-white/20 text-xs font-bold"
+              title="వీక్షణలు / Views"
+            >
+              <Eye className="w-4 h-4 text-white/80" />
+              <span>{viewsCount}</span>
+            </div>
+
+            <button
+              onClick={handleShare}
+              className="w-10 h-10 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center shrink-0 border border-white/20 active:scale-95 transition-all cursor-pointer"
+              title="Share Advertisement"
+            >
+              <Share2 className="w-4 h-4" />
+            </button>
+          </div>
         </div>
 
         {/* Call to Action Button */}

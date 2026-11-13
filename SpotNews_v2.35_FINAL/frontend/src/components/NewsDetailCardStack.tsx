@@ -5,11 +5,12 @@ import mastheadLogo from '@/assets/rti_express_logo.png';
 import { LocalAdFeedCard } from '@/components/LocalAdFeedCard';
 import { BrandDealCard } from '@/components/BrandDealCard';
 import type { BrandAd } from '@/services/brandAds.service';
-import { limitWordsForDisplay, MAX_HEADLINE_WORDS } from '@/utils/wordLimit';
+import { limitWordsForDisplay, MAX_HEADLINE_WORDS, MAX_ARTICLE_WORDS } from '@/utils/wordLimit';
 import type { LocalAd } from '@/types/localAds';
+import { localAdsService } from '@/services/localAds.service';
 import { StarRating } from '@/features/rating/StarRating';
-import { FitBox } from '@/components/FitBox';
 import { TwoImageGallery, getClipPhotos } from '@/components/TwoImageGallery';
+import { publicClient } from '@/lib/supabase';
 
 export interface NewsDetailCardStackProps {
   items: any[];
@@ -46,11 +47,54 @@ export const NewsDetailCardStack: React.FC<NewsDetailCardStackProps> = ({
   const itemRefs = useRef<Map<number, HTMLDivElement>>(new Map());
   const initialScrollDone = useRef(false);
 
+  // Ensure local ads are always loaded even if parent feed hasn't passed them yet
+  const [internalAds, setInternalAds] = useState<LocalAd[]>(() => {
+    if (localAds && localAds.length > 0) return localAds;
+    try {
+      const c = localStorage.getItem('spotnews_active_local_ads_cache_v1');
+      return c ? JSON.parse(c) : [];
+    } catch {
+      return [];
+    }
+  });
+  useEffect(() => {
+    if (localAds && localAds.length > 0) {
+      setInternalAds(localAds);
+    } else {
+      localAdsService.fetchActiveLocalAds().then((ads) => {
+        if (ads && ads.length > 0) setInternalAds(ads);
+      }).catch(() => {});
+    }
+  }, [localAds]);
+  const effectiveLocalAds = internalAds.length > 0 ? internalAds : localAds;
+
   // Auto-hide swipe hint after 5 seconds
   useEffect(() => {
     const timer = setTimeout(() => setShowSwipeHint(false), 5000);
     return () => clearTimeout(timer);
   }, []);
+
+  // Track unique view when a clipping is focused/read in detail pager
+  const viewedItemsRef = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    const cur = items[activeIndex];
+    if (cur?.id && !viewedItemsRef.current.has(cur.id)) {
+      viewedItemsRef.current.add(cur.id);
+      const effectiveViewerId = localStorage.getItem('spotnews_guest_user_id') || undefined;
+      Promise.resolve(
+        publicClient.rpc('increment_clipping_view', {
+          p_clipping_id: cur.id,
+          p_viewer_id: effectiveViewerId,
+        })
+      )
+        .then(({ data, error }: any) => {
+          if (!error && data?.success && typeof data.views_count === 'number') {
+            cur.views_count = data.views_count;
+          }
+        })
+        .catch(() => {});
+    }
+  }, [activeIndex, items]);
 
   // Smooth scroll to target story index
   const goToIndex = useCallback((targetIdx: number) => {
@@ -104,18 +148,32 @@ export const NewsDetailCardStack: React.FC<NewsDetailCardStackProps> = ({
     return () => observer.disconnect();
   }, [items.length, onEndReached]);
 
-  // Immediately track card swipe/scroll so previous news video stops without delay
+  // Immediately track card swipe/scroll accurately regardless of inserted ads
   const handleScroll = useCallback(() => {
     setShowSwipeHint(false);
     const pager = pagerRef.current;
     if (!pager) return;
-    const height = pager.clientHeight;
-    if (!height) return;
-    const currentIdx = Math.round(pager.scrollTop / height);
-    if (currentIdx >= 0 && currentIdx < items.length && currentIdx !== activeIndex) {
-      setActiveIndex(currentIdx);
+
+    const pagerRect = pager.getBoundingClientRect();
+    const pagerCenterY = pagerRect.top + pagerRect.height / 2;
+    let closestIdx = activeIndex;
+    let minDistance = Infinity;
+
+    itemRefs.current.forEach((el, idx) => {
+      if (!el) return;
+      const rect = el.getBoundingClientRect();
+      const elCenterY = rect.top + rect.height / 2;
+      const distance = Math.abs(elCenterY - pagerCenterY);
+      if (distance < minDistance) {
+        minDistance = distance;
+        closestIdx = idx;
+      }
+    });
+
+    if (closestIdx !== activeIndex) {
+      setActiveIndex(closestIdx);
     }
-  }, [items.length, activeIndex]);
+  }, [activeIndex]);
 
   const formatDate = useCallback((dateStr?: string) => {
     if (!dateStr) return 'Spot News 24x7';
@@ -132,6 +190,52 @@ export const NewsDetailCardStack: React.FC<NewsDetailCardStackProps> = ({
       return dateStr;
     }
   }, []);
+
+  const textTouchStartRef = useRef<{ x: number; y: number; atBottom: boolean; atTop: boolean } | null>(null);
+
+  const handleTextTouchStart = useCallback((e: React.TouchEvent<HTMLDivElement>) => {
+    const el = e.currentTarget;
+    const atBottom = el.scrollHeight - el.scrollTop <= el.clientHeight + 6;
+    const atTop = el.scrollTop <= 4;
+    textTouchStartRef.current = {
+      x: e.touches[0].clientX,
+      y: e.touches[0].clientY,
+      atBottom,
+      atTop,
+    };
+  }, []);
+
+  const handleTextTouchEnd = useCallback((e: React.TouchEvent<HTMLDivElement>) => {
+    if (!textTouchStartRef.current) return;
+    const deltaX = Math.abs(textTouchStartRef.current.x - e.changedTouches[0].clientX);
+    const deltaY = textTouchStartRef.current.y - e.changedTouches[0].clientY;
+    const el = e.currentTarget;
+    const isNowAtBottom = el.scrollHeight - el.scrollTop <= el.clientHeight + 6;
+    const isNowAtTop = el.scrollTop <= 4;
+
+    // Only handle mostly-vertical swipes
+    if (Math.abs(deltaY) > 30 && Math.abs(deltaY) > deltaX) {
+      // Swiping UP: advance to next news or ad if at bottom
+      if (deltaY > 30 && (textTouchStartRef.current.atBottom || isNowAtBottom)) {
+        const currentEl = itemRefs.current.get(activeIndex);
+        if (currentEl && currentEl.nextElementSibling) {
+          (currentEl.nextElementSibling as HTMLElement).scrollIntoView({ behavior: 'smooth', block: 'start' });
+        } else {
+          goToIndex(activeIndex + 1);
+        }
+      }
+      // Swiping DOWN: go to previous news if at top
+      else if (deltaY < -30 && (textTouchStartRef.current.atTop || isNowAtTop)) {
+        const currentEl = itemRefs.current.get(activeIndex);
+        if (currentEl && currentEl.previousElementSibling) {
+          (currentEl.previousElementSibling as HTMLElement).scrollIntoView({ behavior: 'smooth', block: 'start' });
+        } else {
+          goToIndex(activeIndex - 1);
+        }
+      }
+    }
+    textTouchStartRef.current = null;
+  }, [activeIndex, goToIndex]);
 
   return (
     <div className="fixed inset-0 z-[9999] flex flex-col bg-white h-[100dvh] w-full select-none overflow-hidden">
@@ -228,21 +332,32 @@ export const NewsDetailCardStack: React.FC<NewsDetailCardStackProps> = ({
           const isLiked = likedIds.has(item.id);
           const isActive = activeIndex === index;
 
-          const headline = limitWordsForDisplay(
-            item.headline ||
+          const clipPhotos = getClipPhotos(item);
+          const isTwoImage = clipPhotos.length >= 2 || ['C', 'D'].includes(item.custom_layout?.layoutPattern || item.custom_layout?.layout_pattern || item.layout_pattern || item.pattern || item.image_layout || item.config?.layoutPattern || '');
+
+          const rawHeadline = item.headline ||
             item.title ||
             item.config?.headline ||
-            'Spot News Update',
-            MAX_HEADLINE_WORDS
-          );
+            'Spot News Update';
 
-          const bodyText = limitWordsForDisplay(
-            item.article_content ||
+          const headline = isTwoImage
+            ? rawHeadline
+            : limitWordsForDisplay(rawHeadline, MAX_HEADLINE_WORDS);
+
+          const originalBodyText = item.article_content ||
             item.summary ||
             item.content ||
             item.config?.articleContent ||
-            ''
-          );
+            '';
+
+          const rawBodyText = isTwoImage
+            ? originalBodyText
+            : limitWordsForDisplay(originalBodyText, MAX_ARTICLE_WORDS);
+
+          // Single paragraph in feed view: collapse all newlines and multiple spaces
+          const bodyText = rawBodyText
+            ? rawBodyText.replace(/[\r\n]+/g, ' ').replace(/[ \t]+/g, ' ').trim()
+            : '';
 
           const subheadline =
             item.subheadline ||
@@ -280,7 +395,6 @@ export const NewsDetailCardStack: React.FC<NewsDetailCardStackProps> = ({
             cl.pngUrl ||
             item.clipping_url;
 
-          const clipPhotos = getClipPhotos(item);
           const cardPhotos = clipPhotos.length > 0 ? clipPhotos : (rawClippingUrl ? [rawClippingUrl] : (item.preview_url ? [item.preview_url] : []));
 
           const hasRawClipping = Boolean(rawClippingUrl || clippingVideoUrl);
@@ -295,11 +409,10 @@ export const NewsDetailCardStack: React.FC<NewsDetailCardStackProps> = ({
 
           const formattedTime = formatDate(item.created_at || item.createdAt);
 
-          const isAdInterval = (index + 1) % 10 === 0 || index === 4;
-          const isShortFeedEnd = items.length < 5 && index === items.length - 1;
-          const shouldShowLocalAd = (isAdInterval || isShortFeedEnd) && localAds.length > 0;
-          const localAdIndex = Math.floor(index / 5) % (localAds.length || 1);
-          const localAd = localAds[localAdIndex];
+          const isAdInterval = (index + 1) % 5 === 0;
+          const shouldShowLocalAd = isAdInterval && effectiveLocalAds.length > 0;
+          const localAdIndex = Math.floor(index / 5) % (effectiveLocalAds.length || 1);
+          const localAd = effectiveLocalAds[localAdIndex];
           const showBrandAd = brandAds.length > 0 && (index + 1) % 7 === 0 && !shouldShowLocalAd;
           const brandAd = brandAds[Math.floor(index / 7) % (brandAds.length || 1)];
 
@@ -318,19 +431,8 @@ export const NewsDetailCardStack: React.FC<NewsDetailCardStackProps> = ({
                   maxHeight: '100%',
                 }}
               >
-                {/* ── Animated Card Wrapper: Smooth Scale, Depth & Fade on Swipe ── */}
-                <div
-                  className={`w-full h-full flex flex-col transition-all duration-500 ease-out ${
-                    isActive
-                      ? 'scale-100 opacity-100'
-                      : index < activeIndex
-                      ? 'scale-[0.96] opacity-40 -translate-y-2'
-                      : 'scale-[0.96] opacity-40 translate-y-2'
-                  }`}
-                  style={{
-                    transition: 'transform 0.45s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.4s ease',
-                  }}
-                >
+                {/* ── Card Wrapper: Always Full Brightness & Clean Reading Display ── */}
+                <div className="w-full h-full flex flex-col opacity-100">
                   {/* ── FULL RAW CLIPPING (Uncropped, Full Resolution) ── */}
                   {viewMode === 'clipping' && hasRawClipping ? (
                   <div className="flex-1 w-full bg-black relative flex items-center justify-center overflow-hidden">
@@ -401,8 +503,15 @@ export const NewsDetailCardStack: React.FC<NewsDetailCardStackProps> = ({
 
                     </div>
 
-                    {/* Headline & Body Text (Scrolls comfortably inside flex-1 min-h-0) */}
-                    <FitBox className="flex-1 min-h-0 px-4 pt-2.5 pb-1 select-none font-sans">
+                    {/* Headline & Body Text (Scrollable container so full content is readable; swipes at bottom advance to next news) */}
+                    <div
+                      onTouchStart={handleTextTouchStart}
+                      onTouchEnd={handleTextTouchEnd}
+                      className="flex-1 min-h-0 px-4 pt-2.5 pb-3 overflow-y-auto font-sans"
+                      style={{
+                        WebkitOverflowScrolling: 'touch',
+                      }}
+                    >
                       {/* Clean Author Strip (Placed above headline - leaves photo 100% clean & uncropped) */}
                       {reporterName && (
                         <div className="flex items-center justify-between pb-2 mb-2 border-b border-gray-100">
@@ -434,10 +543,10 @@ export const NewsDetailCardStack: React.FC<NewsDetailCardStackProps> = ({
                           {subheadline}
                         </h3>
                       )}
-                      <p className="mt-2.5 text-[17.5px] sm:text-[18px] leading-[29px] sm:leading-[30px] text-[#1F2937] whitespace-pre-line m-0">
+                      <p className="mt-2.5 text-[22px] sm:text-[23px] leading-[36px] sm:leading-[38px] text-[#1F2937] m-0 pb-3">
                         {bodyText}
                       </p>
-                    </FitBox>
+                    </div>
                     {/* Star rating: one fixed row, so the story always fits one screen (one swipe = next story) */}
                     <div className="shrink-0 px-3 py-1 border-t border-gray-200 bg-[#F8FAFD]">
                       <StarRating postId={item.id} reporterName={reporterName} compact />

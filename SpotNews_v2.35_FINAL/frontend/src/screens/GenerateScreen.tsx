@@ -88,11 +88,26 @@ export const GenerateScreen = () => {
   const setPendingCropImageSrc = useUIStore((state) => state.setPendingCropImageSrc);
   const navigate = useNavigate();
 
-  const [headline, setHeadline] = useState(limitWords(currentConfig.headline || '', MAX_HEADLINE_WORDS));
+  const selectedPattern = currentConfig.layoutPattern || 'A';
+  const maxImages = ['A', 'B'].includes(selectedPattern) ? 1 : ['C', 'D'].includes(selectedPattern) ? 2 : 3;
+  const isTwoImageTemplate =
+    ['C', 'D'].includes(selectedPattern) ||
+    ['C', 'D'].includes(currentConfig.layoutPattern || '') ||
+    (currentConfig as any)?.templateCategory === 'double' ||
+    maxImages === 2 ||
+    (currentConfig.imageUrls && currentConfig.imageUrls.length >= 2);
+
+  const [headline, setHeadline] = useState(
+    isTwoImageTemplate ? (currentConfig.headline || '') : limitWords(currentConfig.headline || '', MAX_HEADLINE_WORDS)
+  );
   const [headlineLimitNotice, setHeadlineLimitNotice] = useState(false);
   const headlineWords = countWords(headline);
   const handleHeadlineChange = (raw: string) => {
-    // Allow the space after the 6th word while typing, but never a 7th word
+    if (isTwoImageTemplate) {
+      setHeadline(raw);
+      return;
+    }
+    // Allow the space after the 10th word while typing, but never an 11th word
     if (countWords(raw) > MAX_HEADLINE_WORDS) {
       setHeadline(limitWords(raw, MAX_HEADLINE_WORDS));
       setHeadlineLimitNotice(true);
@@ -101,13 +116,19 @@ export const GenerateScreen = () => {
       setHeadline(raw);
     }
   };
-  const [content, setContent] = useState(limitWords(currentConfig.articleContent || ''));
+  const [content, setContent] = useState(
+    isTwoImageTemplate ? (currentConfig.articleContent || '') : limitWords(currentConfig.articleContent || '')
+  );
   const [wordLimitNotice, setWordLimitNotice] = useState(false);
   const wordCount = countWords(content);
 
-  // Every change (typing, paste, voice input, autofill) goes through here,
-  // so the article can never exceed MAX_ARTICLE_WORDS words.
+  // Every change (typing, paste, voice input, autofill) goes through here.
+  // When 2 image template is chosen, there is no limit on content size.
   const handleContentChange = (raw: string) => {
+    if (isTwoImageTemplate) {
+      setContent(raw);
+      return;
+    }
     if (countWords(raw) > MAX_ARTICLE_WORDS) {
       setContent(limitWords(raw, MAX_ARTICLE_WORDS));
       setWordLimitNotice(true);
@@ -178,7 +199,6 @@ export const GenerateScreen = () => {
   const [activeLogos, setActiveLogos] = useState<PublicationLogo[]>([]);
   const [logosLoading, setLogosLoading] = useState(true);
 
-  const selectedPattern = currentConfig.layoutPattern || 'A';
   const selectedBorderColour = currentConfig.borderColour || '#cc2222';
   const selectedHeadingBgColour = currentConfig.headingBgColour || '#fff3f3';
   const selectedTemplateId = currentConfig.templateId || 'rti_express';
@@ -235,8 +255,6 @@ export const GenerateScreen = () => {
       });
     }
   }, [selectedTemplateId, setConfig]);
-
-  const maxImages = ['A', 'B'].includes(selectedPattern) ? 1 : ['C', 'D'].includes(selectedPattern) ? 2 : 3;
 
   const getColourDetails = (hex: string, isBorder: boolean) => {
     const palettes = isBorder ? BORDER_COLOURS : HEADING_BG_COLOURS;
@@ -363,8 +381,9 @@ export const GenerateScreen = () => {
 
   const handleGenerate = async () => {
     if (!headline || !content) return;
-    const finalContent = limitWords(content, MAX_ARTICLE_WORDS);
-    const finalHeadline = limitWords(headline, MAX_HEADLINE_WORDS).trim();
+    const rawFinalContent = isTwoImageTemplate ? content : limitWords(content, MAX_ARTICLE_WORDS);
+    const finalContent = rawFinalContent ? rawFinalContent.replace(/[\r\n]+/g, ' ').replace(/\s+/g, ' ').trim() : '';
+    const finalHeadline = (isTwoImageTemplate ? headline : limitWords(headline, MAX_HEADLINE_WORDS)).trim();
     if (activeLogos.length > 0) {
       const isSelectedActive = activeLogos.some(
         (l) => l.publication_code === selectedTemplateId || l.id === selectedTemplateId
@@ -512,20 +531,33 @@ export const GenerateScreen = () => {
           </div>
           <input
             type="text"
-            placeholder={`Enter headline (max ${MAX_HEADLINE_WORDS} words)`}
+            placeholder={isTwoImageTemplate ? "Enter headline..." : `Enter headline (max ${MAX_HEADLINE_WORDS} words)`}
             value={headline}
             onChange={e => handleHeadlineChange(e.target.value)}
             style={{ ...inputStyle, fontSize: '19.5px', fontWeight: 700 }}
           />
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '4px', fontSize: '15px', fontWeight: 700 }}>
-            <span style={{ color: headlineLimitNotice ? '#B45309' : '#64748B' }}>
-              {headlineLimitNotice
-                ? `Headline: only ${MAX_HEADLINE_WORDS} words / శీర్షిక ${MAX_HEADLINE_WORDS} పదాలు మాత్రమే`
-                : `Short headline: up to ${MAX_HEADLINE_WORDS} words`}
-            </span>
-            <span style={{ color: headlineWords >= MAX_HEADLINE_WORDS ? '#B45309' : '#0F487F' }}>
-              {headlineWords}/{MAX_HEADLINE_WORDS}
-            </span>
+            {isTwoImageTemplate ? (
+              <>
+                <span style={{ color: '#0F487F' }}>
+                  2 Image Template: No headline limit / శీర్షిక పరిమితి లేదు
+                </span>
+                <span style={{ color: '#0F487F' }}>
+                  {headlineWords} {headlineWords === 1 ? 'word' : 'words'}
+                </span>
+              </>
+            ) : (
+              <>
+                <span style={{ color: headlineLimitNotice ? '#B45309' : '#64748B' }}>
+                  {headlineLimitNotice
+                    ? `Headline: only ${MAX_HEADLINE_WORDS} words / శీర్షిక ${MAX_HEADLINE_WORDS} పదాలు మాత్రమే`
+                    : `Short headline: up to ${MAX_HEADLINE_WORDS} words`}
+                </span>
+                <span style={{ color: headlineWords >= MAX_HEADLINE_WORDS ? '#B45309' : '#0F487F' }}>
+                  {headlineWords}/{MAX_HEADLINE_WORDS}
+                </span>
+              </>
+            )}
           </div>
         </div>
 
@@ -536,21 +568,41 @@ export const GenerateScreen = () => {
             <strong style={{ fontWeight: 900, fontFamily: "system-ui, -apple-system, Arial, sans-serif", fontSize: '15px', letterSpacing: '0.5px', color: '#0F487F' }}>ARTICLE CONTENT</strong>
           </div>
           <textarea
-            placeholder={`Enter article content (max ${MAX_ARTICLE_WORDS} words)...`}
+            placeholder={isTwoImageTemplate ? "Enter article content..." : `Enter article content (max ${MAX_ARTICLE_WORDS} words)...`}
             value={content}
             onChange={e => handleContentChange(e.target.value)}
             rows={4}
-            style={{ ...inputStyle, resize: 'none', lineHeight: 1.45, minHeight: '108px', height: '108px', borderColor: wordCount >= MAX_ARTICLE_WORDS ? '#F59E0B' : inputStyle.border as string }}
+            style={{
+              ...inputStyle,
+              resize: 'none',
+              lineHeight: 1.45,
+              minHeight: '108px',
+              height: '108px',
+              borderColor: !isTwoImageTemplate && wordCount >= MAX_ARTICLE_WORDS ? '#F59E0B' : inputStyle.border as string
+            }}
           />
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '4px', fontSize: '14px', fontWeight: 700 }}>
-            <span style={{ color: wordLimitNotice ? '#B45309' : '#64748B' }}>
-              {wordLimitNotice
-                ? `Only the first ${MAX_ARTICLE_WORDS} words are kept / ${MAX_ARTICLE_WORDS} పదాలు మాత్రమే ఉంచబడ్డాయి`
-                : `Keep it short: up to ${MAX_ARTICLE_WORDS} words`}
-            </span>
-            <span style={{ color: wordCount >= MAX_ARTICLE_WORDS ? '#B45309' : wordCount >= MAX_ARTICLE_WORDS - 5 ? '#CA8A04' : '#0F487F' }}>
-              {wordCount}/{MAX_ARTICLE_WORDS}
-            </span>
+            {isTwoImageTemplate ? (
+              <>
+                <span style={{ color: '#0F487F' }}>
+                  2 Image Template: No content limit / కంటెంట్ పరిమితి లేదు
+                </span>
+                <span style={{ color: '#0F487F' }}>
+                  {wordCount} {wordCount === 1 ? 'word' : 'words'}
+                </span>
+              </>
+            ) : (
+              <>
+                <span style={{ color: wordLimitNotice ? '#B45309' : '#64748B' }}>
+                  {wordLimitNotice
+                    ? `Only the first ${MAX_ARTICLE_WORDS} words are kept / ${MAX_ARTICLE_WORDS} పదాలు మాత్రమే ఉంచబడ్డాయి`
+                    : `Keep it short: up to ${MAX_ARTICLE_WORDS} words`}
+                </span>
+                <span style={{ color: wordCount >= MAX_ARTICLE_WORDS ? '#B45309' : wordCount >= MAX_ARTICLE_WORDS - 5 ? '#CA8A04' : '#0F487F' }}>
+                  {wordCount}/{MAX_ARTICLE_WORDS}
+                </span>
+              </>
+            )}
           </div>
         </div>
 
@@ -713,7 +765,10 @@ export const GenerateScreen = () => {
         isOpen={isPatternModalOpen}
         onClose={() => setIsPatternModalOpen(false)}
         selectedPattern={selectedPattern}
-        onSelectPattern={(patternId) => setConfig({ layoutPattern: patternId as any })}
+        onSelectPattern={(patternId) => setConfig({
+          layoutPattern: patternId as any,
+          ...(['C', 'D'].includes(patternId) ? { templateCategory: 'double' } : { templateCategory: 'single' })
+        })}
       />
 
       {isLogoModalOpen && (

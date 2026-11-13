@@ -24,8 +24,8 @@ import psutil
 from datetime import datetime, timedelta
 
 # ── Content limits (Nov 2026): short, readable clippings ──────────────────
-MAX_HEADLINE_WORDS = 6
-MAX_ARTICLE_WORDS = 50
+MAX_HEADLINE_WORDS = 10
+MAX_ARTICLE_WORDS = 100
 
 
 def _limit_words(text, max_words):

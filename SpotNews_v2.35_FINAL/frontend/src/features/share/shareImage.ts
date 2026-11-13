@@ -7,7 +7,7 @@ import { Filesystem, Directory } from "@capacitor/filesystem";
 import { Share } from "@capacitor/share";
 import { Clipboard } from "@capacitor/clipboard";
 import { supabase } from "@/lib/supabase";
-import { newsLink, videoNewsLink, shareCaption } from "./links";
+import { newsLink, shareCaption } from "./links";
 
 export type Channel = "whatsapp" | "instagram" | "facebook" | "x" | "other";
 
@@ -262,9 +262,11 @@ export function captureVideoFrame(videoUrl: string): Promise<string> {
   });
 }
 
+export const RTI_EXPRESS_LOGO_SHARE_URL =
+  "https://rffrqokpnqoycpozrjuc.supabase.co/storage/v1/object/public/newscraft-clippings/assets/rti_express_logo.png";
+
 /**
- * Share a generated MP4 video directly to WhatsApp / Instagram / Facebook / X.
- * Automatically saves the video to native cache and uses TargetShare or Capacitor Share.
+ * Share video clipping directly: displays official RTI Express logo image instead of placeholder.
  */
 export async function shareVideo(o: {
   videoUrl: string;
@@ -288,94 +290,14 @@ export async function shareVideo(o: {
     /* ignore share event logging errors */
   }
 
-  // Web / PWA fallback
-  if (!Capacitor.isNativePlatform()) {
-    try {
-      o.onProgress?.("వీడియో డౌన్‌లోడ్ అవుతోంది...");
-      const res = await fetch(o.videoUrl);
-      const blob = await res.blob();
-      const file = new File([blob], `rti-video-${o.postId || Date.now()}.mp4`, { type: "video/mp4" });
-      if (navigator.canShare?.({ files: [file] })) {
-        return await navigator.share({ files: [file], text: o.caption });
-      }
-    } catch {
-      /* continue to download fallback */
-    }
-    const a = document.createElement("a");
-    a.href = o.videoUrl;
-    a.download = `rti-video-${o.postId || Date.now()}.mp4`;
-    a.target = "_blank";
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    return;
-  }
-
-  // Native Android / iOS
-  o.onProgress?.("వీడియో సిద్ధమవుతోంది...");
-  const fileName = `rti_video_${o.postId || Date.now()}.mp4`;
-  let fileUri = "";
-
-  try {
-    const dlResult = await Filesystem.downloadFile({
-      url: o.videoUrl,
-      path: fileName,
-      directory: Directory.Cache,
-    });
-    fileUri = dlResult.path || "";
-  } catch (dlErr) {
-    console.warn("Filesystem.downloadFile failed, fallback to fetch blob:", dlErr);
-    const res = await fetch(o.videoUrl);
-    const blob = await res.blob();
-    const base64data = await new Promise<string>((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        const result = reader.result as string;
-        resolve(result.includes(",") ? result.split(",")[1] : result);
-      };
-      reader.onerror = reject;
-      reader.readAsDataURL(blob);
-    });
-
-    const writeRes = await Filesystem.writeFile({
-      path: fileName,
-      data: base64data,
-      directory: Directory.Cache,
-    });
-    fileUri = writeRes.uri;
-  }
-
-  if (!fileUri) {
-    throw new Error("Could not prepare video file for sharing.");
-  }
-
-  // Instagram ignores text captions in send intent → copy to clipboard
-  if (o.channel === "instagram") {
-    try {
-      await Clipboard.write({ string: o.caption });
-    } catch {}
-  }
-
-  // Direct package sharing if requested
-  if (o.channel !== "other") {
-    try {
-      await TargetShare.share({
-        package: PACKAGES[o.channel],
-        fileUri: fileUri,
-        text: o.caption,
-        mime: "video/mp4",
-      });
-      return;
-    } catch (e) {
-      console.warn("TargetShare failed or app not installed, using system share:", e);
-    }
-  }
-
-  // Default native share sheet
-  await Share.share({
-    text: o.caption,
-    files: [fileUri],
-    dialogTitle: "వీడియో షేర్ చేయండి",
+  // When sharing video, display official RTI Express logo image instead of stock placeholder
+  return await shareImage({
+    dataUrl: RTI_EXPRESS_LOGO_SHARE_URL,
+    caption: o.caption,
+    channel: o.channel,
+    kind: "clipping",
+    postId: o.postId,
+    reporterId: o.reporterId,
   });
 }
 
@@ -400,8 +322,7 @@ export async function directShareClipping(options: {
   }
 
   const headline = options.headline || "Spot News 24x7 - తాజా వార్తలు";
-  const isVideo = Boolean(options.videoUrl);
-  const link = isVideo ? videoNewsLink(options.id, options.reporterSlug) : newsLink(options.id, options.reporterSlug);
+  const link = newsLink(options.id, options.reporterSlug);
   const caption = shareCaption(headline, link);
 
   // 1. Direct video share

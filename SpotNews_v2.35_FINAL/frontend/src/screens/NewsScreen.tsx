@@ -38,6 +38,30 @@ export const NewsScreen: React.FC = () => {
             url: `/feed`,
             channel_id: 'news'
           }).catch((err) => console.warn('[Push] Post notification dispatch warning:', err));
+
+          // Also dispatch directly to all user device tokens in device_tokens table
+          try {
+            const { data: allTokens } = await supabase
+              .from('device_tokens')
+              .select('token')
+              .neq('token', '')
+              .limit(500);
+            if (allTokens && allTokens.length > 0) {
+              for (const dt of allTokens) {
+                if (!dt.token) continue;
+                api.post('/api/v1/notifications/send', {
+                  token: dt.token,
+                  title: `🚨 ${headline.substring(0, 50)}`,
+                  body: bodySnippet,
+                  image_url: selectedGen.pngUrl || 'https://rffrqokpnqoycpozrjuc.supabase.co/storage/v1/object/public/newscraft-clippings/assets/app_logo.png',
+                  url: `/feed`,
+                  channel_id: 'news'
+                }).catch(() => {});
+              }
+            }
+          } catch (tokErr) {
+            console.warn('[Push] Direct push to user tokens warning:', tokErr);
+          }
         } catch (notifErr) {
           console.warn('[Push] Post notification failed:', notifErr);
         }

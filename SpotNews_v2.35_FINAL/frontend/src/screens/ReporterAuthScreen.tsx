@@ -45,7 +45,6 @@ export const ReporterAuthScreen: React.FC = () => {
   const [stateName, setStateName] = useState<'Andhra Pradesh' | 'Telangana'>('Andhra Pradesh');
   const [district, setDistrict] = useState('');
   const [aadhaar, setAadhaar] = useState<File | null>(null);
-  const [pressId, setPressId] = useState<File | null>(null);
   const [agreed, setAgreed] = useState(false);
 
   const districts = useMemo(() => DISTRICTS.filter((d) => d.state === stateName), [stateName]);
@@ -54,7 +53,6 @@ export const ReporterAuthScreen: React.FC = () => {
   // Uploads start as soon as a photo/document is chosen, so "Submit" is quick
   const photoUpload = useRef<Promise<string> | null>(null);
   const aadhaarUpload = useRef<Promise<string> | null>(null);
-  const pressUpload = useRef<Promise<string> | null>(null);
 
   // Wake the (free-tier) server early so OTP and uploads respond fast
   useEffect(() => {
@@ -72,10 +70,10 @@ export const ReporterAuthScreen: React.FC = () => {
     p.catch(() => {});
     photoUpload.current = p;
   };
-  const startDocUpload = (f: File, kind: 'aadhaar' | 'press_id') => {
-    const p = prepareImage(f, { maxEdge: 2000, fileName: kind }).then((img) => reporterAccountService.uploadPrivateDoc(img, kind));
+  const startDocUpload = (f: File) => {
+    const p = prepareImage(f, { maxEdge: 2000, fileName: 'aadhaar' }).then((img) => reporterAccountService.uploadPrivateDoc(img, 'aadhaar'));
     p.catch(() => {});
-    if (kind === 'aadhaar') aadhaarUpload.current = p; else pressUpload.current = p;
+    aadhaarUpload.current = p;
   };
 
   useEffect(() => {
@@ -188,12 +186,11 @@ export const ReporterAuthScreen: React.FC = () => {
       setProgress('ఫోటో పంపుతున్నాం… · Uploading photo');
       const photoUrl = photoFile ? await retry(photoUpload, () => startPhotoUpload(photoFile)) : '';
       setProgress('ఆధార్ పంపుతున్నాం… · Uploading Aadhaar');
-      const aadhaarPath = await retry(aadhaarUpload, () => startDocUpload(aadhaar, 'aadhaar'));
-      const pressPath = pressId ? await retry(pressUpload, () => startDocUpload(pressId, 'press_id')) : '';
+      const aadhaarPath = await retry(aadhaarUpload, () => startDocUpload(aadhaar));
       setProgress('నమోదు పూర్తి చేస్తున్నాం… · Finishing');
       await reporterAccountService.submitRegistration({
         userId: user.id, name: name.trim() || user.full_name, phone: phone || user.phone_number || '',
-        email: user.email, state: stateName, district, photoUrl, aadhaarPath, pressIdPath: pressPath || undefined,
+        email: user.email, state: stateName, district, photoUrl, aadhaarPath,
         termsVersion: REPORTER_TERMS_VERSION,
       });
       if (photoUrl && !photoUrl.startsWith('data:')) {
@@ -394,9 +391,7 @@ export const ReporterAuthScreen: React.FC = () => {
               <p className="text-[19px] font-bold text-[#0F172A] m-0">పత్రాలు · Documents</p>
               <p className="text-[15.5px] text-[#475569] m-0 leading-relaxed">సూపర్ అడ్మిన్ మాత్రమే మీ ఆధార్ చూస్తారు. · Only the super admin can see your Aadhaar.</p>
               <DocPicker label="ఆధార్ కార్డు ఫోటో (తప్పనిసరి)" sub="Aadhaar card photo (required)" file={aadhaar}
-                onPick={(f) => { setAadhaar(f); if (f) startDocUpload(f, 'aadhaar'); }} />
-              <DocPicker label="పాత ప్రెస్ ID కార్డు (ఉంటే)" sub="Old press ID card (optional)" file={pressId}
-                onPick={(f) => { setPressId(f); if (f) startDocUpload(f, 'press_id'); }} />
+                onPick={(f) => { setAadhaar(f); if (f) startDocUpload(f); }} />
               <ReporterTerms agreed={agreed} onChange={setAgreed} />
               <button className="w-full rounded-2xl py-4 text-[20px] font-bold text-white border-0 cursor-pointer flex items-center justify-center gap-2 disabled:opacity-50 shadow-[0_10px_22px_rgba(225,29,46,0.3)]"
                 style={{ background: 'linear-gradient(180deg,#F0202F,#B30F1C)' }}

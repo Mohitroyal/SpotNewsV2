@@ -42,8 +42,14 @@ export async function scheduleMomentAlerts(district?: string | null, state?: str
     if (!listening && navigate) {
       listening = true;
       LocalNotifications.addListener('localNotificationActionPerformed', (a: any) => {
-        const url = (a.notification.extra as any)?.url;
-        if (url) navigate(url);
+        const extra = (a.notification?.extra || {}) as any;
+        const clipId = extra?.clipId || extra?.clipping_id || extra?.id;
+        const url = extra?.url;
+        if (clipId) {
+          navigate(`/feed?clipId=${encodeURIComponent(clipId)}`);
+        } else if (url) {
+          navigate(url);
+        }
       });
     }
 

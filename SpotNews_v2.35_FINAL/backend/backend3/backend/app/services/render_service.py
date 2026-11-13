@@ -151,7 +151,12 @@ class RenderService:
         if len(_hl_words) > 6:
             data["headline"] = " ".join(_hl_words[:6])
 
-        data["sections"] = processed_sections
+        # Single paragraph requirement: join all sections into one single paragraph without newlines or extra spaces
+        single_paragraph_body = " ".join([re.sub(r'[\r\n\t]+', ' ', s).strip() for s in processed_sections if s.strip()])
+        single_paragraph_body = re.sub(r'\s+', ' ', single_paragraph_body).strip()
+        data["sections"] = [single_paragraph_body] if single_paragraph_body else []
+        data["article_text"] = single_paragraph_body
+        data["raw_content"] = single_paragraph_body
 
         # 2b. Auto-extract summary and key takeaways if missing
         if not data.get("summary") or not data.get("bullet_points") or not isinstance(data.get("bullet_points"), list) or len(data.get("bullet_points")) == 0:
@@ -519,12 +524,10 @@ class RenderService:
             }}
             {custom_border_css}
             .article-content, .paragraph, .nc-text-region-box p, #compositor-canvas p {{
-                text-align: justify !important;
-                text-justify: inter-word !important;
-                text-align-last: left !important;
+                text-align: left !important;
                 letter-spacing: -0.15px !important;
-                margin-bottom: 4px !important;
-                line-height: 1.22 !important;
+                margin-bottom: 0 !important;
+                line-height: 1.5 !important;
             }}
         </style>
         """

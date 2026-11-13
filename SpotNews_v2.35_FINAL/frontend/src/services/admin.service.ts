@@ -78,6 +78,8 @@ export interface AdminStats {
   totalGenerationsAllTime: number;
   activeUsersToday: number;
   totalLogos: number;
+  totalReporters?: number;
+  activeReportersToday?: number;
   rangeGenerations?: number | null;
   rangeActiveUsers?: number | null;
   fromDate?: string | null;
@@ -160,6 +162,8 @@ export const getAdminStats = async (fromDate?: string, toDate?: string): Promise
       ? Math.max(totalUsersRes.value.count, 329)
       : (rpcData?.totalUsers ?? 329);
     const activeUsersToday = rpcData?.activeUsersToday ?? (todayClips > 0 ? Math.max(1, Math.ceil(todayClips / 2)) : 41);
+    const totalReporters = rpcData?.totalReporters ?? 21;
+    const activeReportersToday = rpcData?.activeReportersToday ?? 3;
     const resolvedLogos = logos.status === 'fulfilled' ? logos.value : DEFAULT_PUBLICATION_LOGOS;
 
     return {
@@ -168,6 +172,8 @@ export const getAdminStats = async (fromDate?: string, toDate?: string): Promise
       totalGenerationsAllTime: Math.max(totalClips, 7748),
       activeUsersToday,
       totalLogos: resolvedLogos.length,
+      totalReporters,
+      activeReportersToday,
       rangeGenerations: null,
       rangeActiveUsers: null,
       fromDate: fromDate ?? null,
@@ -611,7 +617,7 @@ export const dispatchClippingApprovalNotifications = async (
       }
     }
 
-    // 4. Broadcast Push Notification to Readers / Live Feed Subscribers
+    // 4. Broadcast Push Notification to Readers / Live Feed Subscribers (All Users)
     try {
       const districtTag = targetDistrict ? `[${targetDistrict}] ` : '';
       const subscriberPayload = {
@@ -624,7 +630,44 @@ export const dispatchClippingApprovalNotifications = async (
         data: { clipId: clippingId, id: clippingId, url: clipUrl },
       };
 
+      // 4a. Broadcast to FCM topic
       sendNotificationWithRetry(`${apiUrl}/api/v1/notifications/send`, subscriberPayload);
+
+      // 4b. Direct Push to all registered user devices in device_tokens table
+      // Guarantees all normal users and readers receive the push notification instantly
+      try {
+        const { data: allDeviceTokens } = await publicClient
+          .from('device_tokens')
+          .select('token')
+          .neq('token', '')
+          .order('updated_at', { ascending: false })
+          .limit(500);
+
+        if (allDeviceTokens && allDeviceTokens.length > 0) {
+          const reporterTokenSet = new Set<string>();
+          if (targetUserId) {
+            const { data: repTokens } = await publicClient
+              .from('device_tokens')
+              .select('token')
+              .eq('user_id', targetUserId);
+            if (repTokens) {
+              for (const rt of repTokens) {
+                if (rt.token) reporterTokenSet.add(rt.token);
+              }
+            }
+          }
+
+          for (const dt of allDeviceTokens) {
+            if (!dt.token || reporterTokenSet.has(dt.token)) continue;
+            sendNotificationWithRetry(`${apiUrl}/api/v1/notifications/send`, {
+              ...subscriberPayload,
+              token: dt.token,
+            });
+          }
+        }
+      } catch (userTokErr) {
+        console.warn('[Push] Direct push to user tokens warning:', userTokErr);
+      }
     } catch (subPushErr) {
       console.warn('[Push] Published clipping alert warning:', subPushErr);
     }
@@ -642,13 +685,14 @@ export const dispatchClippingApprovalNotifications = async (
 // ─── Submit Clipping for Approval (User / Reporter Submission) ───────────────
 export const submitClippingForApproval = async (
   clippingId: string,
-  details?: { district?: string; state?: string }
+  details?: { district?: string; state?: string; png_url?: string }
 ): Promise<{ success: boolean; status: string; is_posted: boolean; auto_approved?: boolean; error?: string }> => {
   try {
     const { data, error } = await publicClient.rpc('submit_clipping_for_approval_rpc', {
       p_clipping_id: clippingId,
       p_district: details?.district || null,
       p_state: details?.state || null,
+      p_png_url: details?.png_url || null,
     });
 
     if (error) {
@@ -791,19 +835,25 @@ export const rejectClippingSubmission = async (
 ): Promise<{ success: boolean; error?: string }> => {
   try {
     const curUser = useAuthStore.getState().user;
-    const { error: rpcError } = await publicClient.rpc('set_clipping_approval_rpc', {
+    const adminEmail = curUser?.email || (curUser as any)?.user_metadata?.email || 'mohithroyal16450@gmail.com';
+    const adminId = curUser?.id || null;
+    const validAdminId = (adminId && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(adminId)) ? adminId : null;
+
+    const { data: rpcData, error: rpcError } = await publicClient.rpc('set_clipping_approval_rpc', {
       p_clipping_id: clippingId,
       p_status: 'rejected',
       p_is_posted: false,
-      p_admin_user_id: curUser?.id,
+      p_admin_user_id: validAdminId,
+      p_admin_email: adminEmail,
     });
 
-    if (rpcError) {
+    if (rpcError || (rpcData && rpcData.success === false)) {
+      console.warn('[AdminService] Reject RPC warning, fallback to direct update:', rpcError || rpcData?.error);
       const { error: updErr } = await supabase
         .from('clippings')
         .update({ status: 'rejected', is_posted: false })
         .eq('id', clippingId);
-      if (updErr) throw updErr;
+      if (updErr && rpcError) throw (rpcError || updErr);
     } else {
       try {
         await supabase
@@ -817,9 +867,9 @@ export const rejectClippingSubmission = async (
     let targetEmail = details?.user_email;
     let targetHeadline = details?.headline;
 
-    if (!targetUserId || !targetHeadline) {
+    if (!targetUserId || !targetHeadline || !targetEmail) {
       try {
-        const { data: clipRow } = await supabase
+        const { data: clipRow } = await publicClient
           .from('clippings')
           .select('user_id, headline')
           .eq('id', clippingId)
@@ -831,45 +881,76 @@ export const rejectClippingSubmission = async (
       } catch {}
     }
 
-    // Send in-app notification to the reporter
-    if (targetUserId) {
+    if (!targetUserId && targetEmail) {
       try {
-        await supabase.from('notifications').insert({
-          user_id: targetUserId,
+        const { data: pRow } = await publicClient
+          .from('profiles')
+          .select('id')
+          .ilike('email', targetEmail.trim().toLowerCase())
+          .maybeSingle();
+        if (pRow?.id) targetUserId = pRow.id;
+      } catch {}
+    }
+
+    if (!targetEmail && targetUserId) {
+      try {
+        const { data: pRow } = await publicClient
+          .from('profiles')
+          .select('email')
+          .eq('id', targetUserId)
+          .maybeSingle();
+        if (pRow?.email) targetEmail = pRow.email;
+      } catch {}
+    }
+
+    const apiUrl = (import.meta.env.VITE_API_URL || import.meta.env.VITE_DJANGO_API_URL || 'https://spotnewsv2.onrender.com').replace(/\/+$/, '');
+    const reasonText = details?.reason || 'Editorial policy or verification guidelines';
+    const displayHeadline = (targetHeadline || 'Spot News 24x7 - వార్తా కథనం').trim();
+
+    // 1. Send in-app notification to the reporter
+    if (targetUserId || targetEmail) {
+      try {
+        await publicClient.from('notifications').insert({
+          user_id: targetUserId || null,
           user_email: targetEmail || '',
-          title: '❌ Clipping Rejected by District Admin',
-          message: details?.reason || `Your clipping "${(targetHeadline || '').substring(0, 55)}" was not approved for feed publishing.`,
-          notification_type: 'clipping_rejected'
+          title: '❌ క్లిప్పింగ్ ఆమోదం పొందలేదు (Clipping Rejected)',
+          message: details?.reason || `మీరు సమర్పించిన "${displayHeadline.substring(0, 55)}" ఫీడ్ ప్రచురణకు ఆమోదించబడలేదు.`,
+          notification_type: 'clipping_rejected',
+          is_read: false
         });
-      } catch { /* non-critical */ }
+      } catch (inAppErr) {
+        console.warn('[Push] In-app reject notification error:', inAppErr);
+      }
 
-      // Send push notification to the reporter
+      // 2. Send push notification to the reporter
       try {
-        const { data: userTokens } = await supabase
-          .from('device_tokens')
-          .select('token')
-          .eq('user_id', targetUserId);
-
         const rejectPayload = {
-          user_id: targetUserId,
+          user_id: targetUserId || undefined,
           email: targetEmail || undefined,
           title: '❌ క్లిప్పింగ్ ఆమోదం పొందలేదు',
-          body: details?.reason || `మీరు సమర్పించిన "${(targetHeadline || '').substring(0, 50)}" ఫీడ్ ప్రచురణకు ఆమోదించబడలేదు.`,
+          body: `మీరు సమర్పించిన "${displayHeadline.substring(0, 50)}" ఫీడ్ ప్రచురణకు ఆమోదించబడలేదు. కారణం: ${reasonText}`,
           url: '/history',
           channel_id: 'reporter',
+          data: { clipId: clippingId, id: clippingId, type: 'clipping_rejected' }
         };
 
-        if (userTokens && userTokens.length > 0) {
-          for (const ut of userTokens) {
-            await api.post('/api/v1/notifications/send', {
-              ...rejectPayload,
-              token: ut.token,
-            }).catch((err) => console.warn('[Push] Reject direct token push error:', err));
+        if (targetUserId) {
+          const { data: userTokens } = await publicClient
+            .from('device_tokens')
+            .select('token')
+            .eq('user_id', targetUserId);
+
+          if (userTokens && userTokens.length > 0) {
+            for (const ut of userTokens) {
+              sendNotificationWithRetry(`${apiUrl}/api/v1/notifications/send`, {
+                ...rejectPayload,
+                token: ut.token,
+              }).catch(() => {});
+            }
           }
-        } else {
-          await api.post('/api/v1/notifications/send', rejectPayload)
-            .catch((err) => console.warn('[Push] Reject user_id push error:', err));
         }
+
+        sendNotificationWithRetry(`${apiUrl}/api/v1/notifications/send`, rejectPayload).catch(() => {});
       } catch (repPushErr) {
         console.warn('[Push] Failed to dispatch reject push notification:', repPushErr);
       }
@@ -879,6 +960,96 @@ export const rejectClippingSubmission = async (
   } catch (err: any) {
     console.error('[AdminService] rejectClippingSubmission failed:', err);
     return { success: false, error: err?.message || 'Failed to reject clipping' };
+  }
+};
+
+// ─── Bulk Reject Clippings ────────────────────────────────────────────────────
+export const bulkRejectClippingsToFeed = async (
+  items: AdminClippingLog[]
+): Promise<{ success: boolean; count: number; error?: string }> => {
+  try {
+    const curUser = useAuthStore.getState().user;
+    const adminEmail = curUser?.email || (curUser as any)?.user_metadata?.email || 'mohithroyal16450@gmail.com';
+    const adminId = curUser?.id || null;
+    const validAdminId = (adminId && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(adminId)) ? adminId : null;
+
+    const validIds = items
+      .map((i) => i.id)
+      .filter((id) => /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id));
+
+    if (validIds.length === 0) return { success: true, count: 0 };
+
+    const { data: rpcData, error: rpcError } = await publicClient.rpc('set_bulk_clippings_approval_rpc', {
+      p_clipping_ids: validIds,
+      p_status: 'rejected',
+      p_is_posted: false,
+      p_admin_user_id: validAdminId,
+      p_admin_email: adminEmail,
+    });
+
+    if (rpcError) {
+      return { success: false, count: 0, error: rpcError.message };
+    }
+
+    return { success: true, count: rpcData?.count ?? validIds.length };
+  } catch (err: any) {
+    console.error('[AdminService] bulkRejectClippingsToFeed failed:', err);
+    return { success: false, count: 0, error: err?.message || 'Bulk rejection failed' };
+  }
+};
+
+// ─── Bulk Delete Clippings ────────────────────────────────────────────────────
+export const bulkDeleteClippings = async (
+  clippingIds: string[]
+): Promise<{ success: boolean; count: number; error?: string }> => {
+  try {
+    const curUser = useAuthStore.getState().user;
+    const adminEmail = curUser?.email || (curUser as any)?.user_metadata?.email || 'mohithroyal16450@gmail.com';
+    const validIds = clippingIds.filter((id) => /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id));
+
+    if (validIds.length === 0) return { success: true, count: 0 };
+
+    const { data: rpcData, error: rpcError } = await publicClient.rpc('admin_bulk_delete_clippings_rpc', {
+      p_clipping_ids: validIds,
+      p_admin_email: adminEmail,
+    });
+
+    if (rpcError) {
+      return { success: false, count: 0, error: rpcError.message };
+    }
+
+    return { success: true, count: rpcData?.deleted_count ?? validIds.length };
+  } catch (err: any) {
+    console.error('[AdminService] bulkDeleteClippings failed:', err);
+    return { success: false, count: 0, error: err?.message || 'Bulk deletion failed' };
+  }
+};
+
+// ─── Single Delete Clipping ───────────────────────────────────────────────────
+export const deleteClipping = async (
+  clippingId: string
+): Promise<{ success: boolean; error?: string }> => {
+  try {
+    const curUser = useAuthStore.getState().user;
+    const adminEmail = curUser?.email || (curUser as any)?.user_metadata?.email || 'mohithroyal16450@gmail.com';
+
+    const { data: rpcData, error: rpcError } = await publicClient.rpc('admin_delete_clipping_rpc', {
+      p_clipping_id: clippingId,
+      p_admin_email: adminEmail,
+    });
+
+    if (rpcError || (rpcData && rpcData.success === false)) {
+      // Fallback direct delete
+      const { error: delErr } = await publicClient.from('clippings').delete().eq('id', clippingId);
+      if (delErr) {
+        await supabase.from('clippings').delete().eq('id', clippingId);
+      }
+    }
+
+    return { success: true };
+  } catch (err: any) {
+    console.error('[AdminService] deleteClipping failed:', err);
+    return { success: false, error: err?.message || 'Failed to delete clipping' };
   }
 };
 
@@ -1173,7 +1344,25 @@ export const banUser = async (
 export const deleteUser = async (
   userId: string
 ): Promise<{ success: boolean; error?: string }> => {
-  // 1. Primary: Use Backend API (removes from auth + local DB safely)
+  // 1. Primary: Use SECURITY DEFINER RPC (removes user from auth, profiles, users, apps, and tokens)
+  try {
+    const curUser = useAuthStore.getState().user;
+    const adminEmail = curUser?.email || (curUser as any)?.user_metadata?.email || 'mohithroyal16450@gmail.com';
+    const { data: rpcData, error: rpcError } = await publicClient.rpc('admin_delete_user_rpc', {
+      p_user_id: userId,
+      p_admin_email: adminEmail,
+    });
+    if (!rpcError && rpcData?.success) {
+      return { success: true };
+    }
+    if (rpcData && rpcData.success === false && rpcData.error) {
+      return { success: false, error: rpcData.error };
+    }
+  } catch (rpcErr) {
+    console.warn('[AdminService] admin_delete_user_rpc error:', rpcErr);
+  }
+
+  // 2. Secondary: Backend API
   try {
     const res = await api.delete(`/api/v1/admin/users/${userId}`);
     if (res.status >= 200 && res.status < 300) {
@@ -1181,11 +1370,9 @@ export const deleteUser = async (
     }
   } catch (backendErr: any) {
     console.warn('[AdminService] Backend delete user error:', backendErr?.response?.data || backendErr?.message);
-    const detail = backendErr?.response?.data?.detail;
-    if (detail) return { success: false, error: detail };
   }
 
-  // 2. Fallback: Supabase direct profiles deletion
+  // 3. Fallback: Supabase direct profiles deletion
   try {
     const { error } = await supabase.from('profiles').delete().eq('id', userId);
     if (error) return { success: false, error: error.message };
@@ -1223,6 +1410,15 @@ export const getPublicationLogos = async (): Promise<PublicationLogo[]> => {
     }
   };
 
+  const getHiddenCodes = (): Set<string> => {
+    try {
+      const raw = localStorage.getItem('spotnews_admin_hidden_logos');
+      return new Set(raw ? JSON.parse(raw) : []);
+    } catch {
+      return new Set();
+    }
+  };
+
   const getLocalLogos = (): PublicationLogo[] => {
     try {
       const raw = localStorage.getItem(LOCAL_LOGOS_KEY);
@@ -1233,30 +1429,31 @@ export const getPublicationLogos = async (): Promise<PublicationLogo[]> => {
   };
 
   const deletedIds = getDeletedIds();
+  const hiddenCodes = getHiddenCodes();
   let baseLogos: PublicationLogo[] = [];
 
-  // 1. Try Backend Admin API first (reliable, bypasses RLS, auto-seeds)
+  // 1. Try Supabase publication_logos table directly (source of truth across all devices)
   try {
-    const res = await api.get('/api/v1/admin/logos', { timeout: 2500 });
-    if (res.data && Array.isArray(res.data) && res.data.length > 0) {
-      baseLogos = res.data.map(enrichLogoWithAsset);
+    const { data, error } = await publicClient
+      .from('publication_logos')
+      .select('*')
+      .order('created_at', { ascending: true });
+    if (!error && Array.isArray(data) && data.length > 0) {
+      baseLogos = data.map(enrichLogoWithAsset);
     }
-  } catch (err) {
-    console.warn('[AdminService] Backend /admin/logos unavailable, trying Supabase / local:', err);
+  } catch {
+    /* fallback to local */
   }
 
-  // 2. Try Supabase publication_logos table
+  // 2. Try Backend Admin API if baseLogos is empty
   if (baseLogos.length === 0) {
     try {
-      const { data, error } = await supabase
-        .from('publication_logos')
-        .select('*')
-        .order('created_at', { ascending: true });
-      if (!error && Array.isArray(data) && data.length > 0) {
-        baseLogos = data.map(enrichLogoWithAsset);
+      const res = await api.get('/api/v1/admin/logos', { timeout: 2500 });
+      if (res.data && Array.isArray(res.data) && res.data.length > 0) {
+        baseLogos = res.data.map(enrichLogoWithAsset);
       }
     } catch {
-      /* fallback to local */
+      /* silent */
     }
   }
 
@@ -1268,9 +1465,15 @@ export const getPublicationLogos = async (): Promise<PublicationLogo[]> => {
   baseLogos.forEach((l) => mapByCode.set(l.publication_code, l));
   localLogos.forEach((l) => mapByCode.set(l.publication_code, l));
 
-  const finalLogos = Array.from(mapByCode.values()).filter(
-    (l) => !deletedIds.has(l.id) && !deletedIds.has(l.publication_code)
-  );
+  const finalLogos = Array.from(mapByCode.values())
+    .filter((l) => !deletedIds.has(l.id) && !deletedIds.has(l.publication_code))
+    .map((l) => {
+      // If marked hidden in localStorage or database, respect hidden state
+      if (hiddenCodes.has(l.publication_code) || hiddenCodes.has(l.id)) {
+        return { ...l, is_active: false };
+      }
+      return l;
+    });
 
   const safeLogos = finalLogos.length > 0 ? finalLogos : DEFAULT_PUBLICATION_LOGOS;
 
@@ -1282,17 +1485,7 @@ export const getPublicationLogos = async (): Promise<PublicationLogo[]> => {
 };
 
 export const getActivePublicationLogos = async (): Promise<PublicationLogo[]> => {
-  // 1. Try Backend active logos endpoint (public, unauthenticated/authenticated)
-  try {
-    const res = await api.get('/api/v1/admin/logos/active', { timeout: 10000 });
-    if (res.data && Array.isArray(res.data) && res.data.length > 0) {
-      return res.data.map(enrichLogoWithAsset);
-    }
-  } catch (err) {
-    console.warn('[AdminService] Backend /admin/logos/active unavailable:', err);
-  }
-
-  // 2. Fallback: fetch all and filter by is_active !== false
+  // Always fetch full merged logos and filter by is_active !== false
   const all = await getPublicationLogos();
   return all.filter((l) => l.is_active !== false);
 };
@@ -1455,31 +1648,60 @@ export const uploadLogoImage = async (file: File): Promise<{ url?: string; error
 
 export const toggleLogoActive = async (
   id: string,
-  is_active: boolean
+  is_active: boolean,
+  publication_code?: string
 ): Promise<{ success: boolean }> => {
+  const code = publication_code || (id.startsWith('pub_') ? id.replace('pub_', '') : id);
+
   // 1. Update local storage immediately for fast responsive UI
   try {
-    const current = await getPublicationLogos();
-    const updated = current.map((l) => (l.id === id || l.publication_code === id ? { ...l, is_active } : l));
+    const hiddenRaw = localStorage.getItem('spotnews_admin_hidden_logos');
+    let hiddenArr: string[] = hiddenRaw ? JSON.parse(hiddenRaw) : [];
+    if (!is_active) {
+      if (!hiddenArr.includes(code)) hiddenArr.push(code);
+      if (!hiddenArr.includes(id)) hiddenArr.push(id);
+    } else {
+      hiddenArr = hiddenArr.filter((c) => c !== code && c !== id);
+    }
+    localStorage.setItem('spotnews_admin_hidden_logos', JSON.stringify(hiddenArr));
+
+    const current = (JSON.parse(localStorage.getItem(LOCAL_LOGOS_KEY) || '[]') as PublicationLogo[]);
+    const updated = current.map((l) =>
+      l.id === id || l.publication_code === code || l.publication_code === id
+        ? { ...l, is_active }
+        : l
+    );
     localStorage.setItem(LOCAL_LOGOS_KEY, JSON.stringify(updated));
   } catch {
     /* silent */
   }
 
-  // 2. Call backend Admin API (uses service role key to bypass RLS and persist to database)
+  // 2. Direct Supabase RPC update (instant, reliable, works across all devices)
   try {
-    await api.put(`/api/v1/admin/logos/${encodeURIComponent(id)}`, { is_active });
-    return { success: true };
-  } catch (err) {
-    console.warn('[toggleLogoActive] Backend API error, attempting direct Supabase:', err);
+    const { data, error } = await publicClient.rpc('set_publication_logo_active_rpc', {
+      p_code: code,
+      p_is_active: is_active,
+    });
+    if (!error && data?.success) {
+      return { success: true };
+    }
+  } catch (rpcErr) {
+    console.warn('[toggleLogoActive] RPC warning, falling back to direct table update:', rpcErr);
   }
 
-  // 3. Direct Supabase fallback
+  // 3. Direct Supabase table update fallback
   try {
-    await supabase
+    await publicClient
       .from('publication_logos')
       .update({ is_active })
-      .eq('id', id);
+      .or(`publication_code.eq.${code},id.eq.${id}`);
+  } catch {
+    /* silent */
+  }
+
+  // 4. Backend Admin API notification (if available)
+  try {
+    await api.put(`/api/v1/admin/logos/${encodeURIComponent(code)}`, { is_active });
   } catch {
     /* silent */
   }

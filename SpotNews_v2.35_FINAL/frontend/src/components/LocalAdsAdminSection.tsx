@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import {
   Megaphone, Plus, CheckCircle2,
   Clock, Phone, MessageSquare, Globe, Trash2,
-  Check, X, RefreshCw, Loader2, Pause, Play, DollarSign, Zap
+  Check, X, RefreshCw, Loader2, Pause, Play, DollarSign, Zap, Eye
 } from 'lucide-react';
 import { localAdsService } from '@/services/localAds.service';
 import type { LocalAd, LocalAdMediaType, LocalAdCtaType } from '@/types/localAds';
@@ -207,6 +207,7 @@ export const LocalAdsAdminSection: React.FC<LocalAdsAdminSectionProps> = ({ isSu
   const acceptedCount = ads.filter((a) => a.status === 'accepted_payment_pending').length;
   const activeCount = ads.filter((a) => a.status === 'active').length;
   const rejectedCount = ads.filter((a) => a.status === 'rejected').length;
+  const totalViews = ads.reduce((acc, a) => acc + (a.views_count || 0), 0);
 
   const filteredAds = ads.filter((a) => {
     if (filter === 'all') return true;
@@ -303,7 +304,7 @@ export const LocalAdsAdminSection: React.FC<LocalAdsAdminSectionProps> = ({ isSu
       )}
 
       {/* KPI Counters */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+      <div className="grid grid-cols-2 sm:grid-cols-5 gap-2.5">
         <div
           onClick={() => setFilter('pending')}
           className={`cursor-pointer rounded-2xl p-3 border transition-all ${
@@ -341,6 +342,16 @@ export const LocalAdsAdminSection: React.FC<LocalAdsAdminSectionProps> = ({ isSu
             <CheckCircle2 className="w-4 h-4" />
           </div>
           <p className="text-2xl font-black text-[#0A2540] mt-1">{activeCount}</p>
+        </div>
+
+        <div
+          className="rounded-2xl p-3 border border-indigo-200 bg-indigo-50/70 shadow-xs"
+        >
+          <div className="flex items-center justify-between text-indigo-700">
+            <span className="text-[11px] font-bold uppercase tracking-wider">Total Ad Views</span>
+            <Eye className="w-4 h-4" />
+          </div>
+          <p className="text-2xl font-black text-[#0A2540] mt-1">{totalViews}</p>
         </div>
 
         <div
@@ -427,7 +438,7 @@ export const LocalAdsAdminSection: React.FC<LocalAdsAdminSectionProps> = ({ isSu
                       <p className="text-gray-600 line-clamp-2 text-[11px]">{ad.description}</p>
                     )}
 
-                    <div className="flex items-center gap-3 text-gray-500 text-[11px] pt-1">
+                    <div className="flex items-center gap-3 text-gray-500 text-[11px] pt-1 flex-wrap">
                       <span className="flex items-center gap-1 text-[#015BB3] font-medium">
                         {ad.cta_type === 'call' && <Phone className="w-3 h-3" />}
                         {ad.cta_type === 'whatsapp' && <MessageSquare className="w-3 h-3 text-emerald-600" />}
@@ -436,6 +447,11 @@ export const LocalAdsAdminSection: React.FC<LocalAdsAdminSectionProps> = ({ isSu
                       </span>
                       <span>•</span>
                       <span>Submitted: {new Date(ad.created_at).toLocaleDateString('en-IN')}</span>
+                      <span>•</span>
+                      <span className="inline-flex items-center gap-1 font-bold text-gray-700 bg-gray-100 px-2 py-0.5 rounded-full" title="Total Views">
+                        <Eye className="w-3.5 h-3.5 text-[#015BB3]" />
+                        <span>{ad.views_count ?? 0} views</span>
+                      </span>
                     </div>
                   </div>
                 </div>
@@ -476,6 +492,15 @@ export const LocalAdsAdminSection: React.FC<LocalAdsAdminSectionProps> = ({ isSu
                       Fee: {(ad.amount_inr ?? 0) === 0 ? 'Free (₹0)' : `₹${ad.amount_inr}`}
                     </span>
                   )}
+
+                  {/* Small eye button / badge showing ad views */}
+                  <div
+                    className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-blue-50 text-[#015BB3] border border-blue-200 text-xs font-bold"
+                    title="Ad Views / ఎన్నిసార్లు చూశారు"
+                  >
+                    <Eye className="w-3.5 h-3.5" />
+                    <span>{ad.views_count ?? 0} views</span>
+                  </div>
                 </div>
               </div>
 

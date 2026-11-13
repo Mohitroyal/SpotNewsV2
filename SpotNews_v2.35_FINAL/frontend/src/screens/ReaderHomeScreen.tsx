@@ -100,6 +100,26 @@ export const ReaderHomeScreen: React.FC = () => {
   const params = new URLSearchParams(loc.search);
   if (params.get('clipId') || params.get('id')) return <Navigate to={`/feed${loc.search}`} replace />;
 
+  const pendingClip = typeof window !== 'undefined' ? (sessionStorage.getItem('spotnews_pending_clip_id') || localStorage.getItem('spotnews_pending_clip_id')) : null;
+  if (pendingClip) {
+    try {
+      sessionStorage.removeItem('spotnews_pending_clip_id');
+      localStorage.removeItem('spotnews_pending_clip_id');
+    } catch {}
+    return <Navigate to={`/feed?clipId=${encodeURIComponent(pendingClip)}`} replace />;
+  }
+
+  useEffect(() => {
+    const handleClippingOpen = (ev: any) => {
+      const clipId = ev?.detail?.clipId;
+      if (clipId) {
+        navigate(`/feed?clipId=${encodeURIComponent(clipId)}&t=${Date.now()}`);
+      }
+    };
+    window.addEventListener('spotnews-open-clipping', handleClippingOpen);
+    return () => window.removeEventListener('spotnews-open-clipping', handleClippingOpen);
+  }, [navigate]);
+
   const openStory = (id: string) => navigate(`/feed?clipId=${encodeURIComponent(id)}`);
   const openEpaper = async () => {
     try { await Browser.open({ url: 'https://www.fouziyapublications.com/' }); }

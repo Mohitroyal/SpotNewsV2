@@ -1,4 +1,4 @@
-import { BrowserRouter as Router, Routes, Route, Navigate, Link, useNavigate, useLocation } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Navigate, Link, useNavigate, useLocation, useParams } from 'react-router-dom';
 import { useState, useEffect } from 'react';
 import { Plus, Newspaper, Home, Megaphone, CloudSun, Grid3x3, BarChart3 } from 'lucide-react';
 // import { useTranslation } from './lib/i18n';
@@ -251,6 +251,19 @@ import { GoogleAuth } from '@codetrix-studio/capacitor-google-auth';
 import { initPush, setPushDistrictName } from './lib/push';
 import { scheduleMomentAlerts } from './lib/localMoments';
 import { initDeepLinks } from './lib/deepLinks';
+import { expandId } from './features/share/shortId';
+
+const ClippingRedirect: React.FC = () => {
+  const { clipId } = useParams<{ clipId: string }>();
+  const loc = useLocation();
+  const targetId = clipId ? expandId(clipId) : '';
+  if (!useAuthStore.getState().isAuthenticated) {
+    const guestId = 'guest_' + Math.random().toString(36).substring(2, 10);
+    useAuthStore.getState().login({ id: guestId, email: '', role: 'user' } as any, 'guest_token');
+  }
+  const search = loc.search ? '&' + loc.search.replace(/^\?/, '') : '';
+  return <Navigate to={`/feed?clipId=${encodeURIComponent(targetId)}${search}`} replace />;
+};
 
 function AppUrlListener() {
   const navigate = useNavigate();
@@ -258,6 +271,16 @@ function AppUrlListener() {
 
   useEffect(() => {
     const cleanupDeepLinks = initDeepLinks(navigate);
+
+    // Check if there is a pending clipping from cold start / notification launch
+    try {
+      const pending = sessionStorage.getItem('spotnews_pending_clip_id') || localStorage.getItem('spotnews_pending_clip_id');
+      if (pending) {
+        sessionStorage.removeItem('spotnews_pending_clip_id');
+        localStorage.removeItem('spotnews_pending_clip_id');
+        navigate(`/feed?clipId=${encodeURIComponent(pending)}`);
+      }
+    } catch {}
 
     const handleUrlOpen = (ev: Event) => {
       const customEv = ev as CustomEvent;
@@ -267,6 +290,19 @@ function AppUrlListener() {
       }
     };
     window.addEventListener('appUrlOpenRoute', handleUrlOpen);
+
+    const handleClippingOpen = (ev: Event) => {
+      const customEv = ev as CustomEvent;
+      const clipId = customEv.detail?.clipId;
+      if (clipId) {
+        try {
+          sessionStorage.removeItem('spotnews_pending_clip_id');
+          localStorage.removeItem('spotnews_pending_clip_id');
+        } catch {}
+        navigate(`/feed?clipId=${encodeURIComponent(clipId)}&t=${Date.now()}`);
+      }
+    };
+    window.addEventListener('spotnews-open-clipping', handleClippingOpen);
 
     // Auto initialize push notifications if enabled
     const savedNotifs = localStorage.getItem('spotnews_notifications');
@@ -287,6 +323,7 @@ function AppUrlListener() {
 
     return () => {
       window.removeEventListener('appUrlOpenRoute', handleUrlOpen);
+      window.removeEventListener('spotnews-open-clipping', handleClippingOpen);
       if (typeof cleanupDeepLinks === 'function') cleanupDeepLinks();
     };
   }, [navigate, user?.id]);
@@ -669,6 +706,10 @@ function App() {
           element={<LocationSelectScreen />}
         />
 
+        <Route path="/n/:clipId" element={<ClippingRedirect />} />
+        <Route path="/story/:clipId" element={<ClippingRedirect />} />
+        <Route path="/clip/:clipId" element={<ClippingRedirect />} />
+
         <Route
           path="/*"
           element={
@@ -676,6 +717,9 @@ function App() {
               <MainLayout>
                 <Routes>
                   <Route path="/" element={<ReaderHomeScreen />} />
+                  <Route path="/n/:clipId" element={<ClippingRedirect />} />
+                  <Route path="/story/:clipId" element={<ClippingRedirect />} />
+                  <Route path="/clip/:clipId" element={<ClippingRedirect />} />
                   <Route path="/feed" element={<FeedScreen />} />
                   <Route path="/post-ad" element={<PostAdScreen />} />
                   <Route path="/location" element={<LocationSelectScreen />} />

@@ -1,6 +1,6 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { Newspaper, X, Send, ChevronDown, ChevronRight } from 'lucide-react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { Newspaper, X, Send, ChevronDown, ChevronRight, Trash2 } from 'lucide-react';
+import { useNavigate, useSearchParams, useLocation } from 'react-router-dom';
 import locationMapPinIcon from '@/assets/location_map_pin.png';
 import { useAuthStore, useUIStore } from '@/store';
 import { publicClient, supabase } from '@/lib/supabase';
@@ -14,12 +14,12 @@ import { AdvisoryCard } from '@/features/weather/AdvisoryCard';
 import { useAdvisory } from '@/features/weather/useAdvisory';
 import { useWeather, getWeatherInfo } from '@/services/weatherService';
 import { directShareClipping } from '@/features/share';
-import { useDailyPosts } from '@/features/daily/useDailyPosts';
 import { DailyPostCard } from '@/features/daily/DailyPostCard';
-import { useCategoryPosts } from '@/features/daily/useDailyPosts';
+import { useDailyPosts, useCategoryPosts } from '@/features/daily/useDailyPosts';
 import { CATEGORY_LABELS, type PostKind } from '@/features/daily/dailyContentEngine';
 import { ReaderStoryCard, type SponsoredTeaser } from '@/features/feed/ReaderStoryCard';
 import { DistrictPickerSheet } from '@/components/DistrictPickerSheet';
+import { expandId } from '@/features/share/shortId';
 
 interface Comment {
   id: string;
@@ -32,8 +32,10 @@ interface Comment {
 
 export const FeedScreen: React.FC = () => {
   const navigate = useNavigate();
+  const loc = useLocation();
   const [searchParams] = useSearchParams();
-  const targetClipId = searchParams.get('clipId') || searchParams.get('id');
+  const rawClipId = searchParams.get('clipId') || searchParams.get('id');
+  const targetClipId = rawClipId ? expandId(rawClipId) : null;
   const { user } = useAuthStore();
   const district = useAuthStore((state) => state.district) || '';
   const userState = useAuthStore((state) => state.userState) || '';
@@ -48,7 +50,16 @@ export const FeedScreen: React.FC = () => {
     } catch {}
     return [];
   });
-  const [localAds, setLocalAds] = useState<LocalAd[]>([]);
+  const [localAds, setLocalAds] = useState<LocalAd[]>(() => {
+    try {
+      const cached = localStorage.getItem('spotnews_active_local_ads_cache_v1');
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    } catch {}
+    return [];
+  });
   const [brandAds, setBrandAds] = useState<BrandAd[]>([]);
   const [loading, setLoading] = useState<boolean>(() => {
     try {
@@ -79,8 +90,41 @@ export const FeedScreen: React.FC = () => {
   const viewedIds = useRef<Set<string>>(new Set());
   const cardRefs = useRef<Map<string, HTMLDivElement>>(new Map());
 
-  // Liked clipping IDs by this user (stored in state for toggle)
-  const [likedIds, setLikedIds] = useState<Set<string>>(new Set());
+  // Liked clipping IDs by this user (cached for instant load and persisted across restarts)
+  const [likedIds, setLikedIds] = useState<Set<string>>(() => {
+    try {
+      const cached = localStorage.getItem('spotnews_liked_ids');
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        if (Array.isArray(parsed)) {
+          const ids = parsed
+            .map((item: any) => (typeof item === 'string' ? item : item?.clipping_id || item?.id || ''))
+            .filter(Boolean);
+          return new Set<string>(ids);
+        }
+      }
+    } catch {}
+    return new Set<string>();
+  });
+
+  // Ground truth likes synchronization
+  useEffect(() => {
+    const effectiveUserId = user?.id || localStorage.getItem('spotnews_guest_user_id');
+    if (effectiveUserId) {
+      publicClient.rpc('get_user_liked_clippings', { p_user_id: effectiveUserId }).then(({ data, error }) => {
+        if (!error && Array.isArray(data)) {
+          const ids = data
+            .map((item: any) => (typeof item === 'string' ? item : item?.clipping_id || item?.id || ''))
+            .filter(Boolean);
+          const s = new Set<string>(ids);
+          setLikedIds(s);
+          try {
+            localStorage.setItem('spotnews_liked_ids', JSON.stringify(ids));
+          } catch {}
+        }
+      });
+    }
+  }, [user?.id]);
 
   // Weather Advisory
   const { advisory } = useAdvisory(district);
@@ -97,17 +141,9 @@ export const FeedScreen: React.FC = () => {
   );
   const WeatherIcon = weatherInfo.Icon;
 
-  // Automatic daily posts for this district (good morning, weather, farming, diet, health, good night)
+  // AI content posts for this district (appears only after 15 clippings)
   const dailyPosts = useDailyPosts(district, userState, liveWeather);
-  // One automatic card (hourly thought, food, weather, career…) after every 2 or 3 news stories, alternately
-  const dailySlotBefore = (idx: number) => {
-    // stories 0,1 | card | 2,3,4 | card | 5,6 | card | 7,8,9 | card …
-    if (idx <= 0) return -1;
-    const cycle = Math.floor(idx / 5), r = idx % 5;
-    if (r === 2) return cycle * 2;
-    if (r === 0) return cycle * 2 - 1;
-    return -1;
-  };
+
   const SPONSOR_EVERY = 3; // a small "Sponsored" option on every 3rd story
 
   // Reader categories (chips): null = all news
@@ -231,24 +267,26 @@ export const FeedScreen: React.FC = () => {
 
       // Deep link support: If clipId query param is present, prioritize or fetch that clipping
       const urlParams = new URLSearchParams(window.location.search);
-      const targetClip = urlParams.get('clipId') || urlParams.get('id') || searchParams.get('clipId') || searchParams.get('id');
+      const targetClipRaw = urlParams.get('clipId') || urlParams.get('id') || searchParams.get('clipId') || searchParams.get('id');
+      const targetClip = targetClipRaw ? expandId(targetClipRaw) : null;
       if (targetClip) {
         const found = postedClippings.find((c) => String(c.id) === String(targetClip));
         if (found) {
           postedClippings = [found, ...postedClippings.filter((c) => String(c.id) !== String(targetClip))];
+          setStartInClipping(true);
           setActiveDetailIndex(0);
           setIsFullScreenFeed(true);
         } else {
           try {
             const { data: directClip } = await client
               .from('clippings')
-              .select(FEED_COLUMNS)
+              .select('*')
               .eq('id', targetClip)
-              .eq('is_posted', true)
               .neq('status', 'rejected')
               .maybeSingle();
             if (directClip) {
               postedClippings = [directClip, ...postedClippings];
+              setStartInClipping(true);
               setActiveDetailIndex(0);
               setIsFullScreenFeed(true);
             }
@@ -282,20 +320,56 @@ export const FeedScreen: React.FC = () => {
     const alreadyLiked = likedIds.has(id);
     const newCount = alreadyLiked ? Math.max(0, currentLikes - 1) : currentLikes + 1;
 
-    // Optimistic UI
-    setClippings((prev) =>
-      prev.map((c) => (c.id === id ? { ...c, likes_count: newCount } : c))
-    );
+    // Optimistic UI update in state and feed cache
+    setClippings((prev) => {
+      const updated = prev.map((c) => (c.id === id ? { ...c, likes_count: newCount } : c));
+      try {
+        localStorage.setItem('spotnews_feed_cache', JSON.stringify(updated));
+      } catch {}
+      return updated;
+    });
+
     setLikedIds((prev) => {
       const next = new Set(prev);
       alreadyLiked ? next.delete(id) : next.add(id);
+      try {
+        localStorage.setItem('spotnews_liked_ids', JSON.stringify(Array.from(next)));
+      } catch {}
       return next;
     });
 
     try {
-      await supabase.from('clippings').update({ likes_count: newCount }).eq('id', id);
+      let effectiveUserId = user?.id || localStorage.getItem('spotnews_guest_user_id');
+      if (!effectiveUserId) {
+        effectiveUserId = 'guest_' + Math.random().toString(36).substring(2, 10);
+        localStorage.setItem('spotnews_guest_user_id', effectiveUserId);
+      }
+      const { data, error } = await publicClient.rpc('toggle_clipping_like', {
+        p_clipping_id: id,
+        p_user_id: effectiveUserId,
+      });
+      if (!error && data && data.success && typeof data.likes_count === 'number') {
+        setClippings((prev) => {
+          const updated = prev.map((c) => (c.id === id ? { ...c, likes_count: data.likes_count } : c));
+          try {
+            localStorage.setItem('spotnews_feed_cache', JSON.stringify(updated));
+          } catch {}
+          return updated;
+        });
+
+        if (typeof data.liked === 'boolean') {
+          setLikedIds((prev) => {
+            const next = new Set(prev);
+            data.liked ? next.add(id) : next.delete(id);
+            try {
+              localStorage.setItem('spotnews_liked_ids', JSON.stringify(Array.from(next)));
+            } catch {}
+            return next;
+          });
+        }
+      }
     } catch (err) {
-      console.error(err);
+      console.error('Like toggle error:', err);
     }
   };
 
@@ -304,12 +378,23 @@ export const FeedScreen: React.FC = () => {
     setCommentOpen(clipId);
     setCommentText('');
     try {
-      const { data } = await supabase
-        .from('lipping_comments')
+      let fetched: any[] = [];
+      const { data, error } = await publicClient
+        .from('clipping_comments')
         .select('*')
         .eq('clipping_id', clipId)
         .order('created_at', { ascending: true });
-      const fetched = data || [];
+      if (!error && Array.isArray(data)) {
+        fetched = data;
+      } else {
+        const { data: fbData } = await publicClient
+          .from('lipping_comments')
+          .select('*')
+          .eq('clipping_id', clipId)
+          .order('created_at', { ascending: true });
+        if (Array.isArray(fbData)) fetched = fbData;
+      }
+
       setComments(fetched);
       // Sync real count into clippings state so the counter is accurate
       setClippings((prev) =>
@@ -340,12 +425,12 @@ export const FeedScreen: React.FC = () => {
       try { localStorage.setItem('spotnews_comment_name', userName); } catch { /* ignore */ }
     }
     setCommentError('');
-    // Guest readers have ids like "guest_123" which are not valid database ids
     const validUserId = user?.id && /^[0-9a-f-]{36}$/i.test(user.id) ? user.id : null;
 
     try {
-      const { data, error } = await supabase
-        .from('lipping_comments')
+      let insertedComment: any = null;
+      const { data, error } = await publicClient
+        .from('clipping_comments')
         .insert({
           clipping_id: commentOpen,
           user_id: validUserId,
@@ -355,7 +440,22 @@ export const FeedScreen: React.FC = () => {
         .select()
         .single();
 
-      if (error) throw error;
+      if (!error && data) {
+        insertedComment = data;
+      } else {
+        const { data: fbData, error: fbErr } = await publicClient
+          .from('lipping_comments')
+          .insert({
+            clipping_id: commentOpen,
+            user_id: validUserId,
+            user_name: userName,
+            text,
+          })
+          .select()
+          .single();
+        if (fbErr) throw fbErr;
+        insertedComment = fbData;
+      }
 
       // Optimistic UI bump for comment count (trigger updates DB)
       setClippings((prev) =>
@@ -363,7 +463,9 @@ export const FeedScreen: React.FC = () => {
           c.id === commentOpen ? { ...c, comments_count: (c.comments_count || 0) + 1 } : c
         )
       );
-      setComments((prev) => [...prev, data as Comment]);
+      if (insertedComment) {
+        setComments((prev) => [...prev, insertedComment as Comment]);
+      }
       setCommentText('');
     } catch (err: any) {
       console.error('Comment failed', err);
@@ -373,9 +475,25 @@ export const FeedScreen: React.FC = () => {
     }
   };
 
-  // ── Auto-view tracking via IntersectionObserver + DB unique constraint ─────
-  // The clipping_views table has PRIMARY KEY (clipping_id, user_id) so the
-  // same user can NEVER insert twice — uniqueness is enforced at DB level.
+  // ── Delete comment ────────────────────────────────────────────────────────
+  const handleDeleteComment = async (commentId: string) => {
+    try {
+      setComments((prev) => prev.filter((c) => c.id !== commentId));
+      if (commentOpen) {
+        setClippings((prev) =>
+          prev.map((c) =>
+            c.id === commentOpen ? { ...c, comments_count: Math.max(0, (c.comments_count || 1) - 1) } : c
+          )
+        );
+      }
+      await publicClient.from('clipping_comments').delete().eq('id', commentId);
+      await publicClient.from('lipping_comments').delete().eq('id', commentId);
+    } catch (err) {
+      console.error('Delete comment error:', err);
+    }
+  };
+
+  // ── Auto-view tracking via IntersectionObserver + increment_clipping_view RPC ─────
   useEffect(() => {
     if (clippings.length === 0) return;
     const observer = new IntersectionObserver(
@@ -387,33 +505,37 @@ export const FeedScreen: React.FC = () => {
             if (!id || viewedIds.current.has(id)) return;
             viewedIds.current.add(id);
 
-            if (user?.id) {
-              try {
-                // Insert into clipping_views — will silently fail on duplicate
-                const { error } = await supabase
-                  .from('clipping_views')
-                  .insert({ clipping_id: id, user_id: user.id });
+            const effectiveViewerId =
+              user?.id ||
+              localStorage.getItem('spotnews_guest_user_id') ||
+              undefined;
 
-                if (error) {
-                  // Error code 23505 = unique violation = already viewed → skip
-                  return;
-                }
-
-                // New unique view — optimistic UI update
-                setClippings((prev) =>
-                  prev.map((c) =>
-                    c.id === id ? { ...c, views_count: (c.views_count || 0) + 1 } : c
-                  )
-                );
-                // DB trigger (trg_sync_views_count) auto-increments views_count
-              } catch (err) {
-                console.error('View tracking failed', err);
-              }
+            try {
+              Promise.resolve(
+                publicClient.rpc('increment_clipping_view', {
+                  p_clipping_id: id,
+                  p_viewer_id: effectiveViewerId,
+                })
+              )
+                .then(({ data, error }: any) => {
+                  if (!error && data?.success && typeof data.views_count === 'number') {
+                    setClippings((prev) =>
+                      prev.map((c) =>
+                        c.id === id ? { ...c, views_count: data.views_count } : c
+                      )
+                    );
+                  }
+                })
+                .catch((err) => {
+                  console.error('View tracking failed', err);
+                });
+            } catch (err) {
+              console.error('View tracking failed', err);
             }
           }
         });
       },
-      { threshold: 0.6 }
+      { threshold: 0.5 }
     );
 
     cardRefs.current.forEach((el) => observer.observe(el));
@@ -421,41 +543,66 @@ export const FeedScreen: React.FC = () => {
   }, [clippings.length, user?.id]);
 
 
+  const loadAds = useCallback(async () => {
+    try {
+      const ads = await localAdsService.fetchActiveLocalAds(district);
+      if (ads && ads.length > 0) {
+        setLocalAds(ads);
+        try { localStorage.setItem('spotnews_active_local_ads_cache_v1', JSON.stringify(ads)); } catch {}
+      }
+    } catch (e) {
+      console.warn('[Feed] Error loading local ads:', e);
+    }
+    try {
+      const brands = await brandAdsService.fetchActive(userState, district);
+      setBrandAds(brands);
+    } catch {}
+  }, [district, userState]);
+
   useEffect(() => {
     fetchFeed();
-    const loadAds = async () => {
-      const [ads, brands] = await Promise.all([
-        localAdsService.fetchActiveLocalAds(district),
-        brandAdsService.fetchActive(userState, district),
-      ]);
-      setLocalAds(ads);
-      setBrandAds(brands);
-    };
     loadAds();
-  }, [district, userState, targetClipId]);
+  }, [district, userState, targetClipId, loc.key, loadAds]);
 
-  // Deep-link handler: automatically open clipping detail if clipId is in URL
+  // Re-fetch ads whenever user returns to the app / window gets focus
+  useEffect(() => {
+    const onFocus = () => loadAds();
+    window.addEventListener('focus', onFocus);
+    const onVisibility = () => {
+      if (document.visibilityState === 'visible') loadAds();
+    };
+    document.addEventListener('visibilitychange', onVisibility);
+    return () => {
+      window.removeEventListener('focus', onFocus);
+      document.removeEventListener('visibilitychange', onVisibility);
+    };
+  }, [loadAds]);
+
+  // Deep-link & notification handler: automatically open clipping detail if clipId is in URL
   useEffect(() => {
     if (!targetClipId) return;
     const loadTargetClip = async () => {
-      const existingIndex = clippings.findIndex((c) => String(c.id) === String(targetClipId));
+      const cleanId = expandId(targetClipId);
+      const existingIndex = clippings.findIndex((c) => String(c.id) === String(cleanId));
       if (existingIndex !== -1) {
+        setStartInClipping(true);
         setActiveDetailIndex(existingIndex);
         setIsFullScreenFeed(true);
         return;
       }
 
       try {
-        const { data: directClip } = await supabase
+        const client = publicClient || supabase;
+        const { data: directClip } = await client
           .from('clippings')
           .select('*')
-          .eq('id', targetClipId)
-          .eq('is_posted', true)
+          .eq('id', cleanId)
           .neq('status', 'rejected')
           .maybeSingle();
 
         if (directClip) {
-          setClippings((prev) => [directClip, ...prev.filter((c) => String(c.id) !== String(targetClipId))]);
+          setClippings((prev) => [directClip, ...prev.filter((c) => String(c.id) !== String(cleanId))]);
+          setStartInClipping(true);
           setActiveDetailIndex(0);
           setIsFullScreenFeed(true);
         }
@@ -465,6 +612,42 @@ export const FeedScreen: React.FC = () => {
     };
     loadTargetClip();
   }, [targetClipId]);
+
+  // Real-time listener: if notification is tapped while user is already in the feed
+  useEffect(() => {
+    const handleOpenClipping = async (e: any) => {
+      const clipId = e?.detail?.clipId;
+      if (!clipId) return;
+      const cleanId = expandId(clipId);
+      const idx = clippings.findIndex((c) => String(c.id) === String(cleanId));
+      if (idx !== -1) {
+        setStartInClipping(true);
+        setActiveDetailIndex(idx);
+        setIsFullScreenFeed(true);
+      } else {
+        try {
+          const client = publicClient || supabase;
+          const { data: directClip } = await client
+            .from('clippings')
+            .select('*')
+            .eq('id', cleanId)
+            .neq('status', 'rejected')
+            .maybeSingle();
+          if (directClip) {
+            setClippings((prev) => [directClip, ...prev.filter((c) => String(c.id) !== String(cleanId))]);
+            setStartInClipping(true);
+            setActiveDetailIndex(0);
+            setIsFullScreenFeed(true);
+          }
+        } catch (err) {
+          console.warn('Failed to load target clipping on custom event:', err);
+        }
+      }
+    };
+
+    window.addEventListener('spotnews-open-clipping', handleOpenClipping);
+    return () => window.removeEventListener('spotnews-open-clipping', handleOpenClipping);
+  }, [clippings]);
 
   return (
     <div className="flex flex-col flex-1 min-h-0 bg-black">
@@ -521,8 +704,10 @@ export const FeedScreen: React.FC = () => {
           <div className="h-full w-full overflow-y-auto snap-y snap-mandatory no-scrollbar relative bg-black">
             {categoryPosts.length === 0 ? (
               <div className="p-12 text-center text-white/70 text-[16px] font-bold">లోడ్ అవుతోంది…</div>
-            ) : categoryPosts.map((p) => (
-              <DailyPostCard key={`cat-${p.kind}-${p.publish_at}`} post={p} />
+            ) : categoryPosts.map((p, pIdx) => (
+              <React.Fragment key={`cat-wrap-${p.kind}-${p.publish_at}-${pIdx}`}>
+                <DailyPostCard key={`cat-${p.kind}-${p.publish_at}`} post={p} />
+              </React.Fragment>
             ))}
           </div>
         ) : loading && clippings.length === 0 ? (
@@ -530,7 +715,7 @@ export const FeedScreen: React.FC = () => {
             <div className="w-8 h-8 rounded-full border-2 border-[#145AB1] border-t-transparent animate-spin mx-auto mb-2" />
             <p className="text-[15px] text-white/80 font-bold">వార్తలు లోడ్ అవుతున్నాయి…</p>
           </div>
-        ) : clippings.length === 0 && dailyPosts.length === 0 ? (
+        ) : clippings.length === 0 ? (
           <div className="bg-[#E8F2FC] border border-[#D0E2F7] rounded-2xl p-8 text-center my-6 mx-4 flex flex-col items-center justify-center shadow-sm">
             <Newspaper className="w-10 h-10 text-[#0d4a8f] mb-3" />
             <h3 className="text-[19px] font-bold text-[#0A2540] mb-2">ఈ జిల్లాలో ఇంకా వార్తలు లేవు</h3>
@@ -549,8 +734,6 @@ export const FeedScreen: React.FC = () => {
           <div className="h-full w-full overflow-y-auto snap-y snap-mandatory no-scrollbar relative bg-black">
             {clippings.map((clip: any, idx: number) => {
               const isLiked = likedIds.has(clip.id);
-              const slot = dailySlotBefore(idx);
-              const dailyPost = slot >= 0 ? dailyPosts[slot] : undefined;
               // Sponsored option (icon row inside the card) on every SPONSOR_EVERY-th story
               let sponsored: SponsoredTeaser | null = null;
               if ((idx + 1) % SPONSOR_EVERY === 0 && (localAds.length || brandAds.length)) {
@@ -570,7 +753,6 @@ export const FeedScreen: React.FC = () => {
 
               return (
                 <React.Fragment key={clip.id}>
-                  {dailyPost && <DailyPostCard key={`daily-${dailyPost.kind}-${dailyPost.publish_at}`} post={dailyPost} />}
                   <div
                     data-clip-id={clip.id}
                     ref={(el) => {
@@ -589,13 +771,28 @@ export const FeedScreen: React.FC = () => {
                       sponsored={sponsored}
                     />
                   </div>
+                  {/* Exactly one local ad strictly after every exact 5 news clippings */}
+                  {localAds.length > 0 && (idx + 1) % 5 === 0 && (
+                    <div
+                      key={`feed-local-ad-wrapper-${idx}`}
+                      className="w-full h-full snap-start snap-always relative"
+                    >
+                      <LocalAdFeedCard
+                        ad={localAds[Math.floor(idx / 5) % localAds.length]}
+                        index={idx}
+                      />
+                    </div>
+                  )}
+                  {/* AI content (DailyPostCard) appears only after 15 clippings */}
+                  {dailyPosts.length > 0 && (idx + 1) % 15 === 0 && (
+                    <DailyPostCard
+                      key={`daily-post-15-${idx}`}
+                      post={dailyPosts[Math.floor((idx + 1) / 15 - 1) % dailyPosts.length]}
+                    />
+                  )}
                 </React.Fragment>
               );
             })}
-            {/* Automatic posts that did not fit between the stories (short feed) */}
-            {dailyPosts.slice(clippings.reduce((n: number, _c: any, i: number) => (dailySlotBefore(i) >= 0 ? n + 1 : n), 0)).map((p) => (
-              <DailyPostCard key={`daily-tail-${p.kind}-${p.publish_at}`} post={p} />
-            ))}
           </div>
         )}
       </div>
@@ -630,8 +827,8 @@ export const FeedScreen: React.FC = () => {
           onComment={openComments}
           onShare={handleShareClick}
           onEndReached={fetchFeed}
-          localAds={[]}
-          brandAds={[]}
+          localAds={localAds}
+          brandAds={brandAds}
         />
       )}
 
@@ -669,8 +866,20 @@ export const FeedScreen: React.FC = () => {
                     <div className="w-7 h-7 rounded-full bg-[#015BB3] flex items-center justify-center text-white text-[11.5px] font-bold shrink-0">
                       {(c.user_name || 'A')[0].toUpperCase()}
                     </div>
-                    <div className="bg-gray-50 rounded-2xl rounded-tl-none px-3 py-2 flex-1">
-                      <p className="text-[11.5px] font-bold text-[#015BB3] mb-0.5">{c.user_name}</p>
+                    <div className="bg-gray-50 rounded-2xl rounded-tl-none px-3 py-2 flex-1 relative group">
+                      <div className="flex items-center justify-between">
+                        <p className="text-[11.5px] font-bold text-[#015BB3] mb-0.5">{c.user_name}</p>
+                        {(user?.id === c.user_id || (!c.user_id && c.user_name === commentName) || user?.role === 'superadmin' || user?.role === 'admin') && (
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteComment(c.id)}
+                            className="text-gray-400 hover:text-red-600 p-0.5 text-[10px] cursor-pointer"
+                            title="Delete comment"
+                          >
+                            <Trash2 className="w-3 h-3" />
+                          </button>
+                        )}
+                      </div>
                       <p className="text-[13.5px] text-gray-800 leading-snug">{c.text}</p>
                       <p className="text-[10.5px] text-gray-400 mt-1">
                         {new Date(c.created_at).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}

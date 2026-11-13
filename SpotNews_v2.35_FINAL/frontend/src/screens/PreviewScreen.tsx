@@ -388,6 +388,7 @@ export const PreviewScreen = () => {
         const submitResult = await submitClippingForApproval(generation.id, {
           district: targetDistrict,
           state: (user as any)?.state || 'Andhra Pradesh',
+          png_url: generation.png_url,
         });
 
         if (submitResult.auto_approved || (submitResult.status === 'approved' && submitResult.is_posted)) {

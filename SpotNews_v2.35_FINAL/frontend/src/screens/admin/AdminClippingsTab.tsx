@@ -11,6 +11,7 @@ import {
   AlertTriangle,
   RotateCcw,
   Newspaper,
+  Trash2,
 } from 'lucide-react';
 import type { AdminClippingLog } from '@/services/admin.service';
 import { AdminStatusBar } from './AdminStatusBar';
@@ -24,10 +25,13 @@ interface AdminClippingsTabProps {
   onRefresh: () => void;
   onApprove: (clip: AdminClippingLog) => Promise<boolean>;
   onBulkApprove?: (items: AdminClippingLog[]) => Promise<boolean>;
+  onBulkReject?: (items: AdminClippingLog[]) => Promise<boolean>;
+  onBulkDelete?: (items: AdminClippingLog[]) => Promise<boolean>;
   onReject: (clip: AdminClippingLog, reason: string, note?: string) => Promise<boolean>;
   onUndoApprove?: (clipId: string) => Promise<void>;
   onRemoveFromFeed?: (clip: AdminClippingLog) => Promise<void>;
   onRestore?: (clip: AdminClippingLog) => Promise<void>;
+  onDeleteClipping?: (clip: AdminClippingLog) => Promise<boolean>;
   onSelectClippingModal: (clip: AdminClippingLog) => void;
 }
 
@@ -69,10 +73,13 @@ export const AdminClippingsTab: React.FC<AdminClippingsTabProps> = ({
   onRefresh,
   onApprove,
   onBulkApprove,
+  onBulkReject,
+  onBulkDelete,
   onReject,
   onUndoApprove,
   onRemoveFromFeed,
   onRestore,
+  onDeleteClipping,
   onSelectClippingModal,
 }) => {
   const [approvalFilter, setApprovalFilter] = useState<'pending' | 'approved' | 'rejected' | 'all'>('all');
@@ -86,9 +93,14 @@ export const AdminClippingsTab: React.FC<AdminClippingsTabProps> = ({
   const [rejectNote, setRejectNote] = useState('');
   const [rejectSubmitting, setRejectSubmitting] = useState(false);
 
-  // Bulk Approve Confirmation state
+  // Bulk Actions state
   const [confirmApproveAll, setConfirmApproveAll] = useState(false);
+  const [confirmRejectAll, setConfirmRejectAll] = useState(false);
+  const [confirmDeleteAll, setConfirmDeleteAll] = useState(false);
   const [bulkApproving, setBulkApproving] = useState(false);
+
+  // Individual Delete Modal state
+  const [deletingClip, setDeletingClip] = useState<AdminClippingLog | null>(null);
 
   // Action loading state
   const [actionLoadingId, setActionLoadingId] = useState<string | null>(null);
@@ -183,6 +195,43 @@ export const AdminClippingsTab: React.FC<AdminClippingsTabProps> = ({
     }
   };
 
+  // Card action loading handlers with propagation prevention
+  const handleUndoWithLoading = async (e: React.MouseEvent, clipId: string) => {
+    e.stopPropagation();
+    if (!onUndoApprove) return;
+    setActionLoadingId(clipId);
+    try {
+      await onUndoApprove(clipId);
+    } finally {
+      setActionLoadingId(null);
+    }
+  };
+
+  const handleRemoveFromFeedWithLoading = async (e: React.MouseEvent, clip: AdminClippingLog) => {
+    e.stopPropagation();
+    if (!onRemoveFromFeed) return;
+    setActionLoadingId(clip.id);
+    try {
+      await onRemoveFromFeed(clip);
+    } finally {
+      setActionLoadingId(null);
+    }
+  };
+
+  const handleRestoreWithLoading = async (e: React.MouseEvent, clip: AdminClippingLog) => {
+    e.stopPropagation();
+    setActionLoadingId(clip.id);
+    try {
+      if (onRestore) {
+        await onRestore(clip);
+      } else if (onUndoApprove) {
+        await onUndoApprove(clip.id);
+      }
+    } finally {
+      setActionLoadingId(null);
+    }
+  };
+
   // Open Reject Modal
   const openRejectModal = (clip: AdminClippingLog) => {
     setRejectingClip(clip);
@@ -201,6 +250,10 @@ export const AdminClippingsTab: React.FC<AdminClippingsTabProps> = ({
   // Bulk Approve handler (parallel chunked execution for instant responsiveness)
   const handleBulkApprove = async () => {
     if (bulkApproving || visiblePendingItems.length === 0) return;
+    if (!confirmApproveAll) {
+      setConfirmApproveAll(true);
+      return;
+    }
 
     setBulkApproving(true);
     try {
@@ -220,6 +273,60 @@ export const AdminClippingsTab: React.FC<AdminClippingsTabProps> = ({
     } finally {
       setBulkApproving(false);
       setConfirmApproveAll(false);
+    }
+  };
+
+  // Bulk Reject handler
+  const handleBulkReject = async () => {
+    if (bulkApproving || visiblePendingItems.length === 0) return;
+    if (!confirmRejectAll) {
+      setConfirmRejectAll(true);
+      return;
+    }
+
+    setBulkApproving(true);
+    try {
+      if (onBulkReject) {
+        await onBulkReject(visiblePendingItems);
+      } else {
+        for (const item of visiblePendingItems) {
+          await onReject(item, 'Bulk rejected by district admin');
+        }
+      }
+      onRefresh();
+    } finally {
+      setBulkApproving(false);
+      setConfirmRejectAll(false);
+    }
+  };
+
+  // Bulk Delete handler
+  const handleBulkDelete = async () => {
+    if (bulkApproving || visibleList.length === 0 || !onBulkDelete) return;
+    if (!confirmDeleteAll) {
+      setConfirmDeleteAll(true);
+      return;
+    }
+
+    setBulkApproving(true);
+    try {
+      await onBulkDelete(visibleList);
+      onRefresh();
+    } finally {
+      setBulkApproving(false);
+      setConfirmDeleteAll(false);
+    }
+  };
+
+  // Delete single clipping handler
+  const handleDeleteWithConfirm = async (clip: AdminClippingLog) => {
+    if (!onDeleteClipping) return;
+    setActionLoadingId(clip.id);
+    try {
+      await onDeleteClipping(clip);
+    } finally {
+      setActionLoadingId(null);
+      setDeletingClip(null);
     }
   };
 
@@ -320,29 +427,74 @@ export const AdminClippingsTab: React.FC<AdminClippingsTabProps> = ({
         </button>
       </div>
 
-      {/* ── Approve All Visible (Only in Pending view) ── */}
-      {approvalFilter === 'pending' && visiblePendingItems.length > 0 && (
-        <div className="flex justify-end">
-          <button
-            onClick={handleBulkApprove}
-            disabled={bulkApproving}
-            className={`px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-2 transition-all shadow-sm cursor-pointer ${
-              confirmApproveAll
-                ? 'bg-amber-600 text-white animate-pulse'
-                : 'bg-[var(--adm-green)] hover:bg-[#047857] text-white'
-            }`}
-          >
-            {bulkApproving ? (
-              <RefreshCw className="w-4 h-4 animate-spin" />
-            ) : (
-              <Check className="w-4 h-4" />
-            )}
-            <span>
-              {confirmApproveAll
-                ? `Click again to confirm (${visiblePendingItems.length})`
-                : `Approve all visible (${visiblePendingItems.length})`}
-            </span>
-          </button>
+      {/* ── Bulk Actions Bar ── */}
+      {visibleList.length > 0 && (
+        <div className="flex items-center justify-end gap-2 flex-wrap">
+          {/* Pending view: Approve All & Reject All */}
+          {approvalFilter === 'pending' && visiblePendingItems.length > 0 && (
+            <>
+              <button
+                onClick={handleBulkApprove}
+                disabled={bulkApproving}
+                className={`px-3.5 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all shadow-xs cursor-pointer ${
+                  confirmApproveAll
+                    ? 'bg-amber-600 text-white animate-pulse'
+                    : 'bg-[var(--adm-green)] hover:bg-[#047857] text-white'
+                }`}
+                title="Approve all visible pending items and publish to feed"
+              >
+                {bulkApproving ? (
+                  <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                ) : (
+                  <Check className="w-3.5 h-3.5" />
+                )}
+                <span>
+                  {confirmApproveAll
+                    ? `Confirm Approve (${visiblePendingItems.length})`
+                    : `Approve All (${visiblePendingItems.length})`}
+                </span>
+              </button>
+
+              <button
+                onClick={handleBulkReject}
+                disabled={bulkApproving}
+                className={`px-3.5 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all shadow-xs cursor-pointer ${
+                  confirmRejectAll
+                    ? 'bg-red-700 text-white animate-pulse'
+                    : 'bg-white dark:bg-[#132742] text-[var(--adm-red)] border border-red-300 hover:bg-red-50'
+                }`}
+                title="Reject all visible pending items"
+              >
+                <X className="w-3.5 h-3.5" />
+                <span>
+                  {confirmRejectAll
+                    ? `Confirm Reject (${visiblePendingItems.length})`
+                    : `Reject All (${visiblePendingItems.length})`}
+                </span>
+              </button>
+            </>
+          )}
+
+          {/* Superadmin Bulk Delete */}
+          {isSuperAdmin && onBulkDelete && visibleList.length > 0 && (
+            <button
+              onClick={handleBulkDelete}
+              disabled={bulkApproving}
+              className={`px-3.5 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all shadow-xs cursor-pointer ${
+                confirmDeleteAll
+                  ? 'bg-red-800 text-white animate-pulse'
+                  : 'bg-white dark:bg-[#132742] text-gray-600 dark:text-gray-300 border border-[var(--adm-card-border)] hover:text-red-600 hover:border-red-300'
+              }`}
+              title="Bulk delete visible clippings"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+              <span>
+                {confirmDeleteAll
+                  ? `Confirm Delete (${visibleList.length})`
+                  : `Bulk Delete (${visibleList.length})`}
+              </span>
+            </button>
+          )}
         </div>
       )}
 
@@ -382,9 +534,9 @@ export const AdminClippingsTab: React.FC<AdminClippingsTabProps> = ({
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {visibleList.map((clip, idx) => {
-            const isApproved = clip.is_posted === true || clip.status === 'approved';
-            const isPending = clip.status === 'pending_approval' || (!clip.is_posted && clip.status !== 'rejected');
-            const isRejected = clip.status === 'rejected';
+            const isRejected = clip.status === 'rejected' || clip.status === 'failed';
+            const isApproved = !isRejected && (clip.status === 'approved' || clip.status === 'auto_approved' || clip.is_posted === true);
+            const isPending = !isRejected && !isApproved;
 
             const borderClass = isApproved
               ? 'adm-border-left-green'
@@ -494,7 +646,11 @@ export const AdminClippingsTab: React.FC<AdminClippingsTabProps> = ({
                   {isPending ? (
                     <div className="flex items-center gap-2">
                       <button
-                        onClick={() => handleApproveWithUndo(clip)}
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleApproveWithUndo(clip);
+                        }}
                         disabled={actionLoadingId === clip.id}
                         className="flex-1 py-2 px-3 bg-[var(--adm-green)] hover:bg-[#047857] text-white text-xs font-bold rounded-xl transition flex items-center justify-center gap-1.5 shadow-xs active:scale-95 cursor-pointer"
                       >
@@ -507,13 +663,32 @@ export const AdminClippingsTab: React.FC<AdminClippingsTabProps> = ({
                       </button>
 
                       <button
-                        onClick={() => openRejectModal(clip)}
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          openRejectModal(clip);
+                        }}
                         disabled={actionLoadingId === clip.id}
                         className="py-2 px-3.5 bg-white dark:bg-[#132742] border border-[var(--adm-card-border)] text-[var(--adm-red)] hover:bg-red-50 text-xs font-bold rounded-xl transition flex items-center justify-center gap-1 active:scale-95 cursor-pointer"
                       >
                         <X className="w-3.5 h-3.5" />
                         <span>Reject</span>
                       </button>
+
+                      {onDeleteClipping && (
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setDeletingClip(clip);
+                          }}
+                          disabled={actionLoadingId === clip.id}
+                          className="p-2 bg-transparent border border-gray-300 dark:border-gray-700 text-gray-400 hover:text-red-600 hover:border-red-300 rounded-xl transition cursor-pointer"
+                          title="Delete clipping"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      )}
                     </div>
                   ) : isApproved ? (
                     <div className="flex items-center justify-between gap-2 flex-wrap">
@@ -523,19 +698,39 @@ export const AdminClippingsTab: React.FC<AdminClippingsTabProps> = ({
                       </span>
                       <div className="flex items-center gap-1.5">
                         <button
-                          onClick={() => onUndoApprove && onUndoApprove(clip.id)}
-                          className="px-2.5 py-1.5 rounded-xl bg-[var(--adm-chip-bg)] text-[var(--adm-text-secondary)] hover:text-[var(--adm-blue)] text-xs font-bold active:scale-95 transition cursor-pointer"
+                          type="button"
+                          onClick={(e) => handleUndoWithLoading(e, clip.id)}
+                          disabled={actionLoadingId === clip.id}
+                          className="px-2.5 py-1.5 rounded-xl bg-[var(--adm-chip-bg)] text-[var(--adm-text-secondary)] hover:text-[var(--adm-blue)] text-xs font-bold active:scale-95 transition cursor-pointer flex items-center gap-1"
                           title="Undo approval and return clipping to pending review"
                         >
-                          Undo Approval
+                          {actionLoadingId === clip.id && <RefreshCw className="w-3 h-3 animate-spin" />}
+                          <span>Undo Approval</span>
                         </button>
                         <button
-                          onClick={() => onRemoveFromFeed && onRemoveFromFeed(clip)}
-                          className="px-2.5 py-1.5 rounded-xl border border-[var(--adm-card-border)] text-[var(--adm-red)] hover:bg-red-50 text-xs font-bold active:scale-95 transition cursor-pointer"
+                          type="button"
+                          onClick={(e) => handleRemoveFromFeedWithLoading(e, clip)}
+                          disabled={actionLoadingId === clip.id}
+                          className="px-2.5 py-1.5 rounded-xl border border-[var(--adm-card-border)] text-[var(--adm-red)] hover:bg-red-50 text-xs font-bold active:scale-95 transition cursor-pointer flex items-center gap-1"
                           title="Remove from feed and mark as rejected"
                         >
-                          Remove from feed
+                          {actionLoadingId === clip.id && <RefreshCw className="w-3 h-3 animate-spin" />}
+                          <span>Remove from feed</span>
                         </button>
+                        {onDeleteClipping && (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setDeletingClip(clip);
+                            }}
+                            disabled={actionLoadingId === clip.id}
+                            className="p-1.5 rounded-xl border border-[var(--adm-card-border)] text-gray-400 hover:text-[var(--adm-red)] hover:border-red-200 transition cursor-pointer"
+                            title="Delete clipping"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        )}
                       </div>
                     </div>
                   ) : (
@@ -546,19 +741,42 @@ export const AdminClippingsTab: React.FC<AdminClippingsTabProps> = ({
                       </span>
                       <div className="flex items-center gap-1.5">
                         <button
-                          onClick={() => (onRestore ? onRestore(clip) : onUndoApprove && onUndoApprove(clip.id))}
-                          className="px-3 py-1.5 rounded-xl bg-[var(--adm-chip-bg)] text-[var(--adm-blue)] text-xs font-bold hover:bg-[#d5e4f5] transition active:scale-95 cursor-pointer"
+                          type="button"
+                          onClick={(e) => handleRestoreWithLoading(e, clip)}
+                          disabled={actionLoadingId === clip.id}
+                          className="px-3 py-1.5 rounded-xl bg-[var(--adm-chip-bg)] text-[var(--adm-blue)] text-xs font-bold hover:bg-[#d5e4f5] transition active:scale-95 cursor-pointer flex items-center gap-1"
                           title="Restore to pending review queue"
                         >
-                          Restore
+                          {actionLoadingId === clip.id && <RefreshCw className="w-3 h-3 animate-spin" />}
+                          <span>Restore</span>
                         </button>
                         <button
-                          onClick={() => handleApproveWithUndo(clip)}
-                          className="px-3 py-1.5 rounded-xl bg-[var(--adm-green)] text-white text-xs font-bold hover:bg-[#047857] transition active:scale-95 cursor-pointer"
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleApproveWithUndo(clip);
+                          }}
+                          disabled={actionLoadingId === clip.id}
+                          className="px-3 py-1.5 rounded-xl bg-[var(--adm-green)] text-white text-xs font-bold hover:bg-[#047857] transition active:scale-95 cursor-pointer flex items-center gap-1"
                           title="Approve & Post to Live Feed"
                         >
-                          Approve & Post
+                          {actionLoadingId === clip.id && <RefreshCw className="w-3 h-3 animate-spin" />}
+                          <span>Approve & Post</span>
                         </button>
+                        {onDeleteClipping && (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setDeletingClip(clip);
+                            }}
+                            disabled={actionLoadingId === clip.id}
+                            className="p-1.5 rounded-xl border border-[var(--adm-card-border)] text-gray-400 hover:text-[var(--adm-red)] hover:border-red-200 transition cursor-pointer"
+                            title="Delete clipping"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        )}
                       </div>
                     </div>
                   )}
@@ -681,6 +899,55 @@ export const AdminClippingsTab: React.FC<AdminClippingsTabProps> = ({
           </div>
         )}
       </AnimatePresence>
+
+      {/* ── Delete Clipping Confirmation Modal ── */}
+      <AnimatePresence>
+        {deletingClip && (
+          <div
+            className="fixed inset-0 z-[220] flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs"
+            onClick={() => setDeletingClip(null)}
+          >
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              onClick={(e) => e.stopPropagation()}
+              className="bg-[var(--adm-card-bg)] border border-[var(--adm-card-border)] rounded-3xl p-6 w-full max-w-sm shadow-2xl space-y-4"
+            >
+              <div className="flex items-center gap-2.5 text-[var(--adm-red)]">
+                <AlertTriangle className="w-5 h-5 shrink-0" />
+                <h3 className="text-base font-bold text-[var(--adm-text-primary)]">Delete Clipping</h3>
+              </div>
+              <p className="text-xs text-[var(--adm-text-secondary)]">
+                Are you sure you want to permanently delete this clipping? It will be removed from the feed and database.
+              </p>
+              <p className="adm-telugu text-xs font-bold text-[var(--adm-text-primary)] line-clamp-2 bg-[var(--adm-chip-bg)] p-2.5 rounded-xl">
+                {deletingClip.headline || 'Untitled Story'}
+              </p>
+              <div className="flex items-center justify-end gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setDeletingClip(null)}
+                  className="px-4 py-2 rounded-xl text-xs font-bold bg-[var(--adm-chip-bg)] text-[var(--adm-text-secondary)] cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleDeleteWithConfirm(deletingClip)}
+                  disabled={actionLoadingId === deletingClip.id}
+                  className="px-4 py-2 rounded-xl text-xs font-bold bg-[var(--adm-red)] text-white hover:bg-red-700 transition flex items-center gap-1.5 cursor-pointer shadow-sm"
+                >
+                  {actionLoadingId === deletingClip.id && <RefreshCw className="w-3.5 h-3.5 animate-spin" />}
+                  <span>Delete Permanently</span>
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+
 
       {/* ── Undo Toast (~4.5s) ── */}
       <AnimatePresence>

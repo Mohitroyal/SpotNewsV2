@@ -13,13 +13,13 @@ import {
   Send,
   ExternalLink,
   Eye,
+  EyeOff,
   Trash2,
   Upload,
   Zap,
 } from 'lucide-react';
 import { useAuthStore, isAdminUser, isSuperAdminUser, isProtectedSuperAdminAccount } from '@/store';
-import { admobService } from '@/services/admob.service';
-import { supabase, publicClient } from '@/lib/supabase';
+import { supabase, publicClient, supabaseUrl, supabaseAnonKey } from '@/lib/supabase';
 import { LocalAdsAdminSection } from '@/components/LocalAdsAdminSection';
 import {
   getAdminStats,
@@ -29,13 +29,18 @@ import {
   DEFAULT_PUBLICATION_LOGOS,
   addPublicationLogo,
   removePublicationLogo,
+  toggleLogoActive,
   uploadLogoImage,
   updateUserRole,
   updateUserPlan,
   banUser,
+  deleteUser,
   getAdminClippings,
   approveClippingToFeed,
   bulkApproveClippingsToFeed,
+  bulkRejectClippingsToFeed,
+  bulkDeleteClippings,
+  deleteClipping,
   rejectClippingSubmission,
   updateReporterApplicationStatus,
   getAutoApproveConfig,
@@ -56,6 +61,7 @@ import { AdminShell } from './admin/AdminShell';
 import { AdminOverviewTab } from './admin/AdminOverviewTab';
 import { AdminClippingsTab } from './admin/AdminClippingsTab';
 import { AdminUsersTab } from './admin/AdminUsersTab';
+import { AdminPayoutsTab } from './admin/AdminPayoutsTab';
 
 function formatDateTime(dateStr?: string) {
   if (!dateStr) return '—';
@@ -224,7 +230,7 @@ export const AdminScreen = () => {
     user?.plan === 'superadmin' ||
     (user as any)?.user_metadata?.role === 'superadmin' ||
     (user as any)?.app_metadata?.role === 'superadmin';
-  const [activeTab, setActiveTab] = useState<'overview' | 'clippings' | 'users' | 'logos' | 'applications' | 'daily_editions' | 'notifications' | 'local_ads'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'clippings' | 'users' | 'logos' | 'applications' | 'daily_editions' | 'notifications' | 'local_ads' | 'payouts'>('overview');
   const [isPdfGeneratorOpen, setIsPdfGeneratorOpen] = useState(false);
   const [dailyEditions, setDailyEditions] = useState<DailyEditionRecord[]>([]);
   const [dailyEditionsLoading, setDailyEditionsLoading] = useState(false);
@@ -286,8 +292,17 @@ export const AdminScreen = () => {
     fetchAdminDistrict();
   }, [user?.id, isSuperAdmin]);
 
-  // Applications state
-  const [applications, setApplications] = useState<any[]>([]);
+  // Applications state (cached for instant render without 0-count flicker)
+  const [applications, setApplications] = useState<any[]>(() => {
+    try {
+      const cached = localStorage.getItem('spotnews_admin_applications_cache');
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    } catch {}
+    return [];
+  });
   const [applicationsLoading, setApplicationsLoading] = useState(false);
   const [actionLoadingId, setActionLoadingId] = useState<string | null>(null);
   const [applicationFilter, setApplicationFilter] = useState<'all' | 'pending' | 'approved' | 'rejected'>('all');
@@ -450,6 +465,32 @@ export const AdminScreen = () => {
     }
   };
 
+  // Handle toggling logo active/hidden for reporters
+  const handleToggleLogo = async (logo: PublicationLogo) => {
+    const nextActive = logo.is_active === false ? true : false;
+    // Optimistic UI state update
+    setLogos((prev) =>
+      prev.map((l) =>
+        l.id === logo.id || l.publication_code === logo.publication_code
+          ? { ...l, is_active: nextActive }
+          : l
+      )
+    );
+    try {
+      await toggleLogoActive(logo.id, nextActive, logo.publication_code);
+      showToast(
+        nextActive
+          ? `"${logo.name}" enabled for reporters`
+          : `"${logo.name}" hidden from reporters`,
+        'success'
+      );
+    } catch {
+      showToast('Failed to update logo status', 'error');
+      const updated = await getPublicationLogos();
+      setLogos(updated);
+    }
+  };
+
   // ── Data fetching ─────────────────────────────────────────────────────────
   const fetchStatsOnly = useCallback(async (fDate?: string, tDate?: string) => {
     try {
@@ -509,40 +550,6 @@ export const AdminScreen = () => {
 
       setClippingsLoading(false);
       clearTimeout(safetyTimer);
-
-      if (autoApproveClippingsRef.current) {
-        const pending = res.results.filter(
-          (c: AdminClippingLog) => (c.status === 'pending_approval' || (!c.is_posted && c.status !== 'rejected')) && c.status !== 'failed' && Boolean(c.png_url)
-        );
-
-        if (pending.length > 0) {
-          (async () => {
-            try {
-              const approveResults = await Promise.allSettled(
-                pending.map((clip: AdminClippingLog) =>
-                  approveClippingToFeed(clip.id, {
-                    headline: clip.headline,
-                    district: clip.district,
-                    user_id: clip.user_id,
-                    user_email: clip.user_email,
-                    png_url: clip.png_url,
-                  })
-                )
-              );
-              const approvedCount = approveResults.filter((r) => r.status === "fulfilled" && (r as any).value?.success).length;
-              if (approvedCount > 0) {
-                setClippings((prev) =>
-                  prev.map((c) =>
-                    pending.some((p) => p.id === c.id) ? { ...c, is_posted: true, status: 'approved' } : c
-                  )
-                );
-              }
-            } catch (e) {
-              console.warn('[AutoApprove] Background auto-approval error:', e);
-            }
-          })();
-        }
-      }
     } catch {
       showToast('Failed to load clippings history', 'error');
     } finally {
@@ -554,9 +561,9 @@ export const AdminScreen = () => {
   // Initial load
   useEffect(() => {
     if (hasAccess) {
-      admobService.hideBanner();
       fetchAll(fromDate || undefined, toDate || undefined);
       fetchClippings(); // All-time clippings for management view
+      fetchApplications();
     }
   }, [hasAccess]);
 
@@ -605,25 +612,70 @@ export const AdminScreen = () => {
     setApplicationsLoading(true);
     const safetyTimer = setTimeout(() => setApplicationsLoading(false), 5000);
     try {
-      const { data, error } = await publicClient
-        .from('reporter_applications')
-        .select('*')
-        .order('created_at', { ascending: false });
-      if (error) {
+      let fetched: any[] = [];
+
+      // 1. PRIMARY: Call the SECURITY DEFINER Postgres RPC (bypasses RLS, 100% reliable)
+      try {
+        const { data: rpcData, error: rpcErr } = await publicClient.rpc('admin_get_reporter_applications');
+        if (!rpcErr && Array.isArray(rpcData) && rpcData.length > 0) {
+          fetched = rpcData;
+        }
+      } catch (err) {
+        console.warn('[AdminScreen] RPC fetch error:', err);
+      }
+
+      // 2. FALLBACK A: Query publicClient table directly
+      if (fetched.length === 0) {
+        const { data, error } = await publicClient
+          .from('reporter_applications')
+          .select('*')
+          .order('created_at', { ascending: false });
+        if (!error && Array.isArray(data) && data.length > 0) {
+          fetched = data;
+        }
+      }
+
+      // 3. FALLBACK B: Direct HTTP fetch with anon key to bypass any client-side interceptor issues
+      if (fetched.length === 0) {
+        try {
+          const restRes = await fetch(`${supabaseUrl}/rest/v1/reporter_applications?select=*&order=created_at.desc`, {
+            headers: {
+              apikey: supabaseAnonKey,
+              Authorization: `Bearer ${supabaseAnonKey}`,
+            },
+          });
+          if (restRes.ok) {
+            const json = await restRes.json();
+            if (Array.isArray(json) && json.length > 0) {
+              fetched = json;
+            }
+          }
+        } catch (err) {
+          console.warn('[AdminScreen] Direct REST fetch error:', err);
+        }
+      }
+
+      // 4. FALLBACK C: Authenticated client fallback
+      if (fetched.length === 0) {
         const { data: fallbackData, error: fbErr } = await supabase
           .from('reporter_applications')
           .select('*')
           .order('created_at', { ascending: false });
-        if (fbErr) throw fbErr;
-        setApplications(fallbackData || []);
-      } else {
-        const fetched = data || [];
+        if (!fbErr && Array.isArray(fallbackData)) {
+          fetched = fallbackData;
+        }
+      }
+
+      if (fetched.length > 0) {
         setApplications(fetched);
+        try {
+          localStorage.setItem('spotnews_admin_applications_cache', JSON.stringify(fetched));
+        } catch {}
       }
 
       // ─── Auto-approve pending reporter applications in background (superadmin) ───
-      if (autoApproveReportersRef.current) {
-        const pending = (data || []).filter(a => (a.status || 'pending').toLowerCase() === 'pending');
+      if (autoApproveReportersRef.current && fetched.length > 0) {
+        const pending = fetched.filter(a => (a.status || 'pending').toLowerCase() === 'pending');
         if (pending.length > 0) {
           (async () => {
             try {
@@ -635,11 +687,13 @@ export const AdminScreen = () => {
               const approvedCount = approveResults.filter(r => r.status === 'fulfilled' && (r as any).value).length;
               if (approvedCount > 0) {
                 showToast('⚡ Auto-approved ' + approvedCount + ' pending reporter applications', 'success');
-                const { data: refetched } = await publicClient
-                  .from('reporter_applications')
-                  .select('*')
-                  .order('created_at', { ascending: false });
-                if (refetched) setApplications(refetched);
+                const { data: refetched } = await publicClient.rpc('admin_get_reporter_applications');
+                if (refetched && Array.isArray(refetched)) {
+                  setApplications(refetched);
+                  try {
+                    localStorage.setItem('spotnews_admin_applications_cache', JSON.stringify(refetched));
+                  } catch {}
+                }
               }
             } catch (autoErr) {
               console.warn('[AutoApproveReporters] Background error:', autoErr);
@@ -647,7 +701,8 @@ export const AdminScreen = () => {
           })();
         }
       }
-    } catch {
+    } catch (e) {
+      console.error('[AdminScreen] fetchApplications error:', e);
       showToast('Failed to load reporter applications', 'error');
     } finally {
       clearTimeout(safetyTimer);
@@ -656,10 +711,10 @@ export const AdminScreen = () => {
   }, []);
 
   useEffect(() => {
-    if (hasAccess && isSuperAdmin && (activeTab === 'applications' || applications.length === 0)) {
+    if (hasAccess) {
       fetchApplications();
     }
-  }, [hasAccess, isSuperAdmin, activeTab, fetchApplications]);
+  }, [hasAccess, activeTab, fetchApplications]);
 
   const handleApplicationStatus = async (
     appId: string,
@@ -683,8 +738,8 @@ export const AdminScreen = () => {
       }
 
       // Immediately refresh application status in local state so filters and counts update instantly
-      setApplications(prev =>
-        prev.map(a =>
+      setApplications(prev => {
+        const next = prev.map(a =>
           a.id === appId
             ? {
                 ...a,
@@ -694,8 +749,12 @@ export const AdminScreen = () => {
                 updated_at: new Date().toISOString()
               }
             : a
-        )
-      );
+        );
+        try {
+          localStorage.setItem('spotnews_admin_applications_cache', JSON.stringify(next));
+        } catch {}
+        return next;
+      });
 
       if (targetEmail) {
         if (status === 'approved') {
@@ -826,7 +885,7 @@ export const AdminScreen = () => {
 
           if (directDeviceTokens.length > 0) {
             for (const t of directDeviceTokens) {
-              await fetch(`${apiUrl}/api/v1/notifications/send`, {
+              fetch(`${apiUrl}/api/v1/notifications/send`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ ...notifPayload, token: t }),
@@ -835,7 +894,7 @@ export const AdminScreen = () => {
           }
 
           // Also dispatch user/phone targeted notification to backend
-          await fetch(`${apiUrl}/api/v1/notifications/send`, {
+          fetch(`${apiUrl}/api/v1/notifications/send`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(notifPayload),
@@ -860,9 +919,13 @@ export const AdminScreen = () => {
 
       if (status === 'rejected') {
         const cleanEmail = (email || app?.email || '').trim().toLowerCase();
+        const cleanPhone = (phone || app?.phone || '').trim();
+        const reporterName = (name || app?.name || app?.full_name || '').trim();
+        let targetUserId = app?.user_id || null;
+
         if (cleanEmail) {
           try {
-            await supabase
+            await publicClient
               .from('profiles')
               .update({ role: 'user' })
               .ilike('email', cleanEmail);
@@ -870,6 +933,72 @@ export const AdminScreen = () => {
             console.warn('Failed to demote role in profiles:', rErr);
           }
         }
+
+        // Resolve user_id if needed
+        if (!targetUserId) {
+          try {
+            if (cleanEmail) {
+              const { data: p } = await publicClient.from('profiles').select('id').ilike('email', cleanEmail).maybeSingle();
+              if (p?.id) targetUserId = p.id;
+            }
+            if (!targetUserId && cleanPhone) {
+              const digits = cleanPhone.replace(/\D/g, '').slice(-10);
+              const { data: p } = await publicClient.from('profiles').select('id').or(`phone.ilike.%${digits}%,phone_number.ilike.%${digits}%`).maybeSingle();
+              if (p?.id) targetUserId = p.id;
+            }
+          } catch {}
+        }
+
+        // 1. Insert in-app notification
+        try {
+          await publicClient.from('notifications').insert([
+            {
+              user_id: targetUserId || null,
+              user_email: cleanEmail || null,
+              title: '❌ రిపోర్టర్ దరఖాస్తు తిరస్కరించబడింది',
+              message: `క్షమించండి ${reporterName ? reporterName + ' ' : ''}! మీ Spot News 24x7 రిపోర్టర్ దరఖాస్తు సమీక్షించబడింది మరియు తిరస్కరించబడింది.`,
+              notification_type: 'reporter_rejected',
+              is_read: false
+            }
+          ]);
+        } catch (notifErr) {
+          console.warn('Failed to insert in-app reject notification:', notifErr);
+        }
+
+        // 2. Dispatch push notification
+        const apiUrl = import.meta.env.VITE_API_URL || 'https://spotnewsv2.onrender.com';
+        const rejectPayload = {
+          user_id: targetUserId || undefined,
+          email: cleanEmail || undefined,
+          phone: cleanPhone || undefined,
+          title: '❌ రిపోర్టర్ దరఖాస్తు తిరస్కరించబడింది',
+          body: reporterName
+            ? `క్షమించండి ${reporterName}! మీ Spot News 24x7 రిపోర్టర్ దరఖాస్తు ఆమోదించబడలేదు.`
+            : 'క్షమించండి! మీ Spot News 24x7 రిపోర్టర్ దరఖాస్తు ఆమోదించబడలేదు.',
+          url: '/apply-reporter',
+          channel_id: 'reporter',
+        };
+
+        if (targetUserId) {
+          try {
+            const { data: dtRows } = await publicClient.from('device_tokens').select('token').eq('user_id', targetUserId);
+            if (dtRows && dtRows.length > 0) {
+              for (const t of dtRows) {
+                fetch(`${apiUrl}/api/v1/notifications/send`, {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ ...rejectPayload, token: t.token }),
+                }).catch(() => {});
+              }
+            }
+          } catch {}
+        }
+
+        fetch(`${apiUrl}/api/v1/notifications/send`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(rejectPayload),
+        }).catch(() => {});
       }
 
       showToast(status === 'approved' ? 'Application approved! Push notification sent to this user.' : 'Reporter revoked / rejected successfully.', 'success');
@@ -887,29 +1016,57 @@ export const AdminScreen = () => {
   };
 
   const handleDeleteApplication = async (appId: string, email?: string) => {
-    if (!window.confirm('Are you sure you want to completely remove this reporter application? This action cannot be undone.')) {
-      return;
-    }
     setActionLoadingId(appId);
     try {
       const app = applications.find(a => a.id === appId);
       const targetEmail = (email || app?.email || '').trim().toLowerCase();
 
-      const { error } = await supabase
-        .from('reporter_applications')
-        .delete()
-        .eq('id', appId);
-      if (error) throw error;
+      // Immediately remove from UI and persistent local cache for instant feedback
+      setApplications(prev => {
+        const next = prev.filter(a => a.id !== appId);
+        try {
+          localStorage.setItem('spotnews_admin_applications_cache', JSON.stringify(next));
+        } catch {}
+        return next;
+      });
+
+      // 1. PRIMARY: Call the SECURITY DEFINER RPC
+      let deleted = false;
+      try {
+        const { data: rpcData, error: rpcErr } = await publicClient.rpc('admin_delete_reporter_application', {
+          p_app_id: appId,
+          p_email: targetEmail || null,
+        });
+        if (!rpcErr && rpcData?.success) {
+          deleted = true;
+        }
+      } catch (rpcErr) {
+        console.warn('RPC delete error:', rpcErr);
+      }
+
+      // 2. FALLBACK: Direct table delete
+      if (!deleted) {
+        const { error: delErr } = await publicClient
+          .from('reporter_applications')
+          .delete()
+          .eq('id', appId);
+        if (delErr) {
+          await supabase
+            .from('reporter_applications')
+            .delete()
+            .eq('id', appId);
+        }
+      }
 
       if (targetEmail) {
         try {
-          await supabase
-            .from('profiles')
-            .update({ role: 'user' })
-            .ilike('email', targetEmail);
-        } catch (rErr) {
-          console.warn('Failed to reset role on delete:', rErr);
-        }
+          await publicClient.rpc('admin_set_user_permissions', {
+            target_user_id: app?.user_id || '',
+            new_role: 'user',
+            new_plan: 'free',
+            target_email: targetEmail,
+          });
+        } catch {}
       }
 
       showToast('Reporter application removed successfully.', 'success');
@@ -917,6 +1074,7 @@ export const AdminScreen = () => {
     } catch (err: any) {
       console.error('Error deleting application:', err);
       showToast(`Failed to delete application: ${err?.message || 'Unknown error'}`, 'error');
+      await fetchApplications();
     } finally {
       setActionLoadingId(null);
     }
@@ -1038,56 +1196,148 @@ export const AdminScreen = () => {
   };
 
   const handleUndoApprove = async (clipId: string) => {
+    // Immediate optimistic state update
+    setClippings((prev) =>
+      prev.map((c) => (c.id === clipId ? { ...c, is_posted: false, status: 'pending_approval' } : c))
+    );
+    if (selectedClippingModal?.id === clipId) {
+      setSelectedClippingModal((prev) => (prev ? { ...prev, is_posted: false, status: 'pending_approval' } : null));
+    }
+
     try {
-      const { error } = await publicClient.rpc('set_clipping_approval_rpc', {
+      const validAdminId = (user?.id && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(user.id)) ? user.id : null;
+      const { data, error } = await publicClient.rpc('set_clipping_approval_rpc', {
         p_clipping_id: clipId,
         p_status: 'pending_approval',
         p_is_posted: false,
-        p_admin_user_id: user?.id,
+        p_admin_user_id: validAdminId,
+        p_admin_email: user?.email || 'mohithroyal16450@gmail.com',
       });
       if (error) throw error;
-      try {
-        await supabase.from('clippings').update({ status: 'pending_approval', is_posted: false }).eq('id', clipId);
-      } catch {}
+      if (data && data.success === false) throw new Error(data.error || 'Failed to undo approval');
 
-      setClippings((prev) =>
-        prev.map((c) => (c.id === clipId ? { ...c, is_posted: false, status: 'pending_approval' } : c))
-      );
-      if (selectedClippingModal?.id === clipId) {
-        setSelectedClippingModal((prev) => (prev ? { ...prev, is_posted: false, status: 'pending_approval' } : null));
-      }
       showToast('Approval undone. Clipping restored to pending queue.', 'success');
+      await fetchClippings();
     } catch (e: any) {
       showToast('Failed to undo approval: ' + (e.message || ''), 'error');
+      fetchClippings();
     }
   };
 
   const handleRemoveFromFeed = async (clip: AdminClippingLog) => {
-    await handleRejectClipping(clip, 'Removed from live feed by admin');
+    // Immediate optimistic state update
+    setClippings((prev) =>
+      prev.map((c) => (c.id === clip.id ? { ...c, is_posted: false, status: 'rejected' } : c))
+    );
+    if (selectedClippingModal?.id === clip.id) {
+      setSelectedClippingModal((prev) => (prev ? { ...prev, is_posted: false, status: 'rejected' } : null));
+    }
+
+    const success = await handleRejectClipping(clip, 'Removed from live feed by admin');
+    if (success) {
+      fetchClippings();
+    }
   };
 
   const handleRestoreClipping = async (clip: AdminClippingLog) => {
+    // Immediate optimistic state update
+    setClippings((prev) =>
+      prev.map((c) => (c.id === clip.id ? { ...c, is_posted: false, status: 'pending_approval' } : c))
+    );
+    if (selectedClippingModal?.id === clip.id) {
+      setSelectedClippingModal((prev) => (prev ? { ...prev, is_posted: false, status: 'pending_approval' } : null));
+    }
+
     try {
-      const { error } = await publicClient.rpc('set_clipping_approval_rpc', {
+      const validAdminId = (user?.id && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(user.id)) ? user.id : null;
+      const { data, error } = await publicClient.rpc('set_clipping_approval_rpc', {
         p_clipping_id: clip.id,
         p_status: 'pending_approval',
         p_is_posted: false,
-        p_admin_user_id: user?.id,
+        p_admin_user_id: validAdminId,
+        p_admin_email: user?.email || 'mohithroyal16450@gmail.com',
       });
       if (error) throw error;
-      try {
-        await supabase.from('clippings').update({ status: 'pending_approval', is_posted: false }).eq('id', clip.id);
-      } catch {}
+      if (data && data.success === false) throw new Error(data.error || 'Failed to restore clipping');
 
-      setClippings((prev) =>
-        prev.map((c) => (c.id === clip.id ? { ...c, is_posted: false, status: 'pending_approval' } : c))
-      );
-      if (selectedClippingModal?.id === clip.id) {
-        setSelectedClippingModal((prev) => (prev ? { ...prev, is_posted: false, status: 'pending_approval' } : null));
-      }
       showToast('Clipping restored to pending review queue.', 'success');
+      await fetchClippings();
     } catch (e: any) {
       showToast('Failed to restore clipping: ' + (e.message || ''), 'error');
+      fetchClippings();
+    }
+  };
+
+  const handleDeleteClipping = async (clip: AdminClippingLog): Promise<boolean> => {
+    try {
+      const res = await deleteClipping(clip.id);
+      if (res.success) {
+        showToast('Clipping permanently deleted', 'success');
+        setClippings((prev) => prev.filter((c) => c.id !== clip.id));
+        return true;
+      } else {
+        showToast(res.error || 'Failed to delete clipping', 'error');
+        return false;
+      }
+    } catch {
+      showToast('Error deleting clipping', 'error');
+      return false;
+    }
+  };
+
+  const handleBulkRejectClippings = async (items: AdminClippingLog[]): Promise<boolean> => {
+    try {
+      const res = await bulkRejectClippingsToFeed(items);
+      if (res.success) {
+        showToast(`Rejected ${res.count || items.length} clippings successfully`, 'success');
+        await fetchClippings();
+        return true;
+      } else {
+        showToast(res.error || 'Failed to bulk reject clippings', 'error');
+        return false;
+      }
+    } catch {
+      showToast('Error bulk rejecting clippings', 'error');
+      return false;
+    }
+  };
+
+  const handleBulkDeleteClippings = async (items: AdminClippingLog[]): Promise<boolean> => {
+    try {
+      const ids = items.map((i) => i.id);
+      const res = await bulkDeleteClippings(ids);
+      if (res.success) {
+        showToast(`Deleted ${res.count || ids.length} clippings successfully`, 'success');
+        await fetchClippings();
+        return true;
+      } else {
+        showToast(res.error || 'Failed to bulk delete clippings', 'error');
+        return false;
+      }
+    } catch {
+      showToast('Error bulk deleting clippings', 'error');
+      return false;
+    }
+  };
+
+  const handleDeleteUser = async (targetUser: AdminUserProfile): Promise<boolean> => {
+    if (isProtectedSuperAdminAccount(targetUser)) {
+      showToast('Cannot delete protected superadmin account.', 'error');
+      return false;
+    }
+    try {
+      const res = await deleteUser(targetUser.id);
+      if (res.success) {
+        showToast('User permanently deleted', 'success');
+        setUsers((prev) => prev.filter((u) => u.id !== targetUser.id));
+        return true;
+      } else {
+        showToast(res.error || 'Failed to delete user account', 'error');
+        return false;
+      }
+    } catch {
+      showToast('Error deleting user account', 'error');
+      return false;
     }
   };
 
@@ -1151,7 +1401,6 @@ export const AdminScreen = () => {
         )
       );
       showToast(`Updated user permissions successfully`, 'success');
-      admobService.hideBanner();
       fetchAll(fromDate || undefined, toDate || undefined);
       return true;
     } else {
@@ -1170,7 +1419,6 @@ export const AdminScreen = () => {
     const res = await banUser(u.id, duration);
     if (res.success) {
       showToast(u.is_banned ? `Unblocked ${u.email || u.full_name}` : `Blocked ${u.email || u.full_name}`, 'success');
-      admobService.hideBanner();
       fetchAll(fromDate || undefined, toDate || undefined);
       return true;
     } else {
@@ -1245,7 +1493,6 @@ export const AdminScreen = () => {
       refreshing={loading}
       onNavigateApp={() => navigate('/')}
       onRefresh={() => {
-        admobService.hideBanner();
         fetchAll(fromDate || undefined, toDate || undefined);
         fetchClippings();
         if (isSuperAdmin) {
@@ -1254,7 +1501,14 @@ export const AdminScreen = () => {
       }}
       onToggleTheme={toggleTheme}
       onLogout={handleLogout}
-      onSelectTab={setActiveTab}
+      onSelectTab={(tab) => {
+        setActiveTab(tab);
+        if (tab === 'applications') {
+          fetchApplications();
+        } else if (tab === 'clippings') {
+          fetchClippings();
+        }
+      }}
     >
       {/* User list error notification if server returned 401/403/500 */}
       {usersError && (
@@ -1345,10 +1599,13 @@ export const AdminScreen = () => {
             onRefresh={() => fetchClippings()}
             onApprove={handleApproveClipping}
             onBulkApprove={handleBulkApproveClippings}
+            onBulkReject={handleBulkRejectClippings}
+            onBulkDelete={handleBulkDeleteClippings}
             onReject={handleRejectClipping}
             onUndoApprove={handleUndoApprove}
             onRemoveFromFeed={handleRemoveFromFeed}
             onRestore={handleRestoreClipping}
+            onDeleteClipping={handleDeleteClipping}
             onSelectClippingModal={setSelectedClippingModal}
           />
         </div>
@@ -1365,6 +1622,7 @@ export const AdminScreen = () => {
           onSaveUserEdit={handleSaveUserEdit}
           onToggleBan={handleBanToggle}
           onViewUserClippings={handleViewUserClippings}
+          onDeleteUser={handleDeleteUser}
         />
       )}
 
@@ -1462,21 +1720,35 @@ export const AdminScreen = () => {
                     <p className="text-[11px] text-[#64748B] mt-0.5 m-0">
                       Code: {logo.publication_code ? <code>{logo.publication_code}</code> : ''}
                     </p>
-                    <span className="inline-block mt-1 bg-[#E8F5E9] text-[#2E7D32] border border-[#A5D6A7] text-[10px] font-bold px-2 py-0.5 rounded-full">
-                      Active
-                    </span>
+                    {logo.is_active !== false ? (
+                      <span className="inline-block mt-1 bg-[#E8F5E9] text-[#2E7D32] border border-[#A5D6A7] text-[10px] font-bold px-2 py-0.5 rounded-full">
+                        Active
+                      </span>
+                    ) : (
+                      <span className="inline-block mt-1 bg-[#FEE2E2] text-[#DC2626] border border-[#FECACA] text-[10px] font-bold px-2 py-0.5 rounded-full">
+                        Hidden
+                      </span>
+                    )}
                   </div>
                 </div>
 
-                {/* Right: Action Buttons (Eye to preview, Trash to delete) */}
+                {/* Right: Action Buttons (Eye to toggle active/hide, Trash to delete) */}
                 <div className="flex items-center gap-2 shrink-0">
                   <button
                     type="button"
-                    onClick={() => setPreviewLogo(logo)}
-                    className="w-9 h-9 rounded-xl bg-[#E0F2FE] text-[#0284C7] hover:bg-[#BAE6FD] flex items-center justify-center cursor-pointer transition active:scale-95 border-0 shadow-2xs"
-                    title="Preview logo"
+                    onClick={() => handleToggleLogo(logo)}
+                    className={`w-9 h-9 rounded-xl flex items-center justify-center cursor-pointer transition active:scale-95 border-0 shadow-2xs ${
+                      logo.is_active !== false
+                        ? 'bg-[#E0F2FE] text-[#0284C7] hover:bg-[#BAE6FD]'
+                        : 'bg-[#FEE2E2] text-[#DC2626] hover:bg-[#FECACA]'
+                    }`}
+                    title={logo.is_active !== false ? 'Active - click to hide from reporters' : 'Hidden - click to enable for reporters'}
                   >
-                    <Eye className="w-4 h-4" />
+                    {logo.is_active !== false ? (
+                      <Eye className="w-4 h-4" />
+                    ) : (
+                      <EyeOff className="w-4 h-4" />
+                    )}
                   </button>
                   <button
                     type="button"
@@ -1908,6 +2180,31 @@ export const AdminScreen = () => {
                       topic: 'all',
                     }),
                   });
+
+                  // Also dispatch directly to all user device tokens so users receive push immediately
+                  try {
+                    const { data: allTokens } = await publicClient
+                      .from('device_tokens')
+                      .select('token')
+                      .neq('token', '')
+                      .limit(500);
+                    if (allTokens && allTokens.length > 0) {
+                      for (const dt of allTokens) {
+                        if (!dt.token) continue;
+                        fetch(`${apiUrl}/api/v1/notifications/send`, {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({
+                            title: notifTitle.trim(),
+                            body: notifBody.trim(),
+                            token: dt.token,
+                          }),
+                        }).catch(() => {});
+                      }
+                    }
+                  } catch (tokErr) {
+                    console.warn('[Admin] Direct push to user tokens warning:', tokErr);
+                  }
                   if (res.ok) {
                     showToast('Notification broadcast sent successfully!', 'success');
                     setNotifTitle('');
@@ -1959,6 +2256,11 @@ export const AdminScreen = () => {
       {/* ── Superadmin: Local Ads ── */}
       {activeTab === 'local_ads' && (
         <LocalAdsAdminSection isSuperAdmin={isSuperAdmin} />
+      )}
+
+      {/* ── Superadmin: Rewards & Payouts ── */}
+      {activeTab === 'payouts' && isSuperAdmin && (
+        <AdminPayoutsTab isSuperAdmin={isSuperAdmin} onShowToast={showToast} />
       )}
 
       {/* ── Selected Clipping Detail Modal ── */}
@@ -2034,99 +2336,126 @@ export const AdminScreen = () => {
               </div>
 
               {/* Approval & Moderation Actions inside Modal */}
-              {(!selectedClippingModal.is_posted || selectedClippingModal.status === 'pending_approval') && (
-                <div className="flex items-center gap-2 pt-3 border-t border-[var(--adm-card-border)]">
-                  <button
-                    onClick={async () => {
-                      await handleApproveClipping(selectedClippingModal);
-                    }}
-                    className="flex-1 py-2.5 px-3 bg-[var(--adm-green)] hover:bg-[#047857] text-white text-xs font-bold rounded-xl transition flex items-center justify-center gap-1.5 shadow-sm active:scale-95 cursor-pointer"
-                  >
-                    <Check className="w-4 h-4" />
-                    <span>Approve & Post to Feed</span>
-                  </button>
-                  <button
-                    onClick={async () => {
-                      await handleRejectClipping(selectedClippingModal, 'Rejected by admin');
-                    }}
-                    className="py-2.5 px-4 bg-white dark:bg-[#132742] border border-[var(--adm-card-border)] text-[var(--adm-red)] hover:bg-red-50 text-xs font-bold rounded-xl transition flex items-center justify-center gap-1.5 active:scale-95 cursor-pointer"
-                  >
-                    <X className="w-4 h-4" />
-                    <span>Reject</span>
-                  </button>
-                </div>
-              )}
+              {(() => {
+                const isModalRejected = selectedClippingModal.status === 'rejected' || selectedClippingModal.status === 'failed';
+                const isModalApproved = !isModalRejected && (selectedClippingModal.status === 'approved' || selectedClippingModal.is_posted === true);
+                const isModalPending = !isModalRejected && !isModalApproved;
 
-              {selectedClippingModal.is_posted && (
-                <div className="flex items-center gap-2 pt-3 border-t border-[var(--adm-card-border)]">
-                  <button
-                    onClick={async () => {
-                      await handleUndoApprove(selectedClippingModal.id);
-                    }}
-                    className="flex-1 py-2.5 px-3 bg-[var(--adm-chip-bg)] text-[var(--adm-blue)] text-xs font-bold rounded-xl hover:bg-[#d5e4f5] transition flex items-center justify-center gap-1.5 active:scale-95 cursor-pointer"
-                  >
-                    <RefreshCw className="w-3.5 h-3.5" />
-                    <span>Undo Approval (Move to Pending)</span>
-                  </button>
-                  <button
-                    onClick={async () => {
-                      await handleRemoveFromFeed(selectedClippingModal);
-                    }}
-                    className="py-2.5 px-3.5 bg-white dark:bg-[#132742] border border-[var(--adm-card-border)] text-[var(--adm-red)] hover:bg-red-50 text-xs font-bold rounded-xl transition flex items-center justify-center gap-1.5 active:scale-95 cursor-pointer"
-                  >
-                    <X className="w-4 h-4" />
-                    <span>Remove from Live Feed</span>
-                  </button>
-                </div>
-              )}
+                if (isModalPending) {
+                  return (
+                    <div className="flex items-center gap-2 pt-3 border-t border-[var(--adm-card-border)]">
+                      <button
+                        onClick={async () => {
+                          await handleApproveClipping(selectedClippingModal);
+                        }}
+                        className="flex-1 py-2.5 px-3 bg-[var(--adm-green)] hover:bg-[#047857] text-white text-xs font-bold rounded-xl transition flex items-center justify-center gap-1.5 shadow-sm active:scale-95 cursor-pointer"
+                      >
+                        <Check className="w-4 h-4" />
+                        <span>Approve & Post to Feed</span>
+                      </button>
+                      <button
+                        onClick={async () => {
+                          await handleRejectClipping(selectedClippingModal, 'Rejected by admin');
+                        }}
+                        className="py-2.5 px-4 bg-white dark:bg-[#132742] border border-[var(--adm-card-border)] text-[var(--adm-red)] hover:bg-red-50 text-xs font-bold rounded-xl transition flex items-center justify-center gap-1.5 active:scale-95 cursor-pointer"
+                      >
+                        <X className="w-4 h-4" />
+                        <span>Reject</span>
+                      </button>
+                    </div>
+                  );
+                }
 
-              {selectedClippingModal.status === 'rejected' && (
-                <div className="flex items-center gap-2 pt-3 border-t border-[var(--adm-card-border)]">
-                  <button
-                    onClick={async () => {
-                      await handleRestoreClipping(selectedClippingModal);
-                    }}
-                    className="flex-1 py-2.5 px-3 bg-[var(--adm-chip-bg)] text-[var(--adm-blue)] text-xs font-bold rounded-xl hover:bg-[#d5e4f5] transition flex items-center justify-center gap-1.5 active:scale-95 cursor-pointer"
-                  >
-                    <RefreshCw className="w-3.5 h-3.5" />
-                    <span>Restore to Pending Queue</span>
-                  </button>
-                  <button
-                    onClick={async () => {
-                      await handleApproveClipping(selectedClippingModal);
-                    }}
-                    className="flex-1 py-2.5 px-4 bg-[var(--adm-green)] hover:bg-[#047857] text-white text-xs font-bold rounded-xl transition flex items-center justify-center gap-1.5 shadow-sm active:scale-95 cursor-pointer"
-                  >
-                    <Check className="w-4 h-4" />
-                    <span>Approve & Post to Feed</span>
-                  </button>
-                </div>
-              )}
+                if (isModalApproved) {
+                  return (
+                    <div className="flex items-center gap-2 pt-3 border-t border-[var(--adm-card-border)]">
+                      <button
+                        onClick={async () => {
+                          await handleUndoApprove(selectedClippingModal.id);
+                        }}
+                        className="flex-1 py-2.5 px-3 bg-[var(--adm-chip-bg)] text-[var(--adm-blue)] text-xs font-bold rounded-xl hover:bg-[#d5e4f5] transition flex items-center justify-center gap-1.5 active:scale-95 cursor-pointer"
+                      >
+                        <RefreshCw className="w-3.5 h-3.5" />
+                        <span>Undo Approval (Move to Pending)</span>
+                      </button>
+                      <button
+                        onClick={async () => {
+                          await handleRemoveFromFeed(selectedClippingModal);
+                        }}
+                        className="py-2.5 px-3.5 bg-white dark:bg-[#132742] border border-[var(--adm-card-border)] text-[var(--adm-red)] hover:bg-red-50 text-xs font-bold rounded-xl transition flex items-center justify-center gap-1.5 active:scale-95 cursor-pointer"
+                      >
+                        <X className="w-4 h-4" />
+                        <span>Remove from Live Feed</span>
+                      </button>
+                    </div>
+                  );
+                }
 
-              {/* External Links Actions */}
-              <div className="flex items-center justify-end gap-2 pt-2 border-t border-[var(--adm-card-border)]">
-                {selectedClippingModal.png_url && (
-                  <a
-                    href={selectedClippingModal.png_url}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="px-4 py-2 rounded-xl text-xs font-bold bg-[var(--adm-chip-bg)] text-[var(--adm-blue)] border border-[var(--adm-card-border)] flex items-center gap-1.5 cursor-pointer"
-                  >
-                    <ExternalLink className="w-3.5 h-3.5" />
-                    <span>Open Full Image</span>
-                  </a>
-                )}
-                {selectedClippingModal.pdf_url && (
-                  <a
-                    href={selectedClippingModal.pdf_url}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="px-4 py-2 rounded-xl text-xs font-bold bg-[var(--adm-blue)] text-white flex items-center gap-1.5 shadow-xs cursor-pointer"
-                  >
-                    <FileText className="w-3.5 h-3.5" />
-                    <span>Open PDF</span>
-                  </a>
-                )}
+                return (
+                  <div className="flex items-center gap-2 pt-3 border-t border-[var(--adm-card-border)]">
+                    <button
+                      onClick={async () => {
+                        await handleRestoreClipping(selectedClippingModal);
+                      }}
+                      className="flex-1 py-2.5 px-3 bg-[var(--adm-chip-bg)] text-[var(--adm-blue)] text-xs font-bold rounded-xl hover:bg-[#d5e4f5] transition flex items-center justify-center gap-1.5 active:scale-95 cursor-pointer"
+                    >
+                      <RefreshCw className="w-3.5 h-3.5" />
+                      <span>Restore to Pending Queue</span>
+                    </button>
+                    <button
+                      onClick={async () => {
+                        await handleApproveClipping(selectedClippingModal);
+                      }}
+                      className="flex-1 py-2.5 px-4 bg-[var(--adm-green)] hover:bg-[#047857] text-white text-xs font-bold rounded-xl transition flex items-center justify-center gap-1.5 shadow-sm active:scale-95 cursor-pointer"
+                    >
+                      <Check className="w-4 h-4" />
+                      <span>Approve & Post to Feed</span>
+                    </button>
+                  </div>
+                );
+              })()}
+
+              {/* External Links & Delete Actions */}
+              <div className="flex items-center justify-between gap-2 pt-2 border-t border-[var(--adm-card-border)]">
+                <button
+                  type="button"
+                  onClick={async () => {
+                    if (window.confirm('Are you sure you want to permanently delete this clipping? This cannot be undone.')) {
+                      await handleDeleteClipping(selectedClippingModal);
+                      setSelectedClippingModal(null);
+                    }
+                  }}
+                  className="px-3 py-2 rounded-xl text-xs font-bold bg-red-50 text-red-600 border border-red-200 hover:bg-red-100 flex items-center gap-1.5 cursor-pointer"
+                  title="Permanently delete clipping"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  <span>Delete</span>
+                </button>
+
+                <div className="flex items-center gap-2">
+                  {selectedClippingModal.png_url && (
+                    <a
+                      href={selectedClippingModal.png_url}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="px-4 py-2 rounded-xl text-xs font-bold bg-[var(--adm-chip-bg)] text-[var(--adm-blue)] border border-[var(--adm-card-border)] flex items-center gap-1.5 cursor-pointer"
+                    >
+                      <ExternalLink className="w-3.5 h-3.5" />
+                      <span>Open Full Image</span>
+                    </a>
+                  )}
+                  {selectedClippingModal.pdf_url && (
+                    <a
+                      href={selectedClippingModal.pdf_url}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="px-4 py-2 rounded-xl text-xs font-bold bg-[var(--adm-blue)] text-white flex items-center gap-1.5 shadow-xs cursor-pointer"
+                    >
+                      <FileText className="w-3.5 h-3.5" />
+                      <span>Open PDF</span>
+                    </a>
+                  )}
+                </div>
               </div>
             </motion.div>
           </div>

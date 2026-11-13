@@ -15,7 +15,7 @@ import mastheadLogo from '../../assets/rti_express_logo.png';
 interface AdminShellProps {
   adminEmail?: string;
   isSuperAdmin?: boolean;
-  activeTab: 'overview' | 'clippings' | 'users' | 'daily_editions' | 'logos' | 'applications' | 'notifications' | 'local_ads';
+  activeTab: 'overview' | 'clippings' | 'users' | 'daily_editions' | 'logos' | 'applications' | 'notifications' | 'local_ads' | 'payouts';
   pendingClippingsCount: number;
   pendingApplicationsCount?: number;
   totalUsersCount: number;
@@ -226,6 +226,15 @@ export const AdminShell: React.FC<AdminShellProps> = ({
                 }`}
             >
               Local Ads
+            </button>
+            <button
+              onClick={() => onSelectTab('payouts')}
+              className={`px-3 py-1 rounded-lg text-[11px] font-bold shrink-0 transition ${activeTab === 'payouts'
+                ? 'bg-[var(--adm-blue)] text-white'
+                : 'bg-[var(--adm-chip-bg)] text-[var(--adm-text-secondary)] hover:bg-[#d5e4f5]'
+                }`}
+            >
+              Rewards & Payouts
             </button>
           </div>
         )}

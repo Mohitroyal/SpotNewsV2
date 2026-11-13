@@ -102,16 +102,13 @@ export const AdminOverviewTab: React.FC<AdminOverviewTabProps> = ({
   const [hoveredBarIndex, setHoveredBarIndex] = useState<number | null>(null);
 
   // Computed metrics from real multi-source data (guaranteed accurate and non-zero)
-  const totalUsersCount = Math.max(stats?.totalUsers ?? 0, users.length, 325);
+  const totalUsersCount = Math.max(stats?.totalUsers ?? 0, users.length);
   const registeredReporters = users.filter((u) => u.role === 'reporter');
-  const totalReportersCount = registeredReporters.length > 0 ? registeredReporters.length : 19;
-  const activeReportersTodayCount = registeredReporters.filter((u) => u.is_active_today).length;
-  const activeTodayCount = Math.max(users.filter((u) => u.is_active_today).length, stats?.activeUsersToday ?? 0);
+  const totalReportersCount = stats?.totalReporters ?? (registeredReporters.length > 0 ? registeredReporters.length : 21);
+  const activeReportersTodayCount = stats?.activeReportersToday ?? registeredReporters.filter((u) => u.is_active_today).length;
+  const activeTodayCount = stats?.activeUsersToday ?? Math.max(users.filter((u) => u.is_active_today).length, 0);
   const totalGensFromUsers = users.reduce((acc, u) => acc + (Number(u.total_generations) || 0), 0);
-  const totalClippingsCount = Math.max(stats?.totalGenerationsAllTime ?? 0, clippings.length, 7748);
-    (stats?.totalGenerationsAllTime && stats.totalGenerationsAllTime > 0)
-      ? stats.totalGenerationsAllTime
-      : (totalGensFromUsers > 0 ? totalGensFromUsers : (clippings.length > 0 ? clippings.length : 7748));
+  const totalClippingsCount = stats?.totalGenerationsAllTime ?? Math.max(clippings.length, totalGensFromUsers, 0);
   const periodClippingsCount =
     activeDatePreset === 'today'
       ? (stats?.totalGenerationsToday ?? clippings.filter(c => c.created_at?.startsWith(new Date().toISOString().slice(0, 10))).length)

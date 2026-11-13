@@ -184,20 +184,18 @@
             text-align: left;
         }
         .article-body {
-            font-size: 18px;
-            line-height: 1.45;
-            color: #37474F;
-            font-weight: 400;
+            font-size: 25.5px;
+            line-height: 1.65;
+            color: #2D3748;
+            font-weight: 500;
             margin: 0;
             font-family: 'Gautami', 'Noto Sans Telugu', 'Inter', sans-serif;
-            text-align: justify;
-            text-justify: inter-word;
+            text-align: left;
         }
         .article-body p {
-            margin: 0 0 8px 0;
+            margin: 0;
             word-break: break-word;
-            text-align: justify;
-            text-justify: inter-word;
+            text-align: left;
         }
         .article-body p:last-child {
             margin-bottom: 0;
@@ -372,9 +370,9 @@
             <div class="article-body">
                 <p>
                 {% if sections and sections|length > 0 %}
-                    {{ sections | join('') }}
+                    {{ sections | join(' ') | replace('\n', ' ') | replace('\r', ' ') }}
                 {% else %}
-                    {{ article_text if article_text else (raw_content if raw_content else '') }}
+                    {{ (article_text if article_text else (raw_content if raw_content else '')) | replace('\n', ' ') | replace('\r', ' ') }}
                 {% endif %}
                 </p>
             </div>

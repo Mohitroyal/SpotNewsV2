@@ -1,12 +1,12 @@
 /**
  * Word-limit helpers for news content.
  *
- * Rule: a news clipping's article text is limited to 50 words.
+ * Rule: a news clipping's article text is limited to 100 words.
  * Works for Telugu and English (words are separated by whitespace).
  */
 
-export const MAX_ARTICLE_WORDS = 50;
-export const MAX_HEADLINE_WORDS = 6;
+export const MAX_ARTICLE_WORDS = 100;
+export const MAX_HEADLINE_WORDS = 10;
 
 /** Count words (any run of non-space characters). */
 export function countWords(text: string): number {

@@ -351,34 +351,33 @@ def _expand_short_id(code):
 def story_share_view(request, clip_id):
     """
     Renders an HTML page with Open Graph (OG) meta tags so WhatsApp, Telegram, etc.
-    display the clipping image or RTI Express logo as a rich preview card.
+    display the clipping image as a rich preview card.
     When tapped in WhatsApp, it opens this URL which redirects directly into the app
     if installed, or prompts to download from Google Play if not installed.
     """
     import html as _html
     from urllib.parse import quote as _quote
-    clean_id = _expand_short_id(clip_id)
+    clip_id = _expand_short_id(clip_id)
     headline = "RTI Express Spot News 24x7"
     png_url = ""
-    mp4_url = ""
-    DEFAULT_APP_LOGO = "https://rffrqokpnqoycpozrjuc.supabase.co/storage/v1/object/public/newscraft-clippings/assets/app_logo.png"
+    summary = "పూర్తి వార్త యాప్‌లో చదవండి — RTI Express Spot News 24x7"
     
     try:
         with connection.cursor() as cursor:
-            cursor.execute("SELECT headline, png_url, mp4_url FROM public.clippings WHERE id = %s", [str(clean_id)])
+            cursor.execute("SELECT headline, png_url, summary FROM public.clippings WHERE id = %s", [str(clip_id)])
             row = cursor.fetchone()
             if row:
                 headline = row[0] or headline
                 png_url = row[1] or ""
-                mp4_url = row[2] or ""
+                summary = row[2] or summary
     except Exception as e:
-        print(f"Error fetching clipping {clean_id}: {e}")
+        print(f"Error fetching clipping {clip_id}: {e}")
 
     # Fallback to Supabase REST if connection failed or not found in local cursor
-    if not headline or headline == "RTI Express Spot News 24x7":
+    if not png_url:
         try:
             import urllib.request
-            supa_url = f"https://rffrqokpnqoycpozrjuc.supabase.co/rest/v1/clippings?id=eq.{clean_id}&select=headline,png_url,mp4_url"
+            supa_url = f"https://rffrqokpnqoycpozrjuc.supabase.co/rest/v1/clippings?id=eq.{clip_id}&select=headline,png_url,summary"
             anon_key = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJmZnJxb2twbnFveWNwb3pyanVjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg5NDE4MjUsImV4cCI6MjA5NDUxNzgyNX0.9BcRAPuhoK1C6SMeUvexABXp5HW2dfEJbdcRT_2FiL4"
             req = urllib.request.Request(supa_url, headers={
                 "apikey": anon_key,
@@ -390,23 +389,20 @@ def story_share_view(request, clip_id):
                 if data and len(data) > 0:
                     headline = data[0].get("headline") or headline
                     png_url = data[0].get("png_url") or ""
-                    mp4_url = data[0].get("mp4_url") or ""
+                    summary = data[0].get("summary") or summary
         except Exception as err:
             print(f"Supabase fallback fetch error: {err}")
 
-    # For video sharing, or when clipping has a video, ALWAYS display the official RTI Express LOGO in WhatsApp/social preview!
-    is_video = bool(mp4_url or request.GET.get('video') == '1' or request.path.startswith('/v/'))
-    preview_image = DEFAULT_APP_LOGO if is_video or not png_url else png_url
-
     # Escape everything that goes into the page (headlines come from reporters)
-    headline_escaped = _html.escape(str(headline), quote=True)
-    preview_img_escaped = _html.escape(str(preview_image), quote=True)
-    safe_clip_id = _quote(str(clean_id), safe="-")
+    headline = _html.escape(str(headline), quote=True)
+    png_url = _html.escape(str(png_url), quote=True)
+    summary = _html.escape(str(summary), quote=True)
+    clip_id = _quote(str(clip_id), safe="-")
 
     package_name = "com.newscraft.mobile"
-    play_store_url = f"https://play.google.com/store/apps/details?id={package_name}&referrer=utm_source%3Dshare%26utm_content%3D{safe_clip_id}"
-    scheme_url = f"spotnews://feed?clipId={safe_clip_id}"
-    intent_url = f"intent://feed?clipId={safe_clip_id}#Intent;scheme=spotnews;package={package_name};S.browser_fallback_url={_quote(play_store_url, safe='')};end"
+    play_store_url = f"https://play.google.com/store/apps/details?id={package_name}&referrer=utm_source%3Dshare%26utm_content%3D{clip_id}"
+    scheme_url = f"spotnews://feed?clipId={clip_id}"
+    intent_url = f"intent://feed?clipId={clip_id}#Intent;scheme=spotnews;package={package_name};S.browser_fallback_url={_quote(play_store_url, safe='')};end"
     share_url = request.build_absolute_uri()
 
     html = f"""<!DOCTYPE html>
@@ -414,25 +410,25 @@ def story_share_view(request, clip_id):
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{headline_escaped} | RTI Express Spot News 24x7</title>
+    <title>{headline} | RTI Express Spot News 24x7</title>
     
     <!-- WhatsApp & Social Open Graph Tags (Way2News style) -->
     <meta property="og:type" content="article" />
     <meta property="og:site_name" content="RTI Express Spot News 24x7" />
-    <meta property="og:title" content="{headline_escaped}" />
+    <meta property="og:title" content="{headline}" />
     <meta property="og:description" content="పూర్తి వార్త చదవడానికి క్లిక్ చేయండి - RTI Express Spot News 24x7" />
-    <meta property="og:image" content="{preview_img_escaped}" />
-    <meta property="og:image:secure_url" content="{preview_img_escaped}" />
+    <meta property="og:image" content="{png_url}" />
+    <meta property="og:image:secure_url" content="{png_url}" />
     <meta property="og:image:type" content="image/png" />
-    <meta property="og:image:width" content="800" />
-    <meta property="og:image:height" content="800" />
+    <meta property="og:image:width" content="1080" />
+    <meta property="og:image:height" content="1350" />
     <meta property="og:url" content="{share_url}" />
     
     <!-- Twitter Card -->
     <meta name="twitter:card" content="summary_large_image" />
-    <meta name="twitter:title" content="{headline_escaped}" />
+    <meta name="twitter:title" content="{headline}" />
     <meta name="twitter:description" content="పూర్తి వార్త చదవడానికి క్లిక్ చేయండి - RTI Express Spot News 24x7" />
-    <meta name="twitter:image" content="{preview_img_escaped}" />
+    <meta name="twitter:image" content="{png_url}" />
 
     <!-- App Links for Android -->
     <meta property="al:android:url" content="{scheme_url}" />
@@ -492,16 +488,6 @@ def story_share_view(request, clip_id):
             cursor: pointer;
             display: block;
         }}
-        .video-logo-img {{
-            width: 140px;
-            height: 140px;
-            object-fit: contain;
-            border-radius: 16px;
-            margin: 0 auto 16px;
-            display: block;
-            background: transparent;
-            cursor: pointer;
-        }}
         .btn {{
             display: flex;
             align-items: center;
@@ -539,8 +525,8 @@ def story_share_view(request, clip_id):
 <body>
     <div class="container">
         <div class="brand-badge">⚡ RTI Express Spot News 24x7</div>
-        <h1 class="headline">{headline_escaped}</h1>
-        {f'<img class="video-logo-img" src="{preview_img_escaped}" alt="RTI Express Logo" onclick="openApp()" />' if is_video else f'<img class="clipping-img" src="{preview_img_escaped}" alt="News Clipping" onclick="openApp()" />'}
+        <h1 class="headline">{headline}</h1>
+        {f'<img class="clipping-img" src="{png_url}" alt="News Clipping" onclick="openApp()" />' if png_url else ''}
         <a href="{scheme_url}" class="btn btn-app" onclick="openApp(); return false;">🚀 యాప్‌లో తెరవండి (Open in App)</a>
         <a href="{play_store_url}" class="btn btn-playstore" target="_blank" rel="noopener">📥 Google Play నుండి డౌన్‌లోడ్ చేయండి</a>
         <p class="footer-text">యాప్ మీ ఫోన్‌లో ఇప్పటికే ఉంటే "యాప్‌లో తెరవండి" పై క్లిక్ చేయండి.</p>

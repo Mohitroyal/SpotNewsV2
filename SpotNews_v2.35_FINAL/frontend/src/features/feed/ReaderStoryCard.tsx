@@ -1,7 +1,6 @@
 import React, { useRef, useState, useEffect } from 'react';
 import { Newspaper, Share2, MessageCircle, ThumbsUp, Megaphone, ChevronRight, FileImage, MapPin, Play, Volume2, VolumeX } from 'lucide-react';
-import { FitBox } from '@/components/FitBox';
-import { limitWordsForDisplay, MAX_HEADLINE_WORDS } from '@/utils/wordLimit';
+import { limitWordsForDisplay, MAX_HEADLINE_WORDS, MAX_ARTICLE_WORDS } from '@/utils/wordLimit';
 import { TwoImageGallery, getClipPhotos } from '@/components/TwoImageGallery';
 
 /**
@@ -141,8 +140,12 @@ export const ReaderStoryCard: React.FC<Props> = ({ clip, liked, onLike, onCommen
   const originalVideo = cl.video_url || cl.videoUrl || clip.video_url || clip.videoUrl || '';
   const poster = clip?.png_url || cl?.png_url || cl?.pngUrl || clip?.image_url || cl?.imageUrl || '';
   const photos = getClipPhotos(clip);
-  const headline = limitWordsForDisplay(clip.headline || cl.headline || 'Spot News', MAX_HEADLINE_WORDS);
-  const body = limitWordsForDisplay(clip.article_content || cl.articleContent || cl.article_content || '');
+  const isTwoImage = photos.length >= 2 || ['C', 'D'].includes(cl?.layoutPattern || cl?.layout_pattern || clip?.layout_pattern || clip?.pattern || clip?.image_layout || '');
+  const rawHeadline = clip.headline || cl.headline || 'Spot News';
+  const headline = isTwoImage ? rawHeadline : limitWordsForDisplay(rawHeadline, MAX_HEADLINE_WORDS);
+  const originalBody = clip.article_content || cl.articleContent || cl.article_content || '';
+  const rawBody = isTwoImage ? originalBody : limitWordsForDisplay(originalBody, MAX_ARTICLE_WORDS);
+  const body = rawBody ? rawBody.replace(/[\r\n]+/g, ' ').replace(/[ \t]+/g, ' ').trim() : '';
   const reporter = cl.reporterName || cl.reporter_name || clip.reporter_name || 'RTI Express Reporter';
   const place = clip.district && clip.district !== 'All' ? clip.district : '';
 
@@ -179,9 +182,14 @@ export const ReaderStoryCard: React.FC<Props> = ({ clip, liked, onLike, onCommen
       </div>
 
       {/* Text */}
-      <FitBox className="flex-1 min-h-0 px-5 pt-4 pb-2">
+      <div
+        className="flex-1 min-h-0 px-5 pt-4 pb-3 overflow-y-auto"
+        style={{
+          WebkitOverflowScrolling: 'touch',
+        }}
+      >
         <h2 className="text-[23px] leading-[1.35] font-extrabold text-[#0A2540] m-0">{headline}</h2>
-        {body && <p className="mt-3 mb-0 text-[18px] leading-[1.65] text-[#1F2937] whitespace-pre-line">{body}</p>}
+        {body && <p className="mt-3 mb-0 text-[22px] sm:text-[23px] leading-[36px] sm:leading-[38px] text-[#1F2937] pb-2">{body}</p>}
         <div className="mt-3 flex items-center gap-2 text-[14px] text-[#64748B] font-semibold">
           <span className="truncate">{reporter}</span>
           {place && (<><span>·</span><span className="inline-flex items-center gap-0.5"><MapPin className="w-3.5 h-3.5" />{place}</span></>)}
@@ -199,7 +207,7 @@ export const ReaderStoryCard: React.FC<Props> = ({ clip, liked, onLike, onCommen
             <ChevronRight className="w-5 h-5 text-[#B45309] shrink-0" />
           </button>
         )}
-      </FitBox>
+      </div>
 
       {/* Actions */}
       <div className="shrink-0 grid grid-cols-3 border-t border-[#E2E8F0] bg-white" style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}>

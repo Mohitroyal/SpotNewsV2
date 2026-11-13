@@ -4,7 +4,7 @@ import { DISTRICTS, findDistrict } from '@/features/daily/dailyContentEngine';
 import {
   ArrowLeft, Plus, Image as ImageIcon, Video, CheckCircle2,
   Clock, AlertCircle, Phone, MessageSquare, Globe,
-  Loader2, X, RefreshCw, Sparkles, CreditCard
+  Loader2, X, RefreshCw, Sparkles, CreditCard, Eye
 } from 'lucide-react';
 import { useAuthStore } from '@/store';
 import { localAdsService, adOwnerId } from '@/services/localAds.service';
@@ -473,9 +473,17 @@ export const ReporterAdRequestsScreen: React.FC = () => {
                           <span className="font-medium text-gray-700">{ad.cta_value || 'None'}</span>
                         </span>
                       </div>
-                      <p className="text-[13px] text-gray-400">
-                        Submitted: {new Date(ad.created_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
-                      </p>
+                      <div className="flex items-center gap-2 pt-0.5 flex-wrap">
+                        <p className="text-[13px] text-gray-400">
+                          Submitted: {new Date(ad.created_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
+                        </p>
+                        {isActive && (
+                          <span className="inline-flex items-center gap-1 font-bold text-gray-700 bg-blue-50 border border-blue-200/80 px-2 py-0.5 rounded-full text-[12px]" title="Ad Views">
+                            <Eye className="w-3.5 h-3.5 text-[#015BB3]" />
+                            <span>{ad.views_count ?? 0} views</span>
+                          </span>
+                        )}
+                      </div>
                     </div>
                   </div>
 
@@ -630,7 +638,7 @@ export const ReporterAdRequestsScreen: React.FC = () => {
                   ? <><Loader2 className="w-6 h-6 animate-spin" /> {submittingStep || 'పోస్ట్ అవుతోంది… · Posting…'}</>
                   : <><CheckCircle2 className="w-6 h-6" /> ప్రకటన పోస్ట్ చేయండి · Post Ad</>}
               </button>
-              <p className="text-center text-[13.5px] text-[#64748B] m-0">v2.50 · ఉచితం · వెంటనే లైవ్ · Free · Live at once</p>
+              <p className="text-center text-[13.5px] text-[#64748B] m-0">v2.54 · ఉచితం · వెంటనే లైవ్ · Free · Live at once</p>
             </form>
           </div>
         </div>

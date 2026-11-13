@@ -104,7 +104,14 @@ export const getAdminUsers = async (): Promise<AdminUserProfile[]> => {
       ]);
       if (pRes.status === 'fulfilled' && Array.isArray(pRes.value.data)) rawProfiles = pRes.value.data;
       if (uRes.status === 'fulfilled' && Array.isArray(uRes.value.data)) rawUsers = uRes.value.data;
-      if (aRes.status === 'fulfilled' && Array.isArray(aRes.value.data)) rawApps = aRes.value.data;
+      if (aRes.status === 'fulfilled' && Array.isArray(aRes.value.data)) {
+        rawApps = aRes.value.data;
+        if (rawApps.length > 0) {
+          try {
+            localStorage.setItem('spotnews_admin_applications_cache', JSON.stringify(rawApps));
+          } catch {}
+        }
+      }
       if (cRes.status === 'fulfilled' && Array.isArray(cRes.value.data)) rawClips = cRes.value.data;
     } catch {}
 
