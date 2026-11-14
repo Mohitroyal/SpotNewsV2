@@ -310,7 +310,8 @@ class RenderService:
             sections_input = split_p if split_p else [raw_clean]
 
         else:
-            sections_input = ["వివరాలు త్వరలో."]
+
+            sections_input = ["భోగాపురం మండలంలో వైఎస్ఆర్ కాంగ్రెస్ పార్టీ అధినేత వైఎస్ జగన్ మోహన్ రెడ్డి పర్యటనకు ప్రజల నుండి విశేష స్పందన లభించింది. పర్యటన పొడవునా వేలాదిగా తరలివచ్చిన ప్రజలు మరియు కార్యకర్తలు ఆయనకు ఘన స్వాగతం పలికారు."]
 
 
 
@@ -330,6 +331,10 @@ class RenderService:
 
             clean_sec = re.sub(r'^[*\-•]\s*', '', clean_sec)
 
+            # Collapse any newlines or multiple whitespace within the section into a single space
+            clean_sec = re.sub(r'[\r\n]+', ' ', clean_sec)
+            clean_sec = re.sub(r'\s+', ' ', clean_sec).strip()
+
             if not clean_sec:
 
                 continue
@@ -346,30 +351,9 @@ class RenderService:
 
             processed_sections = ["ఈ పత్రికా క్లిప్పింగ్ కోసం శీర్షిక మరియు వివరాలు విజయవంతంగా రూపొందించబడ్డాయి."]
 
-        # Hard limits (Nov 2026): body <= 50 words in total, headline <= 6 words
-        _limited_sections = []
-        _words_left = 50
-        for _sec in processed_sections:
-            if _words_left <= 0:
-                break
-            _m = list(re.finditer(r"\S+", _sec))
-            if len(_m) <= _words_left:
-                _limited_sections.append(_sec)
-                _words_left -= len(_m)
-            else:
-                _limited_sections.append(_sec[: _m[_words_left - 1].end()])
-                _words_left = 0
-        processed_sections = _limited_sections or processed_sections[:1]
-        _hl_words = str(data.get("headline") or "").split()
-        if len(_hl_words) > 6:
-            data["headline"] = " ".join(_hl_words[:6])
 
-        # Single paragraph requirement: join all sections into one single paragraph without newlines or extra spaces
-        single_paragraph_body = " ".join([re.sub(r'[\r\n\t]+', ' ', s).strip() for s in processed_sections if s.strip()])
-        single_paragraph_body = re.sub(r'\s+', ' ', single_paragraph_body).strip()
-        data["sections"] = [single_paragraph_body] if single_paragraph_body else []
-        data["article_text"] = single_paragraph_body
-        data["raw_content"] = single_paragraph_body
+
+        data["sections"] = processed_sections
 
 
 
@@ -1117,13 +1101,17 @@ class RenderService:
 
             .article-content, .paragraph, .nc-text-region-box p, #compositor-canvas p {{
 
-                text-align: left !important;
+                text-align: justify !important;
+
+                text-justify: inter-word !important;
+
+                text-align-last: left !important;
 
                 letter-spacing: -0.15px !important;
 
-                margin-bottom: 0 !important;
+                margin-bottom: 4px !important;
 
-                line-height: 1.5 !important;
+                line-height: 1.25 !important;
 
             }}
 
@@ -1202,7 +1190,9 @@ class RenderService:
             "sections": data.get("sections", []),
 
             "image_urls": data.get("image_urls", []),
-            "image_captions": [],  # no English captions under photos (Nov 2026)
+
+            "image_captions": data.get("image_captions", []),
+
             "image_layout": data.get("image_layout", "default"),
 
             "heading_bg": data.get("heading_bg", ""),
@@ -1257,6 +1247,8 @@ class RenderService:
 
         // ── window.onerror: Report JS errors with exact file/line/column ────
 
+        window.__LAYOUT_DONE__ = false;
+
         window.onerror = function(msg, src, line, col, err) {
 
             console.error(
@@ -1271,11 +1263,7 @@ class RenderService:
 
             );
 
-            if (!window.__LAYOUT_DONE__) {
-
-                window.__LAYOUT_DONE__ = true;
-
-            }
+            // Let executeLayout handle its own completion and errors
 
             return false;
 
@@ -3962,17 +3950,35 @@ class RenderService:
 
 
 
-                        for wait_i in range(12):
+                        has_compositor = await page.evaluate("!!document.getElementById('compositor-canvas')")
 
-                            is_done = await page.evaluate("typeof window.__LAYOUT_DONE__ === 'undefined' ? true : window.__LAYOUT_DONE__ === true")
+                        if has_compositor:
 
-                            print(f"[DEBUG LAYOUT POLL {wait_i}] is_done = {is_done}")
+                            for wait_i in range(40):
 
-                            if is_done:
+                                is_done = await page.evaluate("window.__LAYOUT_DONE__ === true")
 
-                                break
+                                print(f"[DEBUG LAYOUT POLL {wait_i}] is_done = {is_done}")
 
-                            await asyncio.sleep(0.25)
+                                if is_done:
+
+                                    break
+
+                                await asyncio.sleep(0.25)
+
+                        else:
+
+                            for wait_i in range(12):
+
+                                is_done = await page.evaluate("typeof window.__LAYOUT_DONE__ === 'undefined' ? true : window.__LAYOUT_DONE__ === true")
+
+                                print(f"[DEBUG LAYOUT POLL {wait_i}] is_done = {is_done}")
+
+                                if is_done:
+
+                                    break
+
+                                await asyncio.sleep(0.25)
 
 
 

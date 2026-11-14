@@ -143,9 +143,14 @@ export const ReaderStoryCard: React.FC<Props> = ({ clip, liked, onLike, onCommen
   const isTwoImage = photos.length >= 2 || ['C', 'D'].includes(cl?.layoutPattern || cl?.layout_pattern || clip?.layout_pattern || clip?.pattern || clip?.image_layout || '');
   const rawHeadline = clip.headline || cl.headline || 'Spot News';
   const headline = isTwoImage ? rawHeadline : limitWordsForDisplay(rawHeadline, MAX_HEADLINE_WORDS);
-  const originalBody = clip.article_content || cl.articleContent || cl.article_content || '';
+  const sectionsSource = Array.isArray(clip.sections) && clip.sections.length > 0
+    ? clip.sections.join(' ')
+    : Array.isArray(cl.sections) && cl.sections.length > 0
+    ? cl.sections.join(' ')
+    : '';
+  const originalBody = clip.article_content || cl.articleContent || cl.article_content || sectionsSource || '';
   const rawBody = isTwoImage ? originalBody : limitWordsForDisplay(originalBody, MAX_ARTICLE_WORDS);
-  const body = rawBody ? rawBody.replace(/[\r\n]+/g, ' ').replace(/[ \t]+/g, ' ').trim() : '';
+  const body = rawBody ? rawBody.replace(/[\u00a0\u200b]/g, ' ').replace(/[\r\n]+/g, ' ').replace(/\s+/g, ' ').trim() : '';
   const reporter = cl.reporterName || cl.reporter_name || clip.reporter_name || 'RTI Express Reporter';
   const place = clip.district && clip.district !== 'All' ? clip.district : '';
 

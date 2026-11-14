@@ -331,6 +331,10 @@ class RenderService:
 
             clean_sec = re.sub(r'^[*\-•]\s*', '', clean_sec)
 
+            # Collapse any newlines or multiple whitespace within the section into a single space
+            clean_sec = re.sub(r'[\r\n]+', ' ', clean_sec)
+            clean_sec = re.sub(r'\s+', ' ', clean_sec).strip()
+
             if not clean_sec:
 
                 continue

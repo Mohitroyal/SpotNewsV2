@@ -367,15 +367,11 @@
         <!-- Middle Article Content Section -->
         <div class="article-content">
             <h1 class="article-headline">{{ headline }}</h1>
-            <div class="article-body">
-                <p>
-                {% if sections and sections|length > 0 %}
-                    {{ sections | join(' ') | replace('\n', ' ') | replace('\r', ' ') }}
-                {% else %}
-                    {{ (article_text if article_text else (raw_content if raw_content else '')) | replace('\n', ' ') | replace('\r', ' ') }}
-                {% endif %}
-                </p>
-            </div>
+            <div class="article-body"><p>{% if sections and sections|length > 0 %}{{ sections | join(' ') | replace('
+', ' ') | replace('
+', ' ') | replace('', ' ') }}{% else %}{{ (article_text if article_text else (raw_content if raw_content else '')) | replace('
+', ' ') | replace('
+', ' ') | replace('', ' ') }}{% endif %}</p></div>
         </div>
 
         <!-- Bottom Footer Banner -->

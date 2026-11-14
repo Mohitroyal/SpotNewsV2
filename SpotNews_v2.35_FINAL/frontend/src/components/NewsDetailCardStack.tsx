@@ -344,19 +344,32 @@ export const NewsDetailCardStack: React.FC<NewsDetailCardStackProps> = ({
             ? rawHeadline
             : limitWordsForDisplay(rawHeadline, MAX_HEADLINE_WORDS);
 
+          const cl = item.custom_layout || {};
+          const cfg = item.config || {};
+          const sectionsSource = Array.isArray(item.sections) && item.sections.length > 0
+            ? item.sections.join(' ')
+            : Array.isArray(cl.sections) && cl.sections.length > 0
+            ? cl.sections.join(' ')
+            : '';
+
           const originalBodyText = item.article_content ||
+            cl.article_content ||
+            cl.articleContent ||
             item.summary ||
+            cl.summary ||
             item.content ||
-            item.config?.articleContent ||
+            cfg.articleContent ||
+            cfg.content ||
+            sectionsSource ||
             '';
 
           const rawBodyText = isTwoImage
             ? originalBodyText
             : limitWordsForDisplay(originalBodyText, MAX_ARTICLE_WORDS);
 
-          // Single paragraph in feed view: collapse all newlines and multiple spaces
+          // Single paragraph in feed view: collapse all newlines, tabs, and multiple spaces into a single space
           const bodyText = rawBodyText
-            ? rawBodyText.replace(/[\r\n]+/g, ' ').replace(/[ \t]+/g, ' ').trim()
+            ? rawBodyText.replace(/[\u00a0\u200b]/g, ' ').replace(/[\r\n]+/g, ' ').replace(/\s+/g, ' ').trim()
             : '';
 
           const subheadline =
@@ -368,8 +381,6 @@ export const NewsDetailCardStack: React.FC<NewsDetailCardStackProps> = ({
             item.custom_layout?.sub_headline ||
             item.config?.subheadline ||
             '';
-
-          const cl = item.custom_layout || {};
 
           // Original uploaded news video (used ONLY in Text reader view)
           const originalVideoUrl =
