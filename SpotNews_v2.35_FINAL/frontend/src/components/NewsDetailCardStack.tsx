@@ -344,35 +344,16 @@ export const NewsDetailCardStack: React.FC<NewsDetailCardStackProps> = ({
             ? rawHeadline
             : limitWordsForDisplay(rawHeadline, MAX_HEADLINE_WORDS);
 
-          const cl = item.custom_layout || {};
-          const cfg = item.config || {};
-          const sectionsSource = Array.isArray(item.sections) && item.sections.length > 0
-            ? item.sections.join(' ')
-            : Array.isArray(cl.sections) && cl.sections.length > 0
-            ? cl.sections.join(' ')
-            : '';
+          const cleanSinglePara = (str: string) =>
+            (str || '')
+              .replace(/<br\s*\/?>/gi, ' ')
+              .replace(/<\/p>/gi, ' ')
+              .replace(/<[^>]+>/g, '')
+              .replace(/[\r\n\t]+/g, ' ')
+              .replace(/\s+/g, ' ')
+              .trim();
 
-          const originalBodyText = item.article_content ||
-            cl.article_content ||
-            cl.articleContent ||
-            item.summary ||
-            cl.summary ||
-            item.content ||
-            cfg.articleContent ||
-            cfg.content ||
-            sectionsSource ||
-            '';
-
-          const rawBodyText = isTwoImage
-            ? originalBodyText
-            : limitWordsForDisplay(originalBodyText, MAX_ARTICLE_WORDS);
-
-          // Single paragraph in feed view: collapse all newlines, tabs, and multiple spaces into a single space
-          const bodyText = rawBodyText
-            ? rawBodyText.replace(/[\u00a0\u200b]/g, ' ').replace(/[\r\n]+/g, ' ').replace(/\s+/g, ' ').trim()
-            : '';
-
-          const subheadline =
+          const rawSub = cleanSinglePara(
             item.subheadline ||
             item.sub_headline ||
             item.sub_title ||
@@ -380,7 +361,34 @@ export const NewsDetailCardStack: React.FC<NewsDetailCardStackProps> = ({
             item.custom_layout?.subheadline ||
             item.custom_layout?.sub_headline ||
             item.config?.subheadline ||
-            '';
+            ''
+          );
+
+          const rawBody = cleanSinglePara(
+            item.article_content ||
+            item.summary ||
+            item.content ||
+            item.config?.articleContent ||
+            item.articleContent ||
+            item.custom_layout?.articleContent ||
+            item.custom_layout?.article_content ||
+            (Array.isArray(item.custom_layout?.sections) ? item.custom_layout.sections.join(' ') : '') ||
+            (Array.isArray(item.sections) ? item.sections.join(' ') : '') ||
+            ''
+          );
+
+          // Merge subheadline & body into one single paragraph so no line breaks or gaps exist
+          const mergedText = rawSub && !rawBody.startsWith(rawSub)
+            ? `${rawSub} ${rawBody}`
+            : (rawBody || rawSub);
+
+          const rawBodyText = isTwoImage
+            ? mergedText
+            : limitWordsForDisplay(mergedText, MAX_ARTICLE_WORDS);
+
+          // Guarantee strictly one single paragraph with zero newlines, zero breaks, and single spaces
+          const bodyText = cleanSinglePara(rawBodyText);
+          const cl = item.custom_layout || {};
 
           // Original uploaded news video (used ONLY in Text reader view)
           const originalVideoUrl =
@@ -549,11 +557,6 @@ export const NewsDetailCardStack: React.FC<NewsDetailCardStackProps> = ({
                       <h2 className="text-[22px] sm:text-[23px] font-extrabold text-[#0A2540] leading-[1.35] font-sans m-0 tracking-tight">
                         {headline}
                       </h2>
-                      {subheadline && (
-                        <h3 className="text-[15.5px] font-bold text-black/90 mt-1 m-0">
-                          {subheadline}
-                        </h3>
-                      )}
                       <p className="mt-2.5 text-[22px] sm:text-[23px] leading-[36px] sm:leading-[38px] text-[#1F2937] m-0 pb-3">
                         {bodyText}
                       </p>
