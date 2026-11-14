@@ -148,7 +148,8 @@ export const ReaderStoryCard: React.FC<Props> = ({ clip, liked, onLike, onCommen
       .replace(/<br\s*\/?>/gi, ' ')
       .replace(/<\/p>/gi, ' ')
       .replace(/<[^>]+>/g, '')
-      .replace(/[\r\n\t]+/g, ' ')
+      .replace(/[\u00a0\u200b\ufeff]/g, ' ')
+      .replace(/[\r\n\t\v\f]+/g, ' ')
       .replace(/\s+/g, ' ')
       .trim();
 
@@ -216,8 +217,20 @@ export const ReaderStoryCard: React.FC<Props> = ({ clip, liked, onLike, onCommen
           WebkitOverflowScrolling: 'touch',
         }}
       >
-        <h2 className="text-[23px] leading-[1.35] font-extrabold text-[#0A2540] m-0">{headline}</h2>
-        {body && <p className="mt-3 mb-0 text-[22px] sm:text-[23px] leading-[36px] sm:leading-[38px] text-[#1F2937] pb-2">{body}</p>}
+        <h2 className="text-[21px] sm:text-[22px] leading-[1.3] font-extrabold text-[#0A2540] m-0 tracking-tight">{headline}</h2>
+        {body && (
+          <p
+            className="mt-2.5 mb-0 text-[18px] sm:text-[19px] leading-[30px] sm:leading-[32px] text-[#1F2937] pb-2 font-normal"
+            style={{
+              textAlign: 'justify',
+              textJustify: 'inter-word',
+              hyphens: 'auto',
+              wordBreak: 'break-word',
+            }}
+          >
+            {body}
+          </p>
+        )}
         <div className="mt-3 flex items-center gap-2 text-[14px] text-[#64748B] font-semibold">
           <span className="truncate">{reporter}</span>
           {place && (<><span>·</span><span className="inline-flex items-center gap-0.5"><MapPin className="w-3.5 h-3.5" />{place}</span></>)}

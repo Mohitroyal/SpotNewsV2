@@ -349,7 +349,8 @@ export const NewsDetailCardStack: React.FC<NewsDetailCardStackProps> = ({
               .replace(/<br\s*\/?>/gi, ' ')
               .replace(/<\/p>/gi, ' ')
               .replace(/<[^>]+>/g, '')
-              .replace(/[\r\n\t]+/g, ' ')
+              .replace(/[\u00a0\u200b\ufeff]/g, ' ')
+              .replace(/[\r\n\t\v\f]+/g, ' ')
               .replace(/\s+/g, ' ')
               .trim();
 
@@ -554,10 +555,18 @@ export const NewsDetailCardStack: React.FC<NewsDetailCardStackProps> = ({
                           </span>
                         </div>
                       )}
-                      <h2 className="text-[22px] sm:text-[23px] font-extrabold text-[#0A2540] leading-[1.35] font-sans m-0 tracking-tight">
+                      <h2 className="text-[21px] sm:text-[22px] font-extrabold text-[#0A2540] leading-[1.3] font-sans m-0 tracking-tight">
                         {headline}
                       </h2>
-                      <p className="mt-2.5 text-[22px] sm:text-[23px] leading-[36px] sm:leading-[38px] text-[#1F2937] m-0 pb-3">
+                      <p
+                        className="mt-2.5 text-[18px] sm:text-[19px] leading-[30px] sm:leading-[32px] text-[#1F2937] m-0 pb-3 font-normal"
+                        style={{
+                          textAlign: 'justify',
+                          textJustify: 'inter-word',
+                          hyphens: 'auto',
+                          wordBreak: 'break-word',
+                        }}
+                      >
                         {bodyText}
                       </p>
                     </div>
