@@ -1099,7 +1099,7 @@ class RenderService:
 
             {custom_border_css}
 
-            .article-content, .paragraph, .nc-text-region-box p, #compositor-canvas p {{
+            .article-content, .article-body, .article-body p, .paragraph, .nc-text-region-box p, #compositor-canvas p {{
 
                 text-align: justify !important;
 
@@ -1109,9 +1109,7 @@ class RenderService:
 
                 letter-spacing: -0.15px !important;
 
-                margin-bottom: 4px !important;
-
-                line-height: 1.25 !important;
+                margin-bottom: 0 !important;
 
             }}
 
