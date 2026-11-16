@@ -124,6 +124,14 @@ def send_topic_notification(
         for k, v in extra_data.items():
             data_payload[str(k)] = str(v)
 
+    android_tag = None
+    if extra_data and extra_data.get("clipId"):
+        android_tag = f"clip_{extra_data.get('clipId')}"
+    elif extra_data and extra_data.get("id"):
+        android_tag = f"clip_{extra_data.get('id')}"
+    elif url and url.startswith("/n/"):
+        android_tag = f"clip_{url.replace('/n/', '').strip()}"
+
     notification_kwargs = {"title": title, "body": body, "image": image_url}
 
     message = messaging.Message(
@@ -132,12 +140,14 @@ def send_topic_notification(
         data=data_payload,
         android=messaging.AndroidConfig(
             priority="high",
+            collapse_key=android_tag,
             notification=messaging.AndroidNotification(
                 channel_id=channel_id,
                 sound="default",
                 color="#015BB3",
                 image=image_url,
                 icon="ic_stat_logo",
+                tag=android_tag,
             ),
         ),
     )
@@ -150,43 +160,47 @@ def send_topic_notification(
     except Exception as e:
         logger.warning("Topic notification [%s] failed (will try direct device multicast): %s", topic, str(e))
 
-    # 2. Direct multicast to all registered device tokens in public.device_tokens
-    # Ensures all app users receive the push notification even if topic subscription was missed
+    # 2. Direct multicast to all registered device tokens in public.device_tokens (FALLBACK ONLY)
+    # Only executes if topic broadcast failed, strictly preventing duplicate notifications
     multicast_sent = 0
     multicast_failed = 0
-    try:
-        all_tokens = _get_all_device_tokens()
-        if all_tokens:
-            batch_size = 500
-            for i in range(0, len(all_tokens), batch_size):
-                batch = all_tokens[i:i + batch_size]
-                multicast_msg = messaging.MulticastMessage(
-                    tokens=batch,
-                    notification=messaging.Notification(**notification_kwargs),
-                    data=data_payload,
-                    android=messaging.AndroidConfig(
-                        priority="high",
-                        notification=messaging.AndroidNotification(
-                            channel_id=channel_id,
-                            sound="default",
-                            color="#015BB3",
-                            image=image_url,
-                            icon="ic_stat_logo",
+    if not topic_res:
+        logger.info("Topic broadcast failed or unavailable, falling back to direct token multicast...")
+        try:
+            all_tokens = _get_all_device_tokens()
+            if all_tokens:
+                batch_size = 500
+                for i in range(0, len(all_tokens), batch_size):
+                    batch = all_tokens[i:i + batch_size]
+                    multicast_msg = messaging.MulticastMessage(
+                        tokens=batch,
+                        notification=messaging.Notification(**notification_kwargs),
+                        data=data_payload,
+                        android=messaging.AndroidConfig(
+                            priority="high",
+                            collapse_key=android_tag,
+                            notification=messaging.AndroidNotification(
+                                channel_id=channel_id,
+                                sound="default",
+                                color="#015BB3",
+                                image=image_url,
+                                icon="ic_stat_logo",
+                                tag=android_tag,
+                            ),
                         ),
-                    ),
-                )
-                batch_response = messaging.send_each_for_multicast(multicast_msg)
-                multicast_sent += batch_response.success_count
-                multicast_failed += batch_response.failure_count
-                for idx, resp in enumerate(batch_response.responses):
-                    if not resp.success and resp.exception:
-                        exc_str = str(resp.exception).lower()
-                        if "not-registered" in exc_str or "unregistered" in exc_str or "invalid-argument" in exc_str:
-                            _remove_stale_token(batch[idx])
-            logger.info("Direct multicast delivered to %d tokens (success: %d, failure: %d)",
-                        len(all_tokens), multicast_sent, multicast_failed)
-    except Exception as multi_err:
-        logger.warning("Direct multicast error: %s", multi_err)
+                    )
+                    batch_response = messaging.send_each_for_multicast(multicast_msg)
+                    multicast_sent += batch_response.success_count
+                    multicast_failed += batch_response.failure_count
+                    for idx, resp in enumerate(batch_response.responses):
+                        if not resp.success and resp.exception:
+                            exc_str = str(resp.exception).lower()
+                            if "not-registered" in exc_str or "unregistered" in exc_str or "invalid-argument" in exc_str:
+                                _remove_stale_token(batch[idx])
+                logger.info("Direct multicast delivered to %d tokens (success: %d, failure: %d)",
+                            len(all_tokens), multicast_sent, multicast_failed)
+        except Exception as multi_err:
+            logger.warning("Direct multicast error: %s", multi_err)
 
     if topic_res or multicast_sent > 0:
         return {"success": True, "message_id": topic_res or "multicast_direct", "topic": topic, "direct_sent": multicast_sent}
@@ -222,6 +236,14 @@ def send_token_notification(
         for k, v in extra_data.items():
             data_payload[str(k)] = str(v)
 
+    android_tag = None
+    if extra_data and extra_data.get("clipId"):
+        android_tag = f"clip_{extra_data.get('clipId')}"
+    elif extra_data and extra_data.get("id"):
+        android_tag = f"clip_{extra_data.get('id')}"
+    elif url and url.startswith("/n/"):
+        android_tag = f"clip_{url.replace('/n/', '').strip()}"
+
     notification_kwargs = {"title": title, "body": body, "image": image_url}
 
     message = messaging.Message(
@@ -230,12 +252,14 @@ def send_token_notification(
         data=data_payload,
         android=messaging.AndroidConfig(
             priority="high",
+            collapse_key=android_tag,
             notification=messaging.AndroidNotification(
                 channel_id=channel_id,
                 sound="default",
                 color="#015BB3",
                 image=image_url,
                 icon="ic_stat_logo",
+                tag=android_tag,
             ),
         ),
     )

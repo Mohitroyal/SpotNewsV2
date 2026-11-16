@@ -812,15 +812,15 @@ def run_clipping_generation_background(clipping_id, data, user_id):
 
             try:
                 cursor.execute(
-                    'UPDATE clippings SET status = %s, png_url = %s, pdf_url = %s, mp4_url = %s, template_id = %s, publication_name = %s, publication_date = %s, state = %s, district = %s, is_posted = %s, custom_layout = %s::jsonb WHERE id = %s',
-                    [final_status, png_url, pdf_url, mp4_url, template_id, pub_name, pub_date, clip_state, clip_district, final_is_posted, json.dumps(current_cl), clipping_id]
+                    'UPDATE clippings SET status = %s, png_url = %s, pdf_url = %s, mp4_url = %s, template_id = %s, publication_name = %s, publication_date = %s, state = %s, district = %s, is_posted = %s, approval_notified = %s, custom_layout = %s::jsonb WHERE id = %s',
+                    [final_status, png_url, pdf_url, mp4_url, template_id, pub_name, pub_date, clip_state, clip_district, final_is_posted, bool(is_auto_approve), json.dumps(current_cl), clipping_id]
                 )
             except Exception as db_err:
                 print(f'[BACKGROUND ERROR] Failed to update mp4_url or extra columns: {db_err}')
                 connection.rollback()
                 cursor.execute(
-                    'UPDATE clippings SET status = %s, png_url = %s, pdf_url = %s, is_posted = %s, custom_layout = %s::jsonb WHERE id = %s',
-                    [final_status, png_url, pdf_url, final_is_posted, json.dumps(current_cl), clipping_id]
+                    'UPDATE clippings SET status = %s, png_url = %s, pdf_url = %s, is_posted = %s, approval_notified = %s, custom_layout = %s::jsonb WHERE id = %s',
+                    [final_status, png_url, pdf_url, final_is_posted, bool(is_auto_approve), json.dumps(current_cl), clipping_id]
                 )
             if not connection.in_atomic_block:
                 connection.commit()
@@ -856,6 +856,8 @@ def run_clipping_generation_background(clipping_id, data, user_id):
 
                     channel_id="news",
 
+                    extra_data={"clipId": str(clipping_id), "id": str(clipping_id), "url": f"/n/{clipping_id}"},
+
                 )
 
                 
@@ -877,6 +879,8 @@ def run_clipping_generation_background(clipping_id, data, user_id):
                         url=f"/n/{clipping_id}",
 
                         channel_id="reporter",
+
+                        extra_data={"clipId": str(clipping_id), "id": str(clipping_id), "url": f"/n/{clipping_id}"},
 
                     )
 
