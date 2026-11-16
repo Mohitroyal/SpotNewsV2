@@ -24,8 +24,6 @@ const mapUser = (user: any, profile?: any, generations = 0): AdminUserProfile =>
   const email = (user?.email || profile?.email || '').trim();
   const lastSignIn = user?.last_sign_in_at || profile?.last_sign_in_at;
   const isPhone = user?.provider === 'phone' || email.endsWith('@phone.user') || (!email && !!phone);
-  const loginTime = Date.parse(lastSignIn || '');
-  const today = new Date(); today.setHours(0, 0, 0, 0);
 
   const rawRole = (user?.role || profile?.role || (user?.is_admin ? 'admin' : 'user')).toLowerCase();
   const normalizedRole: 'superadmin' | 'admin' | 'reporter' | 'user' =
@@ -63,10 +61,7 @@ const mapUser = (user: any, profile?: any, generations = 0): AdminUserProfile =>
     last_sign_in_at: lastSignIn,
     total_generations: user?.total_generations ?? generations,
     generations_today: user?.generations_today ?? 0,
-    is_active_today:
-      Boolean(user?.is_active_today) ||
-      (user?.generations_today > 0) ||
-      (loginTime >= today.getTime() && loginTime <= Date.now()),
+    is_active_today: (Number(user?.generations_today || 0) > 0),
     avatar_url: user?.avatar_url || profile?.avatar_url || '',
     preferred_language: user?.preferred_language || profile?.preferred_language || 'English',
     is_banned: Boolean(user?.is_banned || profile?.is_banned),
@@ -78,6 +73,8 @@ const mapUser = (user: any, profile?: any, generations = 0): AdminUserProfile =>
 
 export const getAdminUsers = async (): Promise<AdminUserProfile[]> => {
   const userMap = new Map<string, AdminUserProfile>();
+  const totalClipsMap: Record<string, number> = {};
+  const todayClipsMap: Record<string, number> = {};
 
   // 1. Preload any cached users immediately for instant UI render
   const cached = getCachedAdminUsers();
@@ -94,13 +91,15 @@ export const getAdminUsers = async (): Promise<AdminUserProfile[]> => {
     let rawUsers: any[] = [];
     let rawApps: any[] = [];
     let rawClips: any[] = [];
+    let rawClipsTotal: any[] = [];
 
     try {
-      const [pRes, uRes, aRes, cRes] = await Promise.allSettled([
+      const [pRes, uRes, aRes, cRes, cTotalRes] = await Promise.allSettled([
         publicClient.from('profiles').select('*').order('created_at', { ascending: false }).limit(500),
         publicClient.from('users').select('*').order('created_at', { ascending: false }).limit(500),
         publicClient.from('reporter_applications').select('*').order('created_at', { ascending: false }).limit(200),
-        publicClient.from('clippings').select('user_id, created_at').limit(1000),
+        publicClient.from('clippings').select('user_id, created_at').gte('created_at', todayStr),
+        publicClient.from('clippings').select('user_id').order('created_at', { ascending: false }).limit(2000),
       ]);
       if (pRes.status === 'fulfilled' && Array.isArray(pRes.value.data)) rawProfiles = pRes.value.data;
       if (uRes.status === 'fulfilled' && Array.isArray(uRes.value.data)) rawUsers = uRes.value.data;
@@ -113,6 +112,7 @@ export const getAdminUsers = async (): Promise<AdminUserProfile[]> => {
         }
       }
       if (cRes.status === 'fulfilled' && Array.isArray(cRes.value.data)) rawClips = cRes.value.data;
+      if (cTotalRes.status === 'fulfilled' && Array.isArray(cTotalRes.value.data)) rawClipsTotal = cTotalRes.value.data;
     } catch {}
 
     // Direct REST fallback if client query returned 0 profiles
@@ -129,14 +129,14 @@ export const getAdminUsers = async (): Promise<AdminUserProfile[]> => {
     }
 
     // Build clipping counts map
-    const totalClipsMap: Record<string, number> = {};
-    const todayClipsMap: Record<string, number> = {};
     rawClips.forEach((c: any) => {
       if (!c?.user_id) return;
+      todayClipsMap[c.user_id] = (todayClipsMap[c.user_id] || 0) + 1;
       totalClipsMap[c.user_id] = (totalClipsMap[c.user_id] || 0) + 1;
-      if (c.created_at && c.created_at.startsWith(todayStr)) {
-        todayClipsMap[c.user_id] = (todayClipsMap[c.user_id] || 0) + 1;
-      }
+    });
+    rawClipsTotal.forEach((c: any) => {
+      if (!c?.user_id) return;
+      totalClipsMap[c.user_id] = (totalClipsMap[c.user_id] || 0) + 1;
     });
 
     // Process profiles
@@ -146,7 +146,7 @@ export const getAdminUsers = async (): Promise<AdminUserProfile[]> => {
       const todayGen = todayClipsMap[p.id] || 0;
       const mapped = mapUser(p, undefined, totalGen);
       mapped.generations_today = todayGen;
-      if (todayGen > 0) mapped.is_active_today = true;
+      mapped.is_active_today = todayGen > 0;
       userMap.set(String(p.id || p.email), mapped);
     });
 
@@ -163,7 +163,7 @@ export const getAdminUsers = async (): Promise<AdminUserProfile[]> => {
         const todayGen = todayClipsMap[u.id] || 0;
         const mapped = mapUser(u, undefined, totalGen);
         mapped.generations_today = todayGen;
-        if (todayGen > 0) mapped.is_active_today = true;
+        mapped.is_active_today = todayGen > 0;
         userMap.set(key, mapped);
       }
     });
@@ -245,9 +245,9 @@ export const getAdminUsers = async (): Promise<AdminUserProfile[]> => {
           plan: isSuper ? 'superadmin' : 'admin',
           created_at: (currentUser as any)?.created_at || (currentUser as any)?.createdAt || new Date().toISOString(),
           last_sign_in_at: new Date().toISOString(),
-          total_generations: 0,
-          generations_today: 0,
-          is_active_today: true,
+          total_generations: totalClipsMap[curId || ''] || 0,
+          generations_today: todayClipsMap[curId || ''] || 0,
+          is_active_today: (todayClipsMap[curId || ''] || 0) > 0,
           avatar_url: currentUser.avatarUrl || '',
           preferred_language: 'English',
           is_banned: false,
@@ -298,7 +298,7 @@ export const getAdminUsers = async (): Promise<AdminUserProfile[]> => {
         last_sign_in_at: new Date().toISOString(),
         total_generations: 0,
         generations_today: 0,
-        is_active_today: true,
+        is_active_today: false,
         avatar_url: '',
         preferred_language: 'Telugu',
         is_banned: false,

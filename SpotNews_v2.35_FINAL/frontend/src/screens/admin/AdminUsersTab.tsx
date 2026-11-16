@@ -104,7 +104,7 @@ export const AdminUsersTab: React.FC<AdminUsersTabProps> = ({
   const counts = useMemo(() => {
     return {
       all: users.length,
-      activeToday: users.filter((u) => u.is_active_today).length,
+      activeToday: users.filter((u) => Boolean(u.is_active_today || (Number(u.generations_today) > 0))).length,
       reporters: users.filter((u) => u.role === 'reporter').length,
       admins: users.filter((u) => u.role === 'admin' || u.role === 'superadmin').length,
       pro: users.filter((u) => (u.plan || '').toLowerCase() === 'pro').length,
@@ -128,7 +128,7 @@ export const AdminUsersTab: React.FC<AdminUsersTabProps> = ({
       }
 
       // Filter chips
-      if (activeFilter === 'active_today') return Boolean(u.is_active_today);
+      if (activeFilter === 'active_today') return Boolean(u.is_active_today || (Number(u.generations_today) > 0));
       if (activeFilter === 'reporter') return u.role === 'reporter';
       if (activeFilter === 'admin') return u.role === 'admin' || u.role === 'superadmin';
       if (activeFilter === 'pro') return (u.plan || '').toLowerCase() === 'pro';
@@ -375,7 +375,7 @@ export const AdminUsersTab: React.FC<AdminUsersTabProps> = ({
                       <div className="w-12 h-12 rounded-full bg-[#dee9f5] border-2 border-[var(--adm-blue)]/30 text-[var(--adm-blue)] font-black text-sm flex items-center justify-center">
                         {initials}
                       </div>
-                      {u.is_active_today && (
+                      {(u.is_active_today || (Number(u.generations_today) > 0)) && (
                         <span
                           className="absolute bottom-0 right-0 w-3.5 h-3.5 bg-[var(--adm-green)] border-2 border-white dark:border-[#132742] rounded-full adm-live-dot"
                           title="Active Today"
@@ -411,7 +411,7 @@ export const AdminUsersTab: React.FC<AdminUsersTabProps> = ({
                         </span>
 
                         {/* Active Today Tag */}
-                        {u.is_active_today && (
+                        {(u.is_active_today || (Number(u.generations_today) > 0)) && (
                           <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-[#ecfdf5] text-[var(--adm-green)] border border-[#a7f3d0]">
                             Active Today
                           </span>

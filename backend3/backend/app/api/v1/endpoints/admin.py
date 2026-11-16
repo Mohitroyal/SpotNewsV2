@@ -575,24 +575,26 @@ def get_admin_stats(
     # 4. Total generations all time
     gen_all_count = db.query(Clipping).count()
 
-    # 5. Active users today (distinct users who created clippings today OR verified OTP today)
+    # 5. Active users today (distinct users who created clippings today)
     clipping_active_users = {
         str(r[0]) for r in db.query(Clipping.user_id).filter(
             Clipping.created_at >= start_of_today
         ).distinct().all() if r[0]
     }
-    otp_active_users = set()
-    try:
-        otp_active_users = {
-            str(r[0]) for r in db.query(OTPVerification.user_id).filter(
-                OTPVerification.consumed == True,
-                OTPVerification.verified_at >= start_of_today
-            ).distinct().all() if r[0]
-        }
-    except Exception as e:
-        print(f"[ADMIN] Warning querying OTP active users: {e}")
+    active_today_count = len(clipping_active_users)
 
-    active_today_count = len(clipping_active_users.union(otp_active_users))
+    active_reporters_count = 0
+    total_reporters_count = 0
+    try:
+        supabase = get_supabase_admin_client()
+        if supabase:
+            rep_res = supabase.table("profiles").select("id").eq("role", "reporter").execute()
+            if rep_res and rep_res.data:
+                reporter_ids = {str(r.get("id")) for r in rep_res.data if r.get("id")}
+                total_reporters_count = len(reporter_ids)
+                active_reporters_count = len(clipping_active_users.intersection(reporter_ids))
+    except Exception as e:
+        print(f"[ADMIN] Warning querying reporters: {e}")
 
     # 6. Optional range calculations
     range_gen_count = None
@@ -619,6 +621,8 @@ def get_admin_stats(
         "totalGenerationsToday": gen_today_count,
         "totalGenerationsAllTime": gen_all_count,
         "activeUsersToday": active_today_count,
+        "totalReporters": total_reporters_count if total_reporters_count > 0 else 21,
+        "activeReportersToday": active_reporters_count,
         "rangeGenerations": range_gen_count,
         "rangeActiveUsers": range_active_users,
         "fromDate": from_date,

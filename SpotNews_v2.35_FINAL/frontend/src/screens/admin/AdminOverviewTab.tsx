@@ -105,8 +105,10 @@ export const AdminOverviewTab: React.FC<AdminOverviewTabProps> = ({
   const totalUsersCount = Math.max(stats?.totalUsers ?? 0, users.length);
   const registeredReporters = users.filter((u) => u.role === 'reporter');
   const totalReportersCount = stats?.totalReporters ?? (registeredReporters.length > 0 ? registeredReporters.length : 21);
-  const activeReportersTodayCount = stats?.activeReportersToday ?? registeredReporters.filter((u) => u.is_active_today).length;
-  const activeTodayCount = stats?.activeUsersToday ?? Math.max(users.filter((u) => u.is_active_today).length, 0);
+  const activeReportersFromUsers = registeredReporters.filter((u) => u.is_active_today || (Number(u.generations_today) > 0)).length;
+  const activeReportersTodayCount = users.length > 0 ? activeReportersFromUsers : (stats?.activeReportersToday ?? 0);
+  const activeUsersFromUsers = users.filter((u) => u.is_active_today || (Number(u.generations_today) > 0)).length;
+  const activeTodayCount = users.length > 0 ? activeUsersFromUsers : (stats?.activeUsersToday ?? 0);
   const totalGensFromUsers = users.reduce((acc, u) => acc + (Number(u.total_generations) || 0), 0);
   const totalClippingsCount = stats?.totalGenerationsAllTime ?? Math.max(clippings.length, totalGensFromUsers, 0);
   const periodClippingsCount =
