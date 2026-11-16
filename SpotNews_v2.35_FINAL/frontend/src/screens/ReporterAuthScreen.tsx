@@ -93,8 +93,12 @@ export const ReporterAuthScreen: React.FC = () => {
     const user = useAuthStore.getState().user;
     const role = (user?.role || '').toLowerCase();
     if (role === 'superadmin' || role === 'admin') return navigate('/', { replace: true });
-    if (app && isApprovedStatus(app.status)) {
-      useAuthStore.getState().updateUser({ role: 'reporter', district: app.district || undefined, state: app.state || undefined } as any);
+    if (role === 'reporter' || (app && isApprovedStatus(app.status))) {
+      useAuthStore.getState().updateUser({
+        role: 'reporter',
+        district: app?.district || user?.district || undefined,
+        state: app?.state || user?.state || undefined,
+      } as any);
       return navigate('/generate', { replace: true });
     }
     if (app) return navigate('/reporter/status', { replace: true });
@@ -132,7 +136,21 @@ export const ReporterAuthScreen: React.FC = () => {
       if (!res.success || !res.token || !res.user) throw new Error(res.message || 'OTP తప్పు / Wrong OTP');
       const u: any = { ...res.user, phone_number: `+91${last10(phone)}` };
       try {
-        const { data: prof } = await supabase.from('profiles').select('role, district, state').eq('id', u.id).maybeSingle();
+        let prof: any = null;
+        const { data: pById } = await supabase.from('profiles').select('role, district, state').eq('id', u.id).maybeSingle();
+        if (pById) prof = pById;
+        if (!prof && u.email) {
+          const { data: pByEmail } = await supabase.from('profiles').select('role, district, state').ilike('email', u.email).maybeSingle();
+          if (pByEmail) prof = pByEmail;
+        }
+        if (!prof && phone) {
+          const d = last10(phone);
+          const { data: pByPhone } = await supabase.from('profiles').select('role, district, state')
+            .or(`phone.ilike.%${d},phone_number.ilike.%${d},email.ilike.%${d}%`)
+            .limit(1)
+            .maybeSingle();
+          if (pByPhone) prof = pByPhone;
+        }
         if (prof?.role) u.role = prof.role;
         if (prof?.district) { u.district = prof.district; useAuthStore.getState().setDistrict(prof.district); }
         if (prof?.state) { u.state = prof.state; useAuthStore.getState().setUserState(prof.state); }

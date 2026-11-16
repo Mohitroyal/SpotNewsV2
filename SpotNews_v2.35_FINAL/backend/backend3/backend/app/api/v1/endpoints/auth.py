@@ -69,7 +69,7 @@ def _is_registered_reporter_phone(e164_phone: str) -> bool:
         profs = (
             sb.from_("profiles")
             .select("id,role")
-            .ilike("phone_number", f"%{digits}")
+            .or_(f"phone.ilike.%{digits},phone_number.ilike.%{digits},email.ilike.%{digits}%")
             .limit(5)
             .execute()
         )
@@ -485,9 +485,20 @@ async def verify_otp(
         if is_super_admin:
             if existing_role not in ("admin", "superadmin"):
                 profile_row["role"] = "superadmin"
-        elif not existing_role:
-            # Brand-new account: old app versions used the plan name ("free") as the role
-            profile_row["role"] = user_role if payload.purpose is None else "user"
+        elif not existing_role or existing_role == "user":
+            # Check if user has an approved or active reporter application
+            has_approved_app = False
+            try:
+                app_check = admin_sb.from_("reporter_applications").select("id,status").ilike("phone", f"%{clean_digits}").limit(1).execute()
+                if any((a.get("status") or "").lower() in ("approved", "active") for a in (app_check.data or [])):
+                    has_approved_app = True
+            except Exception:
+                pass
+            if has_approved_app:
+                profile_row["role"] = "reporter"
+            elif not existing_role:
+                # Brand-new account: old app versions used the plan name ("free") as the role
+                profile_row["role"] = user_role if payload.purpose is None else "user"
         admin_sb.from_("profiles").upsert(profile_row, on_conflict="id").execute()
     except Exception as ep:
         logger.warning(f"[SUPABASE_PROFILE_SYNC_WARNING] {ep}")

@@ -460,12 +460,18 @@ function App() {
         }
 
         // Check if user has active reporter application
-        if ((!prof || prof.role === 'user') && userEmail) {
+        if (!prof || prof.role === 'user') {
           try {
-            const { data: appData } = await supabase
-              .from('reporter_applications')
-              .select('status, district, state')
-              .ilike('email', userEmail.trim())
+            const phoneDigits = (currentLoggedInUser?.phone_number || userEmail || '').replace(/\D/g, '').slice(-10);
+            let appQuery = supabase.from('reporter_applications').select('status, district, state');
+            if (userEmail && phoneDigits.length === 10) {
+              appQuery = appQuery.or(`email.ilike.${userEmail.trim()},phone.ilike.%${phoneDigits}`);
+            } else if (userEmail) {
+              appQuery = appQuery.ilike('email', userEmail.trim());
+            } else if (phoneDigits.length === 10) {
+              appQuery = appQuery.ilike('phone', `%${phoneDigits}`);
+            }
+            const { data: appData } = await appQuery
               .order('created_at', { ascending: false })
               .limit(1)
               .maybeSingle();
@@ -573,11 +579,17 @@ function App() {
               .maybeSingle();
             if (data) prof = data;
           }
-          if ((!prof || prof.role === 'user') && email) {
-            const { data: appData } = await supabase
-              .from('reporter_applications')
-              .select('status, district, state')
-              .ilike('email', email.trim())
+          if (!prof || prof.role === 'user') {
+            const phoneDigits = ((session.user as any)?.phone || email || '').replace(/\D/g, '').slice(-10);
+            let appQuery = supabase.from('reporter_applications').select('status, district, state');
+            if (email && phoneDigits.length === 10) {
+              appQuery = appQuery.or(`email.ilike.${email.trim()},phone.ilike.%${phoneDigits}`);
+            } else if (email) {
+              appQuery = appQuery.ilike('email', email.trim());
+            } else if (phoneDigits.length === 10) {
+              appQuery = appQuery.ilike('phone', `%${phoneDigits}`);
+            }
+            const { data: appData } = await appQuery
               .order('created_at', { ascending: false })
               .limit(1)
               .maybeSingle();

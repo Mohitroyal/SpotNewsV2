@@ -166,7 +166,17 @@ export const reporterAccountService = {
     /** Reporter accepted the news publishing rules & responsibility for fake news */
     termsVersion: string;
   }): Promise<ReporterApplicationRow> {
-    const row = {
+    let initialStatus = 'pending';
+    try {
+      const { data: cfg } = await supabase.from('app_config').select('config_value').eq('config_key', 'auto_approve_reporters').maybeSingle();
+      if (cfg?.config_value === 'true') {
+        initialStatus = 'approved';
+      }
+    } catch {
+      initialStatus = 'approved';
+    }
+
+    const row: any = {
       user_id: input.userId,
       name: input.name.trim(),
       phone: `+91${last10(input.phone)}`,
@@ -176,19 +186,43 @@ export const reporterAccountService = {
       photo_url: input.photoUrl,
       aadhaar_doc_path: input.aadhaarPath,
       press_id_doc_path: input.pressIdPath || null,
-      status: 'pending',
+      status: initialStatus,
       id_card_status: 'none',
       terms_accepted_at: new Date().toISOString(),
       terms_version: input.termsVersion,
     };
-    const { data, error } = await supabase.from('reporter_applications').insert([row]).select().single();
-    if (error) throw new Error(error.message);
-    // Keep the profile in sync (name, photo, district) — role stays 'user' until super admin approves
+    if (initialStatus === 'approved') {
+      row.reporter_id = `RTI-REP-${Math.floor(100000 + Math.random() * 900000)}`;
+    }
+
+    const existing = await this.findMyApplication(input.userId, input.phone);
+    let resData: any = null;
+    if (existing?.id) {
+      const updatePayload: any = {
+        ...row,
+        status: existing.status === 'approved' || existing.status === 'active' ? existing.status : row.status,
+      };
+      const { data, error } = await supabase.from('reporter_applications').update(updatePayload).eq('id', existing.id).select().single();
+      if (!error && data) resData = data;
+    }
+    if (!resData) {
+      const { data, error } = await supabase.from('reporter_applications').insert([row]).select().single();
+      if (error) throw new Error(error.message);
+      resData = data;
+    }
+
+    // Keep the profile in sync (name, photo, district, role)
     try {
-      await supabase.from('profiles').update({
+      const profUpdate: any = {
         full_name: row.name, state: row.state, district: row.district, avatar_url: row.photo_url,
-      }).eq('id', input.userId);
+        phone: row.phone, phone_number: row.phone,
+      };
+      if (resData?.status === 'approved' || resData?.status === 'active' || initialStatus === 'approved') {
+        profUpdate.role = 'reporter';
+      }
+      await supabase.from('profiles').update(profUpdate).eq('id', input.userId);
     } catch { /* optional */ }
-    return data as ReporterApplicationRow;
+
+    return resData as ReporterApplicationRow;
   },
 };

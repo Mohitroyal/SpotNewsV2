@@ -19,8 +19,8 @@ export const ReporterStatusScreen: React.FC = () => {
     setBusy(true);
     const row = await reporterAccountService.findMyApplication(user.id, user.phone_number);
     setApp(row);
-    if (row && isApprovedStatus(row.status) && user.role !== 'reporter') {
-      useAuthStore.getState().updateUser({ role: 'reporter', district: row.district || undefined, state: row.state || undefined } as any);
+    if ((isApprovedStatus(row?.status) || user.role === 'reporter') && user.role !== 'reporter') {
+      useAuthStore.getState().updateUser({ role: 'reporter', district: row?.district || undefined, state: row?.state || undefined } as any);
     }
     setBusy(false);
   }, [user]);
@@ -48,7 +48,7 @@ export const ReporterStatusScreen: React.FC = () => {
   }
 
   const status = (app?.status || '').toLowerCase();
-  const approved = isApprovedStatus(status);
+  const approved = isApprovedStatus(status) || user.role === 'reporter';
   const hasIdCard = status === 'active' || app?.id_card_status === 'issued' || app?.payment_status === 'paid';
 
   return (

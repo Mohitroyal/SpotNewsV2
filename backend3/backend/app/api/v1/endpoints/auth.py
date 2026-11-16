@@ -25,6 +25,62 @@ logger = logging.getLogger("app.api.auth")
 router = APIRouter()
 
 
+SUPER_ADMIN_PHONES = ["9346843889", "7668886666"]
+NOT_REGISTERED_MSG = (
+    "ఈ మొబైల్ నంబర్ రిపోర్టర్‌గా నమోదు కాలేదు. ముందుగా రిజిస్టర్ చేసుకోండి. / "
+    "This mobile number is not registered as a reporter. Please register first."
+)
+
+
+def _purpose(value) -> str:
+    v = (value or "login").lower()
+    return v if v in ("login", "register") else "login"
+
+
+def _old_app_allowed(payload) -> bool:
+    """
+    App v2.34 and older (the version on the Play Store now) do not send `purpose`.
+    They keep the OLD login behaviour until you set OLD_APP_OTP=block on Render,
+    so updating this server never breaks the version people already have installed.
+    """
+    return payload.purpose is None and os.getenv("OLD_APP_OTP", "allow").lower() != "block"
+
+
+def _is_registered_reporter_phone(e164_phone: str) -> bool:
+    """
+    A phone may log in only if it belongs to a reporter registration
+    (reporter_applications, any status except rejected) or to a reporter/admin profile.
+    Readers never log in - they read the news without an account.
+    """
+    digits = re.sub(r"\D", "", e164_phone)[-10:]
+    if any(digits.endswith(p) for p in SUPER_ADMIN_PHONES):
+        return True
+    try:
+        sb = get_supabase_admin_client()
+        apps = (
+            sb.from_("reporter_applications")
+            .select("id,status")
+            .ilike("phone", f"%{digits}")
+            .limit(5)
+            .execute()
+        )
+        if any((a.get("status") or "").lower() != "rejected" for a in (apps.data or [])):
+            return True
+        profs = (
+            sb.from_("profiles")
+            .select("id,role")
+            .or_(f"phone.ilike.%{digits},phone_number.ilike.%{digits},email.ilike.%{digits}%")
+            .limit(5)
+            .execute()
+        )
+        if any((p.get("role") or "").lower() in ("reporter", "admin", "superadmin") for p in (profs.data or [])):
+            return True
+    except Exception as e:
+        # If Supabase cannot be reached we fail CLOSED for login (safer), but log it.
+        logger.warning(f"[REGISTERED_CHECK_ERROR] {e}")
+    return False
+
+
 def _get_client_ip(request: Request) -> Optional[str]:
     """Extract client IP from request headers or connection."""
     forwarded = request.headers.get("X-Forwarded-For")
@@ -53,6 +109,14 @@ async def send_otp(
 
     now = datetime.now(timezone.utc)
     client_ip = _get_client_ip(request)
+
+    purpose = _purpose(payload.purpose)
+    # Login is only for registered reporters (Nov 2026)
+    if purpose == "login" and not _old_app_allowed(payload) and not _is_registered_reporter_phone(e164_phone):
+        return JSONResponse(
+            status_code=status.HTTP_404_NOT_FOUND,
+            content={"success": False, "code": "NOT_REGISTERED", "message": NOT_REGISTERED_MSG},
+        )
 
     # Rate Limiting
     window_start = now - timedelta(minutes=settings.OTP_SEND_WINDOW_MINUTES)
@@ -90,7 +154,7 @@ async def send_otp(
     try:
         db.query(OTPVerification).filter(
             OTPVerification.phone_number == e164_phone,
-            OTPVerification.purpose == "login",
+            OTPVerification.purpose == purpose,
             OTPVerification.consumed == False,
         ).update({"consumed": True}, synchronize_session=False)
         db.commit()
@@ -108,7 +172,7 @@ async def send_otp(
         phone_number=e164_phone,
         user_id=existing_user.id if existing_user else None,
         otp_hash=otp_hash,
-        purpose="login",
+        purpose=purpose,
         attempts=0,
         max_attempts=settings.OTP_MAX_ATTEMPTS,
         consumed=False,
@@ -196,7 +260,7 @@ async def verify_otp(
         db.query(OTPVerification)
         .filter(
             OTPVerification.phone_number == e164_phone,
-            OTPVerification.purpose == "login",
+            OTPVerification.purpose == _purpose(payload.purpose),
             OTPVerification.consumed == False,
         )
         .order_by(OTPVerification.created_at.desc())
@@ -238,11 +302,15 @@ async def verify_otp(
         )
 
     clean_digits = re.sub(r"\D", "", e164_phone)
-    SUPER_ADMIN_PHONES = ["9346843889", "7668886666"]
     is_super_admin = any(clean_digits.endswith(p) for p in SUPER_ADMIN_PHONES)
 
-    # Master OTP bypass for Super Admins and App Store Reviewers
-    is_master_otp = is_super_admin and payload.otp == "000000"
+    # Master OTP "000000" is OFF unless ENABLE_REVIEW_MASTER_OTP=true is set on the server
+    # (7668886666 is printed on every clipping, so an always-on master code lets anyone in as super admin).
+    is_master_otp = (
+        os.getenv("ENABLE_REVIEW_MASTER_OTP", "false").lower() == "true"
+        and is_super_admin
+        and payload.otp == "000000"
+    )
 
     # Verify submitted OTP against stored bcrypt hash
     is_correct = is_master_otp or verify_password(payload.otp, otp_record.otp_hash)
@@ -276,6 +344,8 @@ async def verify_otp(
 
     # Find or link User in public.users
     user = db.query(User).filter(User.phone_number == e164_phone).first()
+    is_register = _purpose(payload.purpose) == "register"
+    reg_name = (payload.full_name or "").strip()[:80]
 
     phone_email = f"{clean_digits}@phone.user"
 
@@ -288,11 +358,18 @@ async def verify_otp(
                 user.subscription_plan = "admin"
         else:
             # Create a new User record
+            if not is_register and not is_super_admin and not _old_app_allowed(payload):
+                # Login for an unknown number: never create accounts here (registration only)
+                db.commit()
+                return JSONResponse(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    content={"success": False, "code": "NOT_REGISTERED", "message": NOT_REGISTERED_MSG},
+                )
             user = User(
                 id=uuid.uuid4(),
                 phone_number=e164_phone,
                 email=phone_email,
-                full_name="Super Admin" if is_super_admin else f"User {clean_digits[-4:]}",
+                full_name="Super Admin" if is_super_admin else (reg_name or f"Reporter {clean_digits[-4:]}"),
                 is_active=True,
                 subscription_plan="admin" if is_super_admin else "free",
                 subscription_status="active",
@@ -303,6 +380,8 @@ async def verify_otp(
             user.subscription_plan = "admin"
             if not user.full_name or user.full_name.startswith("User "):
                 user.full_name = "Super Admin"
+        elif is_register and reg_name:
+            user.full_name = reg_name
 
     user.updated_at = now
     otp_record.user_id = user.id
@@ -385,19 +464,42 @@ async def verify_otp(
             except Exception as e_up:
                 logger.warning(f"[SUPABASE_AUTH_UPDATE_WARN] Failed to update auth.users: {e_up}")
 
-        # 2. Upsert into public.profiles table
-        admin_sb.from_("profiles").upsert(
-            {
-                "id": user_id_str,
-                "email": user_email,
-                "full_name": user_full_name,
-                "phone_number": user_phone,
-                "role": user_role,
-                "plan": user_plan,
-                "last_sign_in_at": now.isoformat(),
-            },
-            on_conflict="id",
-        ).execute()
+        # 2. Upsert into public.profiles table.
+        #    Keep the role that super admin gave (reporter / admin). Older code overwrote it
+        #    with "free" on every OTP login, which silently removed reporter access.
+        existing_role = None
+        try:
+            ex = admin_sb.from_("profiles").select("role").eq("id", user_id_str).limit(1).execute()
+            if ex.data:
+                existing_role = ex.data[0].get("role")
+        except Exception:
+            existing_role = None
+        profile_row = {
+            "id": user_id_str,
+            "email": user_email,
+            "full_name": user_full_name,
+            "phone_number": user_phone,
+            "plan": user_plan,
+            "last_sign_in_at": now.isoformat(),
+        }
+        if is_super_admin:
+            if existing_role not in ("admin", "superadmin"):
+                profile_row["role"] = "superadmin"
+        elif not existing_role or existing_role == "user":
+            # Check if user has an approved or active reporter application
+            has_approved_app = False
+            try:
+                app_check = admin_sb.from_("reporter_applications").select("id,status").ilike("phone", f"%{clean_digits}").limit(1).execute()
+                if any((a.get("status") or "").lower() in ("approved", "active") for a in (app_check.data or [])):
+                    has_approved_app = True
+            except Exception:
+                pass
+            if has_approved_app:
+                profile_row["role"] = "reporter"
+            elif not existing_role:
+                # Brand-new account: old app versions used the plan name ("free") as the role
+                profile_row["role"] = user_role if payload.purpose is None else "user"
+        admin_sb.from_("profiles").upsert(profile_row, on_conflict="id").execute()
     except Exception as ep:
         logger.warning(f"[SUPABASE_PROFILE_SYNC_WARNING] {ep}")
 
