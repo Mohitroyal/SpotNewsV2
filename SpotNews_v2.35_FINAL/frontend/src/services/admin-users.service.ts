@@ -61,6 +61,7 @@ const mapUser = (user: any, profile?: any, generations = 0): AdminUserProfile =>
     last_sign_in_at: lastSignIn,
     total_generations: user?.total_generations ?? generations,
     generations_today: user?.generations_today ?? 0,
+    generations_week: user?.generations_week ?? 0,
     is_active_today: (Number(user?.generations_today || 0) > 0),
     avatar_url: user?.avatar_url || profile?.avatar_url || '',
     preferred_language: user?.preferred_language || profile?.preferred_language || 'English',
@@ -75,6 +76,7 @@ export const getAdminUsers = async (): Promise<AdminUserProfile[]> => {
   const userMap = new Map<string, AdminUserProfile>();
   const totalClipsMap: Record<string, number> = {};
   const todayClipsMap: Record<string, number> = {};
+  const weekClipsMap: Record<string, number> = {};
 
   // 1. Preload any cached users immediately for instant UI render
   const cached = getCachedAdminUsers();
@@ -87,6 +89,10 @@ export const getAdminUsers = async (): Promise<AdminUserProfile[]> => {
   // 2. PRIMARY: Direct Supabase Fetch (100% reliable, completes in <1s)
   try {
     const todayStr = new Date().toISOString().slice(0, 10);
+    const dWeek = new Date();
+    dWeek.setDate(dWeek.getDate() - 7);
+    const weekStartStr = dWeek.toISOString().slice(0, 10);
+
     let rawProfiles: any[] = [];
     let rawUsers: any[] = [];
     let rawApps: any[] = [];
@@ -98,7 +104,7 @@ export const getAdminUsers = async (): Promise<AdminUserProfile[]> => {
         publicClient.from('profiles').select('*').order('created_at', { ascending: false }).limit(500),
         publicClient.from('users').select('*').order('created_at', { ascending: false }).limit(500),
         publicClient.from('reporter_applications').select('*').order('created_at', { ascending: false }).limit(200),
-        publicClient.from('clippings').select('user_id, created_at').gte('created_at', todayStr),
+        publicClient.from('clippings').select('user_id, created_at').gte('created_at', weekStartStr),
         publicClient.from('clippings').select('user_id').order('created_at', { ascending: false }).limit(2000),
       ]);
       if (pRes.status === 'fulfilled' && Array.isArray(pRes.value.data)) rawProfiles = pRes.value.data;
@@ -131,8 +137,11 @@ export const getAdminUsers = async (): Promise<AdminUserProfile[]> => {
     // Build clipping counts map
     rawClips.forEach((c: any) => {
       if (!c?.user_id) return;
-      todayClipsMap[c.user_id] = (todayClipsMap[c.user_id] || 0) + 1;
+      weekClipsMap[c.user_id] = (weekClipsMap[c.user_id] || 0) + 1;
       totalClipsMap[c.user_id] = (totalClipsMap[c.user_id] || 0) + 1;
+      if (c.created_at && c.created_at.startsWith(todayStr)) {
+        todayClipsMap[c.user_id] = (todayClipsMap[c.user_id] || 0) + 1;
+      }
     });
     rawClipsTotal.forEach((c: any) => {
       if (!c?.user_id) return;
@@ -144,8 +153,10 @@ export const getAdminUsers = async (): Promise<AdminUserProfile[]> => {
       if (!p?.id && !p?.email) return;
       const totalGen = totalClipsMap[p.id] || 0;
       const todayGen = todayClipsMap[p.id] || 0;
+      const weekGen = weekClipsMap[p.id] || 0;
       const mapped = mapUser(p, undefined, totalGen);
       mapped.generations_today = todayGen;
+      mapped.generations_week = weekGen;
       mapped.is_active_today = todayGen > 0;
       userMap.set(String(p.id || p.email), mapped);
     });
@@ -161,8 +172,10 @@ export const getAdminUsers = async (): Promise<AdminUserProfile[]> => {
       } else {
         const totalGen = totalClipsMap[u.id] || 0;
         const todayGen = todayClipsMap[u.id] || 0;
+        const weekGen = weekClipsMap[u.id] || 0;
         const mapped = mapUser(u, undefined, totalGen);
         mapped.generations_today = todayGen;
+        mapped.generations_week = weekGen;
         mapped.is_active_today = todayGen > 0;
         userMap.set(key, mapped);
       }
@@ -247,6 +260,7 @@ export const getAdminUsers = async (): Promise<AdminUserProfile[]> => {
           last_sign_in_at: new Date().toISOString(),
           total_generations: totalClipsMap[curId || ''] || 0,
           generations_today: todayClipsMap[curId || ''] || 0,
+          generations_week: weekClipsMap[curId || ''] || 0,
           is_active_today: (todayClipsMap[curId || ''] || 0) > 0,
           avatar_url: currentUser.avatarUrl || '',
           preferred_language: 'English',
@@ -298,6 +312,7 @@ export const getAdminUsers = async (): Promise<AdminUserProfile[]> => {
         last_sign_in_at: new Date().toISOString(),
         total_generations: 0,
         generations_today: 0,
+        generations_week: 0,
         is_active_today: false,
         avatar_url: '',
         preferred_language: 'Telugu',

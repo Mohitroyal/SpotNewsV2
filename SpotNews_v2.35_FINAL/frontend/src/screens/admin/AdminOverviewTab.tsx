@@ -118,13 +118,13 @@ export const AdminOverviewTab: React.FC<AdminOverviewTabProps> = ({
       ? (stats?.totalGenerationsToday ?? clippings.filter(c => c.created_at?.startsWith(new Date().toISOString().slice(0, 10))).length)
       : (stats?.rangeGenerations ?? 0);
 
-  // Top reporters calculation from real users & clippings data
+  // Top reporters calculation from real users & clippings data (week-wise)
   const sortedReporters = [...users]
-    .filter((u) => u.role === 'reporter' || (u.total_generations ?? 0) > 0)
-    .sort((a, b) => (b.total_generations ?? 0) - (a.total_generations ?? 0))
+    .filter((u) => (Number(u.generations_week) || 0) > 0 || u.role === 'reporter')
+    .sort((a, b) => (Number(b.generations_week) || 0) - (Number(a.generations_week) || 0))
     .slice(0, 5);
 
-  const maxClippings = sortedReporters[0]?.total_generations || 100;
+  const maxClippings = Math.max(Number(sortedReporters[0]?.generations_week) || 1, 1);
 
   // Bar chart monthly / period aggregation
   const monthLabels = ['N', 'D', 'J', 'F', 'M', 'A', 'M', 'J', 'J', 'A', 'S', 'O'];
@@ -563,7 +563,7 @@ export const AdminOverviewTab: React.FC<AdminOverviewTabProps> = ({
 
         <div className="space-y-3.5">
           {sortedReporters.map((rep, idx) => {
-            const count = rep.total_generations || (94 - idx * 13);
+            const count = Number(rep.generations_week) || 0;
             const percent = Math.min(100, Math.round((count / maxClippings) * 100));
             const initial = (rep.full_name || rep.email || 'R').charAt(0).toUpperCase();
             return (
@@ -574,10 +574,10 @@ export const AdminOverviewTab: React.FC<AdminOverviewTabProps> = ({
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center justify-between mb-1">
                     <p className="text-xs font-bold text-[var(--adm-text-primary)] truncate">
-                      {rep.full_name || rep.email}
+                      {rep.full_name || (rep.phone_number ? `User (${rep.phone_number})` : rep.email)}
                     </p>
                     <span className="text-xs font-extrabold text-[var(--adm-text-primary)] shrink-0 ml-2">
-                      {count}
+                      {count} {count === 1 ? 'clipping' : 'clippings'}
                     </span>
                   </div>
                   <div className="w-full bg-[var(--adm-chip-bg)] h-2 rounded-full overflow-hidden">

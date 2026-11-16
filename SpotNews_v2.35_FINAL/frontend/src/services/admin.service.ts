@@ -17,6 +17,7 @@ export interface AdminUserProfile {
   last_sign_in_at?: string;
   total_generations: number;
   generations_today?: number;
+  generations_week?: number;
   is_active_today?: boolean;
   avatar_url?: string;
   preferred_language?: string;
@@ -306,7 +307,7 @@ export const getAdminClippings = async (options?: {
             if (cr && cr.includes('/')) count = parseInt(cr.split('/')[1], 10);
           }
         }
-      } catch {}
+      } catch { }
     }
 
     if (clippings && clippings.length > 0) {
@@ -319,7 +320,7 @@ export const getAdminClippings = async (options?: {
             .select('id, email, full_name, plan')
             .in('id', userIds);
           (profiles ?? []).forEach((p: any) => { profileMap[p.id] = p; });
-        } catch {}
+        } catch { }
       }
 
       const results: AdminClippingLog[] = clippings.map((c: any) => {
@@ -362,10 +363,10 @@ export const getAutoApproveConfig = async (): Promise<boolean> => {
   try {
     const { data, error } = await publicClient.rpc('get_auto_approve_clippings_rpc');
     if (!error && typeof data === 'boolean') {
-      try { localStorage.setItem('spotnews_auto_approve_clippings', String(data)); } catch {}
+      try { localStorage.setItem('spotnews_auto_approve_clippings', String(data)); } catch { }
       return data;
     }
-  } catch {}
+  } catch { }
 
   try {
     const { data } = await publicClient
@@ -375,10 +376,10 @@ export const getAutoApproveConfig = async (): Promise<boolean> => {
       .maybeSingle();
     if (data?.config_value !== undefined) {
       const isEnabled = data.config_value === 'true';
-      try { localStorage.setItem('spotnews_auto_approve_clippings', String(isEnabled)); } catch {}
+      try { localStorage.setItem('spotnews_auto_approve_clippings', String(isEnabled)); } catch { }
       return isEnabled;
     }
-  } catch {}
+  } catch { }
 
   try {
     return localStorage.getItem('spotnews_auto_approve_clippings') === 'true';
@@ -395,9 +396,9 @@ export const setAutoApproveConfig = async (enabled: boolean): Promise<{ success:
     });
     if (!error) {
       persistSuccess = true;
-      try { localStorage.setItem('spotnews_auto_approve_clippings', String(enabled)); } catch {}
+      try { localStorage.setItem('spotnews_auto_approve_clippings', String(enabled)); } catch { }
     }
-  } catch {}
+  } catch { }
 
   if (!persistSuccess) {
     try {
@@ -407,7 +408,7 @@ export const setAutoApproveConfig = async (enabled: boolean): Promise<{ success:
       });
       if (upErr) throw upErr;
       persistSuccess = true;
-      try { localStorage.setItem('spotnews_auto_approve_clippings', String(enabled)); } catch {}
+      try { localStorage.setItem('spotnews_auto_approve_clippings', String(enabled)); } catch { }
     } catch (fallbackErr: any) {
       console.error('[AdminService] Failed to persist auto_approve_clippings to app_config:', fallbackErr);
       return { success: false, error: fallbackErr.message || 'Failed to save configuration' };
@@ -460,7 +461,7 @@ export const getAutoApproveReportersConfig = async (): Promise<boolean> => {
     if (data?.config_value !== undefined) {
       return data.config_value === 'true';
     }
-  } catch {}
+  } catch { }
   try {
     return localStorage.getItem('spotnews_auto_approve_reporters') === 'true';
   } catch {
@@ -471,7 +472,7 @@ export const getAutoApproveReportersConfig = async (): Promise<boolean> => {
 export const setAutoApproveReportersConfig = async (enabled: boolean): Promise<boolean> => {
   try {
     localStorage.setItem('spotnews_auto_approve_reporters', String(enabled));
-  } catch {}
+  } catch { }
   try {
     await supabase.from('app_config').upsert({
       config_key: 'auto_approve_reporters',
@@ -488,10 +489,10 @@ export const getAutoApproveAdsConfig = async (): Promise<boolean> => {
   try {
     const { data, error } = await supabase.rpc('get_auto_approve_ads_rpc');
     if (!error && typeof data === 'boolean') {
-      try { localStorage.setItem('spotnews_auto_approve_ads', String(data)); } catch {}
+      try { localStorage.setItem('spotnews_auto_approve_ads', String(data)); } catch { }
       return data;
     }
-  } catch {}
+  } catch { }
   try {
     const { data } = await supabase
       .from('app_config')
@@ -500,10 +501,10 @@ export const getAutoApproveAdsConfig = async (): Promise<boolean> => {
       .maybeSingle();
     if (data?.config_value !== undefined) {
       const val = data.config_value === 'true';
-      try { localStorage.setItem('spotnews_auto_approve_ads', String(val)); } catch {}
+      try { localStorage.setItem('spotnews_auto_approve_ads', String(val)); } catch { }
       return val;
     }
-  } catch {}
+  } catch { }
   try {
     return localStorage.getItem('spotnews_auto_approve_ads') === 'true';
   } catch {
@@ -514,11 +515,11 @@ export const getAutoApproveAdsConfig = async (): Promise<boolean> => {
 export const setAutoApproveAdsConfig = async (enabled: boolean): Promise<boolean> => {
   try {
     localStorage.setItem('spotnews_auto_approve_ads', String(enabled));
-  } catch {}
+  } catch { }
   try {
     const { error } = await supabase.rpc('set_auto_approve_ads_rpc', { p_enabled: enabled });
     if (!error) return true;
-  } catch {}
+  } catch { }
   try {
     await supabase.from('app_config').upsert({
       config_key: 'auto_approve_ads',
@@ -705,7 +706,7 @@ export const dispatchClippingApprovalNotifications = async (
     }
 
     // Trigger backend outbox worker
-    sendNotificationWithRetry(`${apiUrl}/api/v1/notifications/process-events`, {}).catch(() => {});
+    sendNotificationWithRetry(`${apiUrl}/api/v1/notifications/process-events`, {}).catch(() => { });
 
     return { success: true, dispatched: true };
   } catch (err: any) {
@@ -847,11 +848,11 @@ export const bulkApproveClippingsToFeed = async (
         user_id: item.user_id,
         user_email: item.user_email,
         png_url: item.png_url,
-      }).catch(() => {});
+      }).catch(() => { });
     });
 
     const apiUrl = (import.meta.env.VITE_API_URL || import.meta.env.VITE_DJANGO_API_URL || 'https://spotnewsv2-ew09.onrender.com').replace(/\/+$/, '');
-    sendNotificationWithRetry(`${apiUrl}/api/v1/notifications/process-events`, {}).catch(() => {});
+    sendNotificationWithRetry(`${apiUrl}/api/v1/notifications/process-events`, {}).catch(() => { });
 
     return { success: true, approvedCount: rpcData?.approved_count ?? validIds.length };
   } catch (err: any) {
@@ -892,7 +893,7 @@ export const rejectClippingSubmission = async (
           .from('clippings')
           .update({ status: 'rejected', is_posted: false })
           .eq('id', clippingId);
-      } catch {}
+      } catch { }
     }
 
     let targetUserId = details?.user_id;
@@ -910,7 +911,7 @@ export const rejectClippingSubmission = async (
           if (!targetUserId) targetUserId = clipRow.user_id;
           if (!targetHeadline) targetHeadline = clipRow.headline;
         }
-      } catch {}
+      } catch { }
     }
 
     if (!targetUserId && targetEmail) {
@@ -921,7 +922,7 @@ export const rejectClippingSubmission = async (
           .ilike('email', targetEmail.trim().toLowerCase())
           .maybeSingle();
         if (pRow?.id) targetUserId = pRow.id;
-      } catch {}
+      } catch { }
     }
 
     if (!targetEmail && targetUserId) {
@@ -932,7 +933,7 @@ export const rejectClippingSubmission = async (
           .eq('id', targetUserId)
           .maybeSingle();
         if (pRow?.email) targetEmail = pRow.email;
-      } catch {}
+      } catch { }
     }
 
     const apiUrl = (import.meta.env.VITE_API_URL || import.meta.env.VITE_DJANGO_API_URL || 'https://spotnewsv2-ew09.onrender.com').replace(/\/+$/, '');
@@ -977,12 +978,12 @@ export const rejectClippingSubmission = async (
               sendNotificationWithRetry(`${apiUrl}/api/v1/notifications/send`, {
                 ...rejectPayload,
                 token: ut.token,
-              }).catch(() => {});
+              }).catch(() => { });
             }
           }
         }
 
-        sendNotificationWithRetry(`${apiUrl}/api/v1/notifications/send`, rejectPayload).catch(() => {});
+        sendNotificationWithRetry(`${apiUrl}/api/v1/notifications/send`, rejectPayload).catch(() => { });
       } catch (repPushErr) {
         console.warn('[Push] Failed to dispatch reject push notification:', repPushErr);
       }
@@ -1196,7 +1197,7 @@ export const updateUserRole = async (
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ ...notifPayload, token: t }),
-              }).catch(() => {});
+              }).catch(() => { });
             }
           }
 
@@ -1204,7 +1205,7 @@ export const updateUserRole = async (
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(notifPayload),
-          }).catch(() => {});
+          }).catch(() => { });
 
           if (cleanPhone) {
             fetch(`${apiUrl}/api/v1/reporter/send-approval-sms`, {
@@ -1215,9 +1216,9 @@ export const updateUserRole = async (
                 name: 'Reporter',
                 message: 'Spot News 24x7: Congratulations! Your reporter application has been APPROVED. Open Spot News app and set up your Press ID Card to complete login.'
               }),
-            }).catch(() => {});
+            }).catch(() => { });
           }
-        } catch {}
+        } catch { }
       }
     } else if (rpcErr) {
       console.warn('[AdminService] admin_set_user_permissions error:', rpcErr);
@@ -1239,7 +1240,7 @@ export const updateUserRole = async (
       if (!err2 && rpc2?.success) {
         succeeded = true;
       }
-    } catch {}
+    } catch { }
   }
 
   // 2. SECONDARY: Sync Django Backend (with short 3.5s timeout, never blocking the UI)
@@ -1252,7 +1253,7 @@ export const updateUserRole = async (
     const controller = new AbortController();
     const abortTimeout = setTimeout(() => controller.abort(), 3500);
     const apiUrl = (import.meta.env.VITE_API_URL || 'https://spotnewsv2-ew09.onrender.com').replace(/\/+$/, '');
-    
+
     fetch(`${apiUrl}/api/v1/admin/users/${encodeURIComponent(cleanUserId)}/role`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
@@ -1266,7 +1267,7 @@ export const updateUserRole = async (
       .catch(() => {
         clearTimeout(abortTimeout);
       });
-  } catch {}
+  } catch { }
 
   // 3. Update localStorage cache immediately so UI shows updated role instantly
   try {
@@ -1290,7 +1291,7 @@ export const updateUserRole = async (
       });
       localStorage.setItem('spotnews_admin_users_cache', JSON.stringify(updated));
     }
-  } catch {}
+  } catch { }
 
   // 4. Update Zustand state if modifying current user
   try {
@@ -1303,7 +1304,7 @@ export const updateUserRole = async (
       });
       if (cleanDistrict) useAuthStore.getState().setDistrict(cleanDistrict);
     }
-  } catch {}
+  } catch { }
 
   if (succeeded) {
     return { success: true };
@@ -1329,7 +1330,7 @@ export const updateUserPlan = async (
     if (!rpcErr && rpcRes?.success) {
       return { success: true };
     }
-  } catch {}
+  } catch { }
 
   // 2. Secondary backend sync
   try {
@@ -1337,7 +1338,7 @@ export const updateUserPlan = async (
     if (res.status >= 200 && res.status < 300) {
       return { success: true };
     }
-  } catch {}
+  } catch { }
 
   return { success: true };
 };
