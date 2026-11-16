@@ -599,6 +599,7 @@ def get_admin_stats(
     # 6. Optional range calculations
     range_gen_count = None
     range_active_users = None
+    range_active_reporters = None
     if from_date or to_date:
         range_q = db.query(Clipping)
         if from_date:
@@ -615,6 +616,14 @@ def get_admin_stats(
                 pass
         range_gen_count = range_q.count()
         range_active_users = range_q.with_entities(func.count(func.distinct(Clipping.user_id))).scalar() or 0
+        try:
+            if range_active_users and reporter_ids:
+                range_user_ids = {
+                    str(r[0]) for r in range_q.with_entities(Clipping.user_id).distinct().all() if r[0]
+                }
+                range_active_reporters = len(range_user_ids.intersection(reporter_ids))
+        except Exception as e:
+            print(f"[ADMIN] Warning querying range active reporters: {e}")
 
     return {
         "totalUsers": total_users,
@@ -625,6 +634,7 @@ def get_admin_stats(
         "activeReportersToday": active_reporters_count,
         "rangeGenerations": range_gen_count,
         "rangeActiveUsers": range_active_users,
+        "rangeActiveReporters": range_active_reporters,
         "fromDate": from_date,
         "toDate": to_date,
         "totalLogos": 0,

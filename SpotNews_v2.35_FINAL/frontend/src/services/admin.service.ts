@@ -82,6 +82,7 @@ export interface AdminStats {
   activeReportersToday?: number;
   rangeGenerations?: number | null;
   rangeActiveUsers?: number | null;
+  rangeActiveReporters?: number | null;
   fromDate?: string | null;
   toDate?: string | null;
   debug_info?: string;
@@ -166,6 +167,31 @@ export const getAdminStats = async (fromDate?: string, toDate?: string): Promise
     const activeReportersToday = rpcData?.activeReportersToday ?? (todayClips > 0 ? 1 : 0);
     const resolvedLogos = logos.status === 'fulfilled' ? logos.value : DEFAULT_PUBLICATION_LOGOS;
 
+    // Range calculations if fromDate or toDate specified
+    let rangeGenerations: number | null = null;
+    let rangeActiveUsers: number | null = null;
+    let rangeActiveReporters: number | null = null;
+
+    if (fromDate || toDate) {
+      try {
+        let q = publicClient.from('clippings').select('user_id, created_at');
+        if (fromDate) q = q.gte('created_at', fromDate.includes('T') ? fromDate : `${fromDate}T00:00:00.000Z`);
+        if (toDate) q = q.lte('created_at', toDate.includes('T') ? toDate : `${toDate}T23:59:59.999Z`);
+        const { data: rangeData } = await q;
+        if (Array.isArray(rangeData)) {
+          rangeGenerations = rangeData.length;
+          const rangeUserIds = new Set(rangeData.map((c) => c.user_id).filter(Boolean));
+          rangeActiveUsers = rangeUserIds.size;
+          const { data: profs } = await publicClient.from('profiles').select('id').eq('role', 'reporter');
+          if (Array.isArray(profs)) {
+            rangeActiveReporters = profs.filter((p) => rangeUserIds.has(p.id)).length;
+          }
+        }
+      } catch (rangeErr) {
+        console.warn('[AdminService] Supabase range stats query error:', rangeErr);
+      }
+    }
+
     return {
       totalUsers,
       totalGenerationsToday: todayClips,
@@ -174,8 +200,9 @@ export const getAdminStats = async (fromDate?: string, toDate?: string): Promise
       totalLogos: resolvedLogos.length,
       totalReporters,
       activeReportersToday,
-      rangeGenerations: null,
-      rangeActiveUsers: null,
+      rangeGenerations,
+      rangeActiveUsers,
+      rangeActiveReporters,
       fromDate: fromDate ?? null,
       toDate: toDate ?? null,
       debug_info: 'Supabase Real-Time Direct (Count: ' + totalClips + ')',
@@ -199,6 +226,7 @@ export const getAdminStats = async (fromDate?: string, toDate?: string): Promise
         activeReportersToday: res.data.activeReportersToday ?? 0,
         rangeGenerations: res.data.rangeGenerations ?? null,
         rangeActiveUsers: res.data.rangeActiveUsers ?? null,
+        rangeActiveReporters: res.data.rangeActiveReporters ?? null,
         fromDate: res.data.fromDate ?? fromDate ?? null,
         toDate: res.data.toDate ?? toDate ?? null,
       };
@@ -216,6 +244,7 @@ export const getAdminStats = async (fromDate?: string, toDate?: string): Promise
     totalLogos: DEFAULT_PUBLICATION_LOGOS.length,
     rangeGenerations: null,
     rangeActiveUsers: null,
+    rangeActiveReporters: null,
     fromDate: fromDate ?? null,
     toDate: toDate ?? null,
     debug_info: 'Default Live Fallback',

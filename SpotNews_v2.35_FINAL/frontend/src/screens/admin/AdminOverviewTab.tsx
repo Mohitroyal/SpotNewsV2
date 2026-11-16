@@ -112,9 +112,11 @@ export const AdminOverviewTab: React.FC<AdminOverviewTabProps> = ({
   const totalGensFromUsers = users.reduce((acc, u) => acc + (Number(u.total_generations) || 0), 0);
   const totalClippingsCount = stats?.totalGenerationsAllTime ?? Math.max(clippings.length, totalGensFromUsers, 0);
   const periodClippingsCount =
-    activeDatePreset === 'today'
+    activeDatePreset === 'all'
+      ? totalClippingsCount
+      : activeDatePreset === 'today'
       ? (stats?.totalGenerationsToday ?? clippings.filter(c => c.created_at?.startsWith(new Date().toISOString().slice(0, 10))).length)
-      : (activeDatePreset === 'all' ? totalClippingsCount : (stats?.rangeGenerations ?? totalClippingsCount));
+      : (stats?.rangeGenerations ?? 0);
 
   // Top reporters calculation from real users & clippings data
   const sortedReporters = [...users]
@@ -167,7 +169,11 @@ export const AdminOverviewTab: React.FC<AdminOverviewTabProps> = ({
               ? 'Last 7 Days'
               : activeDatePreset === 'month'
               ? 'Last 30 Days'
-              : activeDatePreset}
+              : activeDatePreset === 'yesterday'
+              ? 'Yesterday'
+              : activeDatePreset === 'today'
+              ? 'Today'
+              : (fromDate && toDate ? `${fromDate} to ${toDate}` : 'Custom')}
           </span>
         </div>
 
@@ -378,13 +384,21 @@ export const AdminOverviewTab: React.FC<AdminOverviewTabProps> = ({
               </span>
             </div>
             <p className="text-2xl sm:text-3xl font-black text-[var(--adm-green)] dark:text-[#34d399] tracking-tight">
-              {activeDatePreset === 'all' ? totalReportersCount : activeReportersTodayCount}
+              {activeDatePreset === 'all'
+                ? totalReportersCount
+                : activeDatePreset === 'today'
+                ? activeReportersTodayCount
+                : (stats?.rangeActiveReporters ?? 0)}
             </p>
             <p className="text-[10px] sm:text-xs font-black uppercase tracking-wider text-[var(--adm-navy)] dark:text-[var(--adm-text-primary)] mt-1 truncate">
               {activeDatePreset === 'all' ? 'TOTAL REPORTERS' : 'ACTIVE REPORTERS'}
             </p>
             <p className="text-[10px] sm:text-[11px] text-[var(--adm-text-muted)] truncate">
-              {activeReportersTodayCount} active today · of {totalReportersCount} registered
+              {activeDatePreset === 'all'
+                ? `${totalReportersCount} registered`
+                : activeDatePreset === 'today'
+                ? `${activeReportersTodayCount} active today · of ${totalReportersCount} registered`
+                : `${stats?.rangeActiveReporters ?? 0} active in period · of ${totalReportersCount} registered`}
             </p>
           </div>
 

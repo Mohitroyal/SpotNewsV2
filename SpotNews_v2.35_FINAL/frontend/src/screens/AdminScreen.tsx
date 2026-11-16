@@ -1097,9 +1097,13 @@ export const AdminScreen = () => {
     } else if (preset === 'month') {
       f = getDaysAgoStr(30);
       t = getTodayStr();
+    } else if (preset === 'custom') {
+      f = fromDate || getDaysAgoStr(7);
+      t = toDate || getTodayStr();
     }
     setFromDate(f);
     setToDate(t);
+    fetchStatsOnly(f || undefined, t || undefined);
   };
 
   // ── Handlers ──────────────────────────────────────────────────────────────
