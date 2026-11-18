@@ -39,6 +39,7 @@ function defaultLayout(post: DailyPost, seed: number): Layout {
 export const DailyPostCard: React.FC<{ post: DailyPost }> = ({ post }) => {
   const cardRef = useRef<HTMLDivElement>(null);
   const [sharing, setSharing] = useState(false);
+  const [forExport, setForExport] = useState(false);
   const meta = (post.meta || {}) as Record<string, any>;
   const info = findDistrict(post.district);
   const culture = cultureOf(post.district);
@@ -67,14 +68,21 @@ export const DailyPostCard: React.FC<{ post: DailyPost }> = ({ post }) => {
     e.stopPropagation();
     if (!cardRef.current || sharing) return;
     setSharing(true);
+    setForExport(true);
     try {
-      const dataUrl = await nodeToImage(cardRef.current);
+      // Small pause to allow React to paint the clean export footer
+      await new Promise((r) => setTimeout(r, 60));
+      const dataUrl = await nodeToImage(cardRef.current, { pixelRatio: 2.5 });
+      setForExport(false);
       await shareImage({
         dataUrl, caption: shareCaption(post.title_te.split('\n')[0], PLAY_STORE_URL), channel: 'other', kind: 'story_card',
         postId: `daily-${post.district}-${post.post_date}-${post.kind}-${minute}`,
       });
     } catch (err) { console.warn('Daily post share failed', err); }
-    finally { setSharing(false); }
+    finally {
+      setForExport(false);
+      setSharing(false);
+    }
   };
 
   // ── pieces ──
@@ -117,8 +125,8 @@ export const DailyPostCard: React.FC<{ post: DailyPost }> = ({ post }) => {
   ) : null;
   const footer = post.footer_te ? <p className="text-[13.5px] leading-relaxed mt-3 mb-0 font-semibold" style={{ color: sub }}>ⓘ {post.footer_te}</p> : null;
 
-  const sceneBg = (opacity = 1) => (
-    <SkyScene theme={theme} land={culture.land} seed={seed % 997} aspect={1.9} className="absolute inset-x-0 bottom-0 w-full h-full pointer-events-none" style={{ opacity }} />
+  const sceneBg = (opacity = 1, showLand = false) => (
+    <SkyScene theme={theme} land={culture.land} seed={seed % 997} aspect={1.9} showLand={showLand} className="absolute inset-x-0 bottom-0 w-full h-full pointer-events-none" style={{ opacity }} />
   );
 
   let main: React.ReactNode;
@@ -214,11 +222,20 @@ export const DailyPostCard: React.FC<{ post: DailyPost }> = ({ post }) => {
               <span className="block text-[10.5px] font-bold truncate" style={{ color: sub }}>RTI Desk తో మీ జిల్లా కోసం ప్రత్యేకం</span>
             </span>
           </span>
-          <button type="button" onClick={share}
-            className="flex items-center gap-1.5 px-4 py-2 rounded-full text-[14px] font-extrabold border-0 cursor-pointer active:scale-95 transition-transform shrink-0"
-            style={{ background: dark ? '#FFD166' : '#0B56A6', color: dark ? '#1A1033' : '#fff' }}>
-            {sharing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Share2 className="w-4 h-4" />} షేర్
-          </button>
+          {forExport ? (
+            <div
+              className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-[12px] font-black shrink-0 shadow-sm"
+              style={{ background: dark ? '#FFD166' : '#0B56A6', color: dark ? '#1A1033' : '#fff' }}
+            >
+              <span>Google Play Store</span>
+            </div>
+          ) : (
+            <button type="button" onClick={share}
+              className="flex items-center gap-1.5 px-4 py-2 rounded-full text-[14px] font-extrabold border-0 cursor-pointer active:scale-95 transition-transform shrink-0"
+              style={{ background: dark ? '#FFD166' : '#0B56A6', color: dark ? '#1A1033' : '#fff' }}>
+              {sharing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Share2 className="w-4 h-4" />} షేర్
+            </button>
+          )}
         </div>
       </div>
     </div>

@@ -24,17 +24,18 @@ interface TargetSharePlugin {
 
 const TargetShare = registerPlugin<TargetSharePlugin>("TargetShare");
 
-/** Render an off-screen card element (ReporterCard) to a JPEG data URL at its real size (1080 px wide). */
-export async function nodeToImage(node: HTMLElement) {
+/** Render a card element (ReporterCard or DailyPostCard) to a high-res JPEG data URL. */
+export async function nodeToImage(node: HTMLElement, options?: { pixelRatio?: number }) {
   try {
     await Promise.race([
       document.fonts?.ready ?? Promise.resolve(),
       new Promise((r) => setTimeout(r, 400)),
     ]);
   } catch {}
+  const dpr = options?.pixelRatio ?? (node.offsetWidth > 600 ? 1 : 2.5);
   return toJpeg(node, {
-    quality: 0.9,
-    pixelRatio: 1,
+    quality: 0.95,
+    pixelRatio: dpr,
     cacheBust: false,
     style: { left: "0", position: "static" },
   });
