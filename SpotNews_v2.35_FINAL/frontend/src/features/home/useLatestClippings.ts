@@ -1,20 +1,23 @@
 // Latest published clippings for the reader's area (same rules as the swipe feed), with an instant cached first paint.
 import { useEffect, useState } from 'react';
 import { publicClient, supabase } from '@/lib/supabase';
+import { findDistrict } from '@/features/daily/dailyContentEngine';
 
 const COLUMNS = 'id, headline, article_content, png_url, image_url, likes_count, comments_count, created_at, district, state, status, is_posted, custom_layout';
 const isAll = (v?: string) => !v || ['All', 'All districts', 'All Regions', 'Both states'].includes(v);
 
-function cached(): any[] {
+function cached(dKey?: string): any[] {
   try {
-    const c = JSON.parse(localStorage.getItem('spotnews_feed_cache') || '[]');
+    const key = dKey ? `spotnews_feed_cache_${dKey}` : 'spotnews_feed_cache';
+    const c = JSON.parse(localStorage.getItem(key) || localStorage.getItem('spotnews_feed_cache') || '[]');
     return Array.isArray(c) ? c : [];
   } catch { return []; }
 }
 
 export function useLatestClippings(district: string, userState: string, limit = 20) {
-  const [items, setItems] = useState<any[]>(() => cached().slice(0, limit));
-  const [loading, setLoading] = useState<boolean>(() => cached().length === 0);
+  const cleanDistrict = district ? district.split('/')[0]?.split('·')[0]?.trim() : '';
+  const [items, setItems] = useState<any[]>(() => cached(cleanDistrict).slice(0, limit));
+  const [loading, setLoading] = useState<boolean>(() => cached(cleanDistrict).length === 0);
 
   useEffect(() => {
     let alive = true;
@@ -27,7 +30,6 @@ export function useLatestClippings(district: string, userState: string, limit = 
     const fetchClippings = async () => {
       try {
         const client = publicClient || supabase;
-        const cleanDistrict = district ? district.split('/')[0]?.split('·')[0]?.trim() : '';
         const cleanState = userState ? userState.split('/')[0]?.split('·')[0]?.trim() : '';
 
         // Helper timeout for individual network queries (4 seconds max)
@@ -39,30 +41,41 @@ export function useLatestClippings(district: string, userState: string, limit = 
 
         let data: any[] | null = null;
 
-        // Try district/state specific query first if specified
-        if (!isAll(cleanDistrict) || !isAll(cleanState)) {
+        // If specific district is selected: query only for that district
+        if (!isAll(cleanDistrict)) {
           try {
+            const dInfo = findDistrict(cleanDistrict);
             let q = client.from('clippings').select(COLUMNS).eq('is_posted', true).neq('status', 'rejected')
               .order('created_at', { ascending: false }).limit(limit);
 
-            if (!isAll(cleanState)) {
-              q = q.or(`state.eq."${cleanState}",state.eq.All,state.eq."Both states",state.is.null`);
-            }
-            if (!isAll(cleanDistrict)) {
-              q = q.or(`district.eq."${cleanDistrict}",district.eq.All,district.is.null`);
+            if (dInfo) {
+              q = q.or(`district.eq."${dInfo.en}",district.eq."${dInfo.te}",district.ilike."${dInfo.en}"`);
+            } else {
+              q = q.ilike('district', cleanDistrict);
             }
 
             const res = await withTimeout(q);
-            if (res && res.data && res.data.length > 0) {
+            if (res && res.data) {
               data = res.data;
             }
           } catch (e) {
-            console.warn('District query failed or timed out, trying global fallback:', e);
+            console.warn('District query failed or timed out:', e);
           }
-        }
-
-        // If no items found for specific district, fetch latest overall approved clippings
-        if (!data || data.length === 0) {
+        } else if (!isAll(cleanState)) {
+          // If specific state is selected with All districts
+          try {
+            const q = client.from('clippings').select(COLUMNS).eq('is_posted', true).neq('status', 'rejected')
+              .ilike('state', cleanState)
+              .order('created_at', { ascending: false }).limit(limit);
+            const res = await withTimeout(q);
+            if (res && res.data) {
+              data = res.data;
+            }
+          } catch (e) {
+            console.warn('State query failed or timed out:', e);
+          }
+        } else {
+          // All selected: fetch latest overall approved clippings
           try {
             const allRes = await withTimeout(
               client.from('clippings').select(COLUMNS).eq('is_posted', true).neq('status', 'rejected')
@@ -72,14 +85,21 @@ export function useLatestClippings(district: string, userState: string, limit = 
               data = allRes.data;
             }
           } catch (e) {
-            console.warn('Fallback query failed or timed out:', e);
+            console.warn('All query failed or timed out:', e);
           }
         }
 
-        if (alive && data && data.length > 0) {
-          setItems(data);
+        if (alive) {
+          const finalItems = data || [];
+          setItems(finalItems);
           try {
-            localStorage.setItem('spotnews_feed_cache', JSON.stringify(data));
+            const dKey = cleanDistrict || 'All';
+            if (finalItems.length > 0) {
+              localStorage.setItem(`spotnews_feed_cache_${dKey}`, JSON.stringify(finalItems));
+              if (isAll(cleanDistrict)) {
+                localStorage.setItem('spotnews_feed_cache', JSON.stringify(finalItems));
+              }
+            }
           } catch {}
         }
       } catch (err) {

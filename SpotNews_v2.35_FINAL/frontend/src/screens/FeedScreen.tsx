@@ -16,7 +16,7 @@ import { useWeather, getWeatherInfo } from '@/services/weatherService';
 import { directShareClipping } from '@/features/share';
 import { DailyPostCard } from '@/features/daily/DailyPostCard';
 import { useDailyPosts, useCategoryPosts } from '@/features/daily/useDailyPosts';
-import { CATEGORY_LABELS, type PostKind } from '@/features/daily/dailyContentEngine';
+import { CATEGORY_LABELS, findDistrict, type PostKind } from '@/features/daily/dailyContentEngine';
 import { ReaderStoryCard, type SponsoredTeaser } from '@/features/feed/ReaderStoryCard';
 import { DistrictPickerSheet } from '@/components/DistrictPickerSheet';
 import { expandId } from '@/features/share/shortId';
@@ -42,7 +42,8 @@ export const FeedScreen: React.FC = () => {
   const setIsFullScreenFeed = useUIStore((state) => state.setIsFullScreenFeed);
   const [clippings, setClippings] = useState<any[]>(() => {
     try {
-      const cached = localStorage.getItem('spotnews_feed_cache');
+      const dKey = district ? district.split('/')[0]?.split('·')[0]?.trim() : 'All';
+      const cached = localStorage.getItem(`spotnews_feed_cache_${dKey}`) || localStorage.getItem('spotnews_feed_cache');
       if (cached) {
         const parsed = JSON.parse(cached);
         if (Array.isArray(parsed) && parsed.length > 0) return parsed;
@@ -236,11 +237,18 @@ export const FeedScreen: React.FC = () => {
       const cleanState = userState ? userState.split('/')[0]?.split('·')[0]?.trim() : '';
       const cleanDistrict = district ? district.split('/')[0]?.split('·')[0]?.trim() : '';
 
-      if (cleanState && cleanState !== 'All' && cleanState !== 'Both states') {
-        query = query.or(`state.eq."${cleanState}",state.eq.All,state.eq."Both states",state.is.null`);
-      }
-      if (cleanDistrict && cleanDistrict !== 'All districts' && cleanDistrict !== 'All' && cleanDistrict !== 'All Regions') {
-        query = query.or(`district.eq."${cleanDistrict}",district.eq.All,district.is.null`);
+      const isDistrictAll = !cleanDistrict || ['All', 'All districts', 'All Regions'].includes(cleanDistrict);
+      const isStateAll = !cleanState || ['All', 'Both states'].includes(cleanState);
+
+      if (!isDistrictAll) {
+        const dInfo = findDistrict(cleanDistrict);
+        if (dInfo) {
+          query = query.or(`district.eq."${dInfo.en}",district.eq."${dInfo.te}",district.ilike."${dInfo.en}"`);
+        } else {
+          query = query.ilike('district', cleanDistrict);
+        }
+      } else if (!isStateAll) {
+        query = query.ilike('state', cleanState);
       }
 
       const { data, error } = await query;
@@ -251,19 +259,6 @@ export const FeedScreen: React.FC = () => {
         c.status !== 'rejected';
 
       let postedClippings = (data || []).filter(isApprovedFeedClip);
-
-      // If user's specific district has no news yet, fallback to latest news across all regions
-      if (postedClippings.length === 0) {
-        const { data: allData } = await client
-          .from('clippings')
-          .select(FEED_COLUMNS)
-          .eq('is_posted', true)
-          .neq('status', 'rejected')
-          .order('created_at', { ascending: false })
-          .limit(40);
-
-        postedClippings = (allData || []).filter(isApprovedFeedClip);
-      }
 
       // Deep link support: If clipId query param is present, prioritize or fetch that clipping
       const urlParams = new URLSearchParams(window.location.search);
@@ -296,15 +291,19 @@ export const FeedScreen: React.FC = () => {
         }
       }
 
+      const dKey = cleanDistrict || 'All';
       if (postedClippings.length > 0) {
         setClippings(postedClippings);
         try {
-          localStorage.setItem('spotnews_feed_cache', JSON.stringify(postedClippings));
+          localStorage.setItem(`spotnews_feed_cache_${dKey}`, JSON.stringify(postedClippings));
+          if (isDistrictAll) {
+            localStorage.setItem('spotnews_feed_cache', JSON.stringify(postedClippings));
+          }
         } catch {}
       } else {
         setClippings([]);
         try {
-          localStorage.removeItem('spotnews_feed_cache');
+          localStorage.removeItem(`spotnews_feed_cache_${dKey}`);
         } catch {}
       }
     } catch (err) {
@@ -560,6 +559,26 @@ export const FeedScreen: React.FC = () => {
   }, [district, userState]);
 
   useEffect(() => {
+    const cleanDistrict = district ? district.split('/')[0]?.split('·')[0]?.trim() : 'All';
+    try {
+      const cached = localStorage.getItem(`spotnews_feed_cache_${cleanDistrict}`);
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          setClippings(parsed);
+          setLoading(false);
+        } else {
+          setClippings([]);
+          setLoading(true);
+        }
+      } else {
+        setClippings([]);
+        setLoading(true);
+      }
+    } catch {
+      setClippings([]);
+      setLoading(true);
+    }
     fetchFeed();
     loadAds();
   }, [district, userState, targetClipId, loc.key, loadAds]);
