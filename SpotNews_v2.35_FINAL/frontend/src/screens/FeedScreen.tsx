@@ -46,7 +46,14 @@ export const FeedScreen: React.FC = () => {
       const cached = localStorage.getItem(`spotnews_feed_cache_${dKey}`) || localStorage.getItem('spotnews_feed_cache');
       if (cached) {
         const parsed = JSON.parse(cached);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          const now = Date.now();
+          return parsed.filter((c: any) => {
+            if (!c?.created_at) return true;
+            const t = new Date(c.created_at).getTime();
+            return !isNaN(t) && (now - t) <= 24 * 60 * 60 * 1000;
+          });
+        }
       }
     } catch {}
     return [];
@@ -226,12 +233,16 @@ export const FeedScreen: React.FC = () => {
     try {
       const FEED_COLUMNS = 'id, headline, article_content, png_url, mp4_url, image_url, image_urls, likes_count, views_count, comments_count, created_at, district, state, user_id, status, is_posted, custom_layout';
 
+      // 24-hour feed lifespan: clippings older than 24 hours disappear from the feed
+      const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+
       const client = publicClient || supabase;
       let query = client
         .from('clippings')
         .select(FEED_COLUMNS)
         .eq('is_posted', true)
         .neq('status', 'rejected')
+        .gte('created_at', twentyFourHoursAgo)
         .order('created_at', { ascending: false })
         .limit(40);
 
@@ -255,9 +266,16 @@ export const FeedScreen: React.FC = () => {
       const { data, error } = await query;
       if (error) throw error;
 
+      const isWithin24Hours = (c: any) => {
+        if (!c?.created_at) return true;
+        const createdMs = new Date(c.created_at).getTime();
+        return !isNaN(createdMs) && (Date.now() - createdMs) <= 24 * 60 * 60 * 1000;
+      };
+
       const isApprovedFeedClip = (c: any) =>
         (c.is_posted === true || ['approved', 'auto_approved', 'published', 'completed'].includes(c.status)) &&
-        c.status !== 'rejected';
+        c.status !== 'rejected' &&
+        isWithin24Hours(c);
 
       let postedClippings = (data || []).filter(isApprovedFeedClip);
 

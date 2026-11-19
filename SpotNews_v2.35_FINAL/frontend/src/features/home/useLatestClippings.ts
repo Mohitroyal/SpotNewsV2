@@ -10,7 +10,13 @@ function cached(dKey?: string): any[] {
   try {
     const key = dKey ? `spotnews_feed_cache_${dKey}` : 'spotnews_feed_cache';
     const c = JSON.parse(localStorage.getItem(key) || localStorage.getItem('spotnews_feed_cache') || '[]');
-    return Array.isArray(c) ? c : [];
+    const now = Date.now();
+    const isFresh = (item: any) => {
+      if (!item?.created_at) return true;
+      const t = new Date(item.created_at).getTime();
+      return !isNaN(t) && (now - t) <= 24 * 60 * 60 * 1000;
+    };
+    return Array.isArray(c) ? c.filter(isFresh) : [];
   } catch { return []; }
 }
 
@@ -31,6 +37,7 @@ export function useLatestClippings(district: string, userState: string, limit = 
       try {
         const client = publicClient || supabase;
         const cleanState = userState ? userState.split('/')[0]?.split('·')[0]?.trim() : '';
+        const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
 
         // Helper timeout for individual network queries (4 seconds max)
         const withTimeout = async <T = any>(thenable: any, ms = 4000): Promise<T> =>
@@ -46,6 +53,7 @@ export function useLatestClippings(district: string, userState: string, limit = 
           try {
             const dInfo = findDistrict(cleanDistrict);
             let q = client.from('clippings').select(COLUMNS).eq('is_posted', true).neq('status', 'rejected')
+              .gte('created_at', twentyFourHoursAgo)
               .order('created_at', { ascending: false }).limit(limit);
 
             if (dInfo) {
@@ -66,6 +74,7 @@ export function useLatestClippings(district: string, userState: string, limit = 
           try {
             const q = client.from('clippings').select(COLUMNS).eq('is_posted', true).neq('status', 'rejected')
               .ilike('state', cleanState)
+              .gte('created_at', twentyFourHoursAgo)
               .order('created_at', { ascending: false }).limit(limit);
             const res = await withTimeout(q);
             if (res && res.data) {
@@ -79,6 +88,7 @@ export function useLatestClippings(district: string, userState: string, limit = 
           try {
             const allRes = await withTimeout(
               client.from('clippings').select(COLUMNS).eq('is_posted', true).neq('status', 'rejected')
+                .gte('created_at', twentyFourHoursAgo)
                 .order('created_at', { ascending: false }).limit(limit)
             );
             if (allRes && allRes.data) {
@@ -90,7 +100,12 @@ export function useLatestClippings(district: string, userState: string, limit = 
         }
 
         if (alive) {
-          const finalItems = data || [];
+          const now = Date.now();
+          const finalItems = (data || []).filter((item: any) => {
+            if (!item?.created_at) return true;
+            const t = new Date(item.created_at).getTime();
+            return !isNaN(t) && (now - t) <= 24 * 60 * 60 * 1000;
+          });
           setItems(finalItems);
           try {
             const dKey = cleanDistrict || 'All';

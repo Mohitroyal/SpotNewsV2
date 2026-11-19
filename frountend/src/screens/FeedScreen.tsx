@@ -143,6 +143,7 @@ export const FeedScreen: React.FC = () => {
 
     try {
       const FEED_COLUMNS = 'id, headline, article_content, png_url, mp4_url, image_url, image_urls, likes_count, views_count, comments_count, created_at, district, state, user_id, status, is_posted, custom_layout';
+      const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
 
       let query = supabase
         .from('clippings')
@@ -150,6 +151,7 @@ export const FeedScreen: React.FC = () => {
         .or('is_posted.eq.true,status.eq.approved')
         .neq('status', 'rejected')
         .not('png_url', 'is', null)
+        .gte('created_at', twentyFourHoursAgo)
         .order('created_at', { ascending: false })
         .limit(50);
 
@@ -163,9 +165,16 @@ export const FeedScreen: React.FC = () => {
       const { data, error } = await query;
       if (error) throw error;
 
+      const isWithin24Hours = (c: any) => {
+        if (!c?.created_at) return true;
+        const createdMs = new Date(c.created_at).getTime();
+        return !isNaN(createdMs) && (Date.now() - createdMs) <= 24 * 60 * 60 * 1000;
+      };
+
       const isApprovedFeedClip = (c: any) =>
         (c.is_posted === true || ['approved', 'auto_approved', 'published', 'completed'].includes(c.status)) &&
-        c.status !== 'rejected';
+        c.status !== 'rejected' &&
+        isWithin24Hours(c);
 
       let postedClippings = (data || []).filter(isApprovedFeedClip);
 
@@ -177,6 +186,7 @@ export const FeedScreen: React.FC = () => {
           .or('is_posted.eq.true,status.eq.approved')
           .neq('status', 'rejected')
           .not('png_url', 'is', null)
+          .gte('created_at', twentyFourHoursAgo)
           .order('created_at', { ascending: false })
           .limit(50);
 
