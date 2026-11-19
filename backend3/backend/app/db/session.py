@@ -17,10 +17,11 @@ else:
     elif db_url.startswith("postgresql://") and not db_url.startswith("postgresql+psycopg2://"):
         db_url = db_url.replace("postgresql://", "postgresql+psycopg2://", 1)
 
-    # Supabase Connection Pooler optimization:
-    # Auto-switch pooler.supabase.com port 5432 (Session Mode, max 15 clients) to 6543 (Transaction Mode)
-    if "pooler.supabase.com" in db_url and ":5432/" in db_url:
-        db_url = db_url.replace(":5432/", ":6543/", 1)
+    # Supabase Connection Pooler:
+    # Port 5432 (Session Mode) is read-write. Port 6543 (Transaction Mode) has transaction_read_only=on in Supabase.
+    # Ensure port 5432 is always used so INSERT/UPDATE/DELETE queries succeed.
+    if "pooler.supabase.com" in db_url and ":6543/" in db_url:
+        db_url = db_url.replace(":6543/", ":5432/", 1)
 
     if not db_url:
         print("[WARNING] DATABASE_URL is empty or not set. Falling back to local SQLite.")

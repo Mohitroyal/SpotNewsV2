@@ -187,6 +187,7 @@ async def send_otp(
         db.refresh(otp_record)
     except Exception as e:
         db.rollback()
+        logger.error(f"[SEND_OTP_DB_ERROR] {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="Failed to initiate OTP request.")
 
     otp_id = otp_record.id
