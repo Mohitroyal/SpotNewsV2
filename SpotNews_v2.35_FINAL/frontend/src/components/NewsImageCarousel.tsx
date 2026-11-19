@@ -196,7 +196,7 @@ export const NewsImageCarousel: React.FC<NewsImageCarouselProps> = ({
       </div>
 
       {/* ── Counter: "1 / 2" Badge (Visible only for multiple images) ── */}
-      <div className="absolute top-2.5 left-2.5 z-20 bg-black/65 backdrop-blur-xs text-white text-[11px] font-bold px-2.5 py-0.5 rounded-full border border-white/20 shadow-xs pointer-events-none select-none tracking-wider flex items-center gap-1">
+      <div className="absolute top-2.5 left-2.5 z-20 bg-black/80 text-white text-[11px] font-bold px-2.5 py-0.5 rounded-full border border-white/20 shadow-xs pointer-events-none select-none tracking-wider flex items-center gap-1">
         <span>{currentImgIndex + 1} / {total}</span>
       </div>
 
@@ -205,7 +205,7 @@ export const NewsImageCarousel: React.FC<NewsImageCarouselProps> = ({
         <button
           type="button"
           onClick={handlePrev}
-          className="absolute left-2 top-1/2 -translate-y-1/2 z-20 w-7 h-7 rounded-full bg-black/50 hover:bg-black/75 text-white flex items-center justify-center backdrop-blur-xs transition-opacity cursor-pointer border-0"
+          className="absolute left-2 top-1/2 -translate-y-1/2 z-20 w-7 h-7 rounded-full bg-black/75 hover:bg-black/90 text-white flex items-center justify-center transition-opacity cursor-pointer border-0"
           aria-label="Previous image"
         >
           <ChevronLeft className="w-4 h-4 text-white" strokeWidth={2.5} />
@@ -216,7 +216,7 @@ export const NewsImageCarousel: React.FC<NewsImageCarouselProps> = ({
         <button
           type="button"
           onClick={handleNext}
-          className="absolute right-2 top-1/2 -translate-y-1/2 z-20 w-7 h-7 rounded-full bg-black/50 hover:bg-black/75 text-white flex items-center justify-center backdrop-blur-xs transition-opacity cursor-pointer border-0"
+          className="absolute right-2 top-1/2 -translate-y-1/2 z-20 w-7 h-7 rounded-full bg-black/75 hover:bg-black/90 text-white flex items-center justify-center transition-opacity cursor-pointer border-0"
           aria-label="Next image"
         >
           <ChevronRight className="w-4 h-4 text-white" strokeWidth={2.5} />
@@ -224,7 +224,7 @@ export const NewsImageCarousel: React.FC<NewsImageCarouselProps> = ({
       )}
 
       {/* ── Pagination Dots (Visible only for multiple images) ── */}
-      <div className="absolute bottom-2.5 left-1/2 -translate-x-1/2 z-20 flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-black/45 backdrop-blur-xs pointer-events-auto">
+      <div className="absolute bottom-2.5 left-1/2 -translate-x-1/2 z-20 flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-black/80 pointer-events-auto">
         {images.map((_, dotIdx) => (
           <button
             key={dotIdx}

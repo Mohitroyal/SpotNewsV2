@@ -4,36 +4,93 @@ import { limitWordsForDisplay, MAX_HEADLINE_WORDS, MAX_ARTICLE_WORDS } from '@/u
 import { TwoImageGallery, getClipPhotos } from '@/components/TwoImageGallery';
 
 /**
- * Hero video player for the feed card with play/pause and sound controls.
+ * Hero video player for the feed card with viewport-aware autoplay and sound controls.
  */
 const FeedHeroVideoPlayer: React.FC<{
   videoSrc: string;
   poster?: string;
-}> = ({ videoSrc, poster }) => {
+  isActive?: boolean;
+}> = ({ videoSrc, poster, isActive = true }) => {
+  const containerRef = useRef<HTMLDivElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [isMuted, setIsMuted] = useState(true);
+  const [isVisible, setIsVisible] = useState(false);
+  const isUserPausedRef = useRef(false);
 
-  // Attempt muted auto-play on mount
+  // Viewport intersection observer: only play when physically inside the viewport
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const entry = entries[0];
+        const inView = Boolean(entry?.isIntersecting && entry.intersectionRatio >= 0.5);
+        setIsVisible(inView);
+        if (!inView) {
+          const vid = videoRef.current;
+          if (vid && !vid.paused) {
+            vid.pause();
+            setIsPlaying(false);
+          }
+        }
+      },
+      { threshold: [0, 0.5, 0.8] }
+    );
+
+    observer.observe(el);
+
+    return () => {
+      observer.disconnect();
+      const vid = videoRef.current;
+      if (vid) {
+        vid.pause();
+        vid.removeAttribute('src');
+        vid.load();
+      }
+    };
+  }, []);
+
+  // Synchronize playback with visibility and active state
   useEffect(() => {
     const vid = videoRef.current;
     if (!vid) return;
 
-    const p = vid.play();
-    if (p !== undefined) {
-      p.then(() => setIsPlaying(true)).catch(() => {
-        setIsPlaying(false);
-      });
+    const shouldPlay = isActive && isVisible && !isUserPausedRef.current;
+
+    if (shouldPlay) {
+      vid.muted = isMuted;
+      const playPromise = vid.play();
+      if (playPromise !== undefined) {
+        playPromise
+          .then(() => setIsPlaying(true))
+          .catch(() => {
+            // If sound was blocked, fallback to muted autoplay
+            vid.muted = true;
+            setIsMuted(true);
+            vid.play()
+              .then(() => setIsPlaying(true))
+              .catch(() => setIsPlaying(false));
+          });
+      }
+    } else {
+      if (!vid.paused) {
+        vid.pause();
+      }
+      setIsPlaying(false);
     }
-  }, [videoSrc]);
+  }, [isActive, isVisible, isMuted, videoSrc]);
 
   const togglePlay = (e: React.MouseEvent) => {
     e.stopPropagation();
     const vid = videoRef.current;
     if (!vid) return;
     if (vid.paused) {
-      vid.play().then(() => setIsPlaying(true)).catch(() => {});
+      isUserPausedRef.current = false;
+      vid.play().then(() => setIsPlaying(true)).catch(() => setIsPlaying(false));
     } else {
+      isUserPausedRef.current = true;
       vid.pause();
       setIsPlaying(false);
     }
@@ -48,27 +105,36 @@ const FeedHeroVideoPlayer: React.FC<{
   };
 
   return (
-    <div className="relative w-full h-full flex items-center justify-center bg-black overflow-hidden select-none">
+    <div ref={containerRef} className="relative w-full h-full flex items-center justify-center bg-black overflow-hidden select-none">
       {poster && (
         <div
-          className="absolute inset-0 opacity-20 scale-110 blur-xl bg-cover bg-center pointer-events-none"
+          className="absolute inset-0 opacity-20 bg-cover bg-center pointer-events-none"
           style={{ backgroundImage: `url(${poster})` }}
         />
       )}
 
-      <video
-        ref={videoRef}
-        src={videoSrc}
-        poster={poster || undefined}
-        playsInline
-        muted={isMuted}
-        loop
-        preload="metadata"
-        onClick={togglePlay}
-        onPlay={() => setIsPlaying(true)}
-        onPause={() => setIsPlaying(false)}
-        className="relative z-10 w-full h-full object-contain cursor-pointer"
-      />
+      {(isActive || isVisible) ? (
+        <video
+          ref={videoRef}
+          src={videoSrc}
+          poster={poster || undefined}
+          playsInline
+          muted={isMuted}
+          loop
+          preload="metadata"
+          onClick={togglePlay}
+          onPlay={() => setIsPlaying(true)}
+          onPause={() => setIsPlaying(false)}
+          className="relative z-10 w-full h-full object-contain cursor-pointer"
+        />
+      ) : poster ? (
+        <img
+          src={poster}
+          alt=""
+          className="relative z-10 w-full h-full object-contain cursor-pointer"
+          loading="lazy"
+        />
+      ) : null}
 
       {/* Play button overlay when paused */}
       {!isPlaying && (
@@ -114,6 +180,7 @@ interface Props {
   onShare: () => void;
   onOpenClipping: () => void;
   sponsored?: SponsoredTeaser | null;
+  isActive?: boolean;
 }
 
 export function clipPhoto(clip: any): string {
@@ -134,7 +201,7 @@ function timeAgo(iso?: string) {
   return new Date(iso).toLocaleDateString('te-IN', { day: 'numeric', month: 'short' });
 }
 
-export const ReaderStoryCard: React.FC<Props> = ({ clip, liked, onLike, onComment, onShare, onOpenClipping, sponsored }) => {
+export const ReaderStoryCard: React.FC<Props> = ({ clip, liked, onLike, onComment, onShare, onOpenClipping, sponsored, isActive = true }) => {
   const cl = clip?.custom_layout || {};
   // Text view must ONLY bind to the original uploaded news video, NOT the composed clipping video
   const originalVideo = cl.video_url || cl.videoUrl || clip.video_url || clip.videoUrl || '';
@@ -183,7 +250,7 @@ export const ReaderStoryCard: React.FC<Props> = ({ clip, liked, onLike, onCommen
       {/* Photo / Two-Image Sliding Gallery */}
       <div className="relative w-full shrink-0 bg-black overflow-hidden" style={{ height: '38%' }}>
         {originalVideo ? (
-          <FeedHeroVideoPlayer videoSrc={originalVideo} poster={poster} />
+          <FeedHeroVideoPlayer videoSrc={originalVideo} poster={poster} isActive={isActive} />
         ) : photos.length > 0 ? (
           <TwoImageGallery
             photos={photos}

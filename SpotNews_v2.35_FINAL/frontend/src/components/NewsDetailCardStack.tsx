@@ -436,6 +436,38 @@ export const NewsDetailCardStack: React.FC<NewsDetailCardStackProps> = ({
           const showBrandAd = brandAds.length > 0 && (index + 1) % 7 === 0 && !shouldShowLocalAd;
           const brandAd = brandAds[Math.floor(index / 7) % (brandAds.length || 1)];
 
+          const isNearActive = Math.abs(activeIndex - index) <= 2;
+
+          if (!isNearActive) {
+            return (
+              <React.Fragment key={item.id || index}>
+                <div
+                  data-index={index}
+                  ref={(el) => {
+                    if (el) itemRefs.current.set(index, el);
+                    else itemRefs.current.delete(index);
+                  }}
+                  className="w-full snap-start snap-always flex flex-col bg-black overflow-hidden relative select-none shrink-0"
+                  style={{
+                    height: '100%',
+                    minHeight: '100%',
+                    maxHeight: '100%',
+                  }}
+                />
+                {(shouldShowLocalAd && localAd) || (showBrandAd && brandAd) ? (
+                  <div
+                    className="w-full snap-start snap-always flex flex-col bg-black overflow-hidden relative select-none shrink-0"
+                    style={{
+                      height: '100%',
+                      minHeight: '100%',
+                      maxHeight: '100%',
+                    }}
+                  />
+                ) : null}
+              </React.Fragment>
+            );
+          }
+
           return (
             <React.Fragment key={item.id || index}>
               <div
@@ -465,9 +497,9 @@ export const NewsDetailCardStack: React.FC<NewsDetailCardStackProps> = ({
                       />
                     ) : (
                       <>
-                        {/* Ambient background blur */}
+                        {/* Ambient background */}
                         <div
-                          className="absolute inset-0 opacity-25 scale-110 blur-xl bg-cover bg-center"
+                          className="absolute inset-0 opacity-20 bg-cover bg-center pointer-events-none"
                           style={{ backgroundImage: `url(${rawClippingUrl})` }}
                         />
                         <img
@@ -689,7 +721,7 @@ export const NewsDetailCardStack: React.FC<NewsDetailCardStackProps> = ({
       {/* ── Animated Swipe Up Hint Indicator (Appears on first card to guide user) ── */}
       {showSwipeHint && activeIndex === 0 && items.length > 1 && (
         <div className="absolute bottom-[72px] left-1/2 -translate-x-1/2 z-40 pointer-events-none flex flex-col items-center animate-bounce">
-          <div className="bg-black/85 backdrop-blur-md text-white text-[12.5px] font-bold px-3.5 py-1.5 rounded-full shadow-xl border border-white/25 flex items-center gap-1.5 tracking-wide">
+          <div className="bg-black/90 text-white text-[12.5px] font-bold px-3.5 py-1.5 rounded-full shadow-xl border border-white/25 flex items-center gap-1.5 tracking-wide">
             <ChevronUp className="w-3.5 h-3.5 text-[#92C1F0] animate-pulse" />
             <span>పైకి స్వైప్ చేయండి · Swipe up for next</span>
           </div>

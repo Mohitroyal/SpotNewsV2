@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Megaphone, Phone, MessageSquare, Volume2, VolumeX, Share2, Sparkles, ExternalLink, Eye } from 'lucide-react';
+import { Megaphone, Phone, MessageSquare, Volume2, VolumeX, Share2, Sparkles, ExternalLink, Eye, Play } from 'lucide-react';
 import type { LocalAd } from '@/types/localAds';
 import { localAdsService } from '@/services/localAds.service';
 
@@ -9,9 +9,64 @@ interface LocalAdFeedCardProps {
 }
 
 export const LocalAdFeedCard: React.FC<LocalAdFeedCardProps> = ({ ad, index }) => {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const videoRef = useRef<HTMLVideoElement>(null);
   const [isMuted, setIsMuted] = useState(true);
   const [viewsCount, setViewsCount] = useState<number>(ad.views_count ?? 0);
+  const [isVisible, setIsVisible] = useState(false);
   const viewedRef = useRef(false);
+
+  // Viewport intersection observing for ad video
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el || ad.media_type !== 'video') return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const inView = Boolean(entries[0]?.isIntersecting && entries[0].intersectionRatio >= 0.5);
+        setIsVisible(inView);
+        const vid = videoRef.current;
+        if (!inView && vid) {
+          try {
+            vid.pause();
+            vid.removeAttribute('src');
+            vid.load();
+          } catch {}
+        }
+      },
+      { threshold: [0, 0.5, 0.8] }
+    );
+
+    observer.observe(el);
+
+    return () => {
+      observer.disconnect();
+      const vid = videoRef.current;
+      if (vid) {
+        vid.pause();
+        vid.removeAttribute('src');
+        vid.load();
+      }
+    };
+  }, [ad.media_type]);
+
+  // Synchronize ad video playback
+  useEffect(() => {
+    if (ad.media_type !== 'video') return;
+    const vid = videoRef.current;
+    if (!vid) return;
+
+    if (isVisible) {
+      vid.muted = isMuted;
+      vid.play().catch(() => {
+        vid.muted = true;
+        setIsMuted(true);
+        vid.play().catch(() => {});
+      });
+    } else {
+      if (!vid.paused) vid.pause();
+    }
+  }, [isVisible, isMuted, ad.media_type]);
 
   useEffect(() => {
     if (!ad?.id || viewedRef.current) return;
@@ -61,6 +116,7 @@ export const LocalAdFeedCard: React.FC<LocalAdFeedCardProps> = ({ ad, index }) =
 
   return (
     <div
+      ref={containerRef}
       key={`local-ad-${ad.id}-${index}`}
       className="w-full h-full min-h-full snap-start snap-always flex flex-col bg-black border-b border-gray-800 relative select-none shrink-0"
       style={{ minHeight: '100%', height: '100%' }}
@@ -74,14 +130,14 @@ export const LocalAdFeedCard: React.FC<LocalAdFeedCardProps> = ({ ad, index }) =
           </div>
 
           {ad.target_district && (
-            <span className="px-2.5 py-1 rounded-full bg-black/60 backdrop-blur-md text-white/90 text-[13px] font-bold border border-white/10">
+            <span className="px-2.5 py-1 rounded-full bg-black/80 text-white/90 text-[13px] font-bold border border-white/10">
               📍 {ad.target_district}
             </span>
           )}
 
           {/* Small eye button / badge showing ad views */}
           <div
-            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-black/60 backdrop-blur-md text-white/95 text-[13px] font-bold border border-white/10 shadow-sm"
+            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-black/80 text-white/95 text-[13px] font-bold border border-white/10 shadow-sm"
             title="వీక్షణలు / Views"
           >
             <Eye className="w-3.5 h-3.5 text-white/80" />
@@ -92,7 +148,7 @@ export const LocalAdFeedCard: React.FC<LocalAdFeedCardProps> = ({ ad, index }) =
         {ad.media_type === 'video' && (
           <button
             onClick={() => setIsMuted(!isMuted)}
-            className="p-2 rounded-full bg-black/60 backdrop-blur-md text-white border border-white/20 pointer-events-auto active:scale-95 transition-transform"
+            className="p-2 rounded-full bg-black/80 text-white border border-white/20 pointer-events-auto active:scale-95 transition-transform"
             title={isMuted ? 'Unmute' : 'Mute'}
           >
             {isMuted ? <VolumeX className="w-4 h-4 text-white" /> : <Volume2 className="w-4 h-4 text-emerald-400" />}
@@ -102,23 +158,30 @@ export const LocalAdFeedCard: React.FC<LocalAdFeedCardProps> = ({ ad, index }) =
 
       {/* ── Media Display Area ── */}
       <div className="flex-1 w-full bg-black relative flex items-center justify-center overflow-hidden pb-[110px]">
-        {/* Glow ambient background */}
+        {/* Ambient background */}
         {ad.media_type === 'image' && (
           <div
-            className="absolute inset-0 opacity-25 scale-110 blur-2xl bg-cover bg-center pointer-events-none"
+            className="absolute inset-0 opacity-20 bg-cover bg-center pointer-events-none"
             style={{ backgroundImage: `url(${ad.media_url})` }}
           />
         )}
 
         {ad.media_type === 'video' ? (
-          <video
-            src={ad.media_url}
-            autoPlay
-            loop
-            muted={isMuted}
-            playsInline
-            className="w-full h-full object-contain relative z-10"
-          />
+          isVisible ? (
+            <video
+              ref={videoRef}
+              src={ad.media_url}
+              loop
+              muted={isMuted}
+              playsInline
+              preload="metadata"
+              className="w-full h-full object-contain relative z-10"
+            />
+          ) : (
+            <div className="w-full h-full flex items-center justify-center text-white/40">
+              <Play className="w-12 h-12" />
+            </div>
+          )
         ) : (
           <img
             src={ad.media_url}

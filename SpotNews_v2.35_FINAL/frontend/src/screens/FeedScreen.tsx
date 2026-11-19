@@ -73,6 +73,7 @@ export const FeedScreen: React.FC = () => {
     return true;
   });
   const [activeDetailIndex, setActiveDetailIndex] = useState<number | null>(null);
+  const [visibleIndex, setVisibleIndex] = useState<number>(0);
 
   // Sync full-screen mode: true only when activeDetailIndex is set
   useEffect(() => {
@@ -499,6 +500,14 @@ export const FeedScreen: React.FC = () => {
       (entries) => {
         entries.forEach(async (entry) => {
           if (entry.isIntersecting) {
+            const rawIdx = (entry.target as HTMLElement).dataset.index;
+            if (rawIdx !== undefined) {
+              const idxNum = parseInt(rawIdx, 10);
+              if (!isNaN(idxNum)) {
+                setVisibleIndex(idxNum);
+              }
+            }
+
             const id = (entry.target as HTMLElement).dataset.clipId;
             // In-memory guard: skip if already processed this scroll session
             if (!id || viewedIds.current.has(id)) return;
@@ -770,25 +779,35 @@ export const FeedScreen: React.FC = () => {
                 };
               }
 
+              const isNearActive = Math.abs(visibleIndex - idx) <= 3;
+
               return (
                 <React.Fragment key={clip.id}>
                   <div
                     data-clip-id={clip.id}
+                    data-index={idx}
                     ref={(el) => {
                       if (el) cardRefs.current.set(clip.id, el);
                       else cardRefs.current.delete(clip.id);
                     }}
                     className="w-full h-full snap-start snap-always relative"
                   >
-                    <ReaderStoryCard
-                      clip={clip}
-                      liked={isLiked}
-                      onLike={() => handleLike(clip.id, clip.likes_count || 0)}
-                      onComment={() => openComments(clip.id)}
-                      onShare={() => handleShareClick(clip)}
-                      onOpenClipping={() => { setStartInClipping(true); setActiveDetailIndex(idx); }}
-                      sponsored={sponsored}
-                    />
+                    {isNearActive ? (
+                      <ReaderStoryCard
+                        clip={clip}
+                        isActive={visibleIndex === idx}
+                        liked={isLiked}
+                        onLike={() => handleLike(clip.id, clip.likes_count || 0)}
+                        onComment={() => openComments(clip.id)}
+                        onShare={() => handleShareClick(clip)}
+                        onOpenClipping={() => { setStartInClipping(true); setActiveDetailIndex(idx); }}
+                        sponsored={sponsored}
+                      />
+                    ) : (
+                      <div className="w-full h-full bg-slate-100 flex items-center justify-center text-slate-300">
+                        <Newspaper className="w-12 h-12 opacity-30" />
+                      </div>
+                    )}
                   </div>
                   {/* Exactly one local ad strictly after every exact 5 news clippings */}
                   {localAds.length > 0 && (idx + 1) % 5 === 0 && (
@@ -950,7 +969,7 @@ export const FeedScreen: React.FC = () => {
       {/* ── Weather Advisory Modal Sheet ──────────────────────────────── */}
       {showWeatherModal && advisory && (
         <div
-          className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[100005] flex items-end justify-center p-0 sm:p-4"
+          className="fixed inset-0 bg-black/75 z-[100005] flex items-end justify-center p-0 sm:p-4"
           onClick={() => setShowWeatherModal(false)}
         >
           <div

@@ -158,7 +158,7 @@ export const TwoImageGallery: React.FC<TwoImageGalleryProps> = ({
         onClick={onImageClick}
       >
         <div
-          className="absolute inset-0 opacity-40 blur-xl scale-110 bg-cover bg-center pointer-events-none"
+          className="absolute inset-0 opacity-20 bg-cover bg-center pointer-events-none"
           style={{ backgroundImage: `url(${validPhotos[0]})` }}
         />
         <img
@@ -184,10 +184,10 @@ export const TwoImageGallery: React.FC<TwoImageGalleryProps> = ({
       onMouseMove={handleMouseMove}
       onMouseUp={handleMouseUp}
     >
-      {/* Ambient background blur tracking active image */}
+      {/* Ambient background tracking active image */}
       {currentPhoto && (
         <div
-          className="absolute inset-0 opacity-40 blur-xl scale-110 bg-cover bg-center pointer-events-none transition-all duration-300"
+          className="absolute inset-0 opacity-20 bg-cover bg-center pointer-events-none"
           style={{ backgroundImage: `url(${currentPhoto})` }}
         />
       )}
@@ -219,7 +219,7 @@ export const TwoImageGallery: React.FC<TwoImageGalleryProps> = ({
       </div>
 
       {/* Subtle Pagination Indicators (Two Dots) */}
-      <div className="absolute z-20 bottom-3 right-4 flex items-center gap-1.5 bg-black/60 backdrop-blur-xs px-2.5 py-1.5 rounded-full border border-white/20 shadow-sm pointer-events-auto">
+      <div className="absolute z-20 bottom-3 right-4 flex items-center gap-1.5 bg-black/80 px-2.5 py-1.5 rounded-full border border-white/20 shadow-sm pointer-events-auto">
         <button
           type="button"
           onClick={(e) => {

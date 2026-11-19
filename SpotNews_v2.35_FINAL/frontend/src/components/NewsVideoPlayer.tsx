@@ -90,6 +90,12 @@ export const NewsVideoPlayer: React.FC<NewsVideoPlayerProps> = ({
     return () => {
       document.removeEventListener('fullscreenchange', handleFullscreenChange);
       if (hideTimerRef.current) clearTimeout(hideTimerRef.current);
+      const video = videoRef.current;
+      if (video) {
+        video.pause();
+        video.removeAttribute('src');
+        video.load();
+      }
     };
   }, []);
 
@@ -283,7 +289,7 @@ export const NewsVideoPlayer: React.FC<NewsVideoPlayerProps> = ({
               e.stopPropagation();
               restartHideTimer();
             }}
-            className="bg-black/85 backdrop-blur-xs text-white text-[12px] font-semibold px-3 py-1 rounded-full shadow-md tracking-wide"
+            className="bg-black/90 text-white text-[12px] font-semibold px-3 py-1 rounded-full shadow-md tracking-wide"
           >
             {formatTime(currentTime)} / {formatTime(duration)}
           </div>
