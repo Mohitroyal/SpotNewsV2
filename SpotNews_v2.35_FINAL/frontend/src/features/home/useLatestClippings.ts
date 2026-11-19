@@ -6,17 +6,26 @@ import { findDistrict } from '@/features/daily/dailyContentEngine';
 const COLUMNS = 'id, headline, article_content, png_url, image_url, likes_count, comments_count, created_at, district, state, status, is_posted, custom_layout';
 const isAll = (v?: string) => !v || ['All', 'All districts', 'All Regions', 'Both states'].includes(v);
 
+const TWENTY_FOUR_HOURS_MS = 24 * 60 * 60 * 1000;
+
+export const isClippingWithin24Hours = (c: any): boolean => {
+  if (!c) return false;
+  const ts = c.published_at || c.created_at;
+  if (!ts) return false;
+  const time = new Date(ts).getTime();
+  if (isNaN(time)) return false;
+  const diff = Date.now() - time;
+  return diff >= 0 && diff <= TWENTY_FOUR_HOURS_MS;
+};
+
 function cached(dKey?: string): any[] {
   try {
     const key = dKey ? `spotnews_feed_cache_${dKey}` : 'spotnews_feed_cache';
     const c = JSON.parse(localStorage.getItem(key) || localStorage.getItem('spotnews_feed_cache') || '[]');
-    const now = Date.now();
-    const isFresh = (item: any) => {
-      if (!item?.created_at) return true;
-      const t = new Date(item.created_at).getTime();
-      return !isNaN(t) && (now - t) <= 24 * 60 * 60 * 1000;
-    };
-    return Array.isArray(c) ? c.filter(isFresh) : [];
+    if (Array.isArray(c)) {
+      return c.filter(isClippingWithin24Hours);
+    }
+    return [];
   } catch { return []; }
 }
 
@@ -37,7 +46,7 @@ export function useLatestClippings(district: string, userState: string, limit = 
       try {
         const client = publicClient || supabase;
         const cleanState = userState ? userState.split('/')[0]?.split('·')[0]?.trim() : '';
-        const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+        const cutoff24hIso = new Date(Date.now() - TWENTY_FOUR_HOURS_MS).toISOString();
 
         // Helper timeout for individual network queries (4 seconds max)
         const withTimeout = async <T = any>(thenable: any, ms = 4000): Promise<T> =>
@@ -53,7 +62,7 @@ export function useLatestClippings(district: string, userState: string, limit = 
           try {
             const dInfo = findDistrict(cleanDistrict);
             let q = client.from('clippings').select(COLUMNS).eq('is_posted', true).neq('status', 'rejected')
-              .gte('created_at', twentyFourHoursAgo)
+              .gte('created_at', cutoff24hIso)
               .order('created_at', { ascending: false }).limit(limit);
 
             if (dInfo) {
@@ -73,8 +82,8 @@ export function useLatestClippings(district: string, userState: string, limit = 
           // If specific state is selected with All districts
           try {
             const q = client.from('clippings').select(COLUMNS).eq('is_posted', true).neq('status', 'rejected')
+              .gte('created_at', cutoff24hIso)
               .ilike('state', cleanState)
-              .gte('created_at', twentyFourHoursAgo)
               .order('created_at', { ascending: false }).limit(limit);
             const res = await withTimeout(q);
             if (res && res.data) {
@@ -88,7 +97,7 @@ export function useLatestClippings(district: string, userState: string, limit = 
           try {
             const allRes = await withTimeout(
               client.from('clippings').select(COLUMNS).eq('is_posted', true).neq('status', 'rejected')
-                .gte('created_at', twentyFourHoursAgo)
+                .gte('created_at', cutoff24hIso)
                 .order('created_at', { ascending: false }).limit(limit)
             );
             if (allRes && allRes.data) {
@@ -100,12 +109,7 @@ export function useLatestClippings(district: string, userState: string, limit = 
         }
 
         if (alive) {
-          const now = Date.now();
-          const finalItems = (data || []).filter((item: any) => {
-            if (!item?.created_at) return true;
-            const t = new Date(item.created_at).getTime();
-            return !isNaN(t) && (now - t) <= 24 * 60 * 60 * 1000;
-          });
+          const finalItems = (data || []).filter(isClippingWithin24Hours);
           setItems(finalItems);
           try {
             const dKey = cleanDistrict || 'All';

@@ -30,6 +30,18 @@ interface Comment {
   created_at: string;
 }
 
+const TWENTY_FOUR_HOURS_MS = 24 * 60 * 60 * 1000;
+
+export const isClippingWithin24Hours = (c: any): boolean => {
+  if (!c) return false;
+  const ts = c.published_at || c.created_at;
+  if (!ts) return false;
+  const time = new Date(ts).getTime();
+  if (isNaN(time)) return false;
+  const diff = Date.now() - time;
+  return diff >= 0 && diff <= TWENTY_FOUR_HOURS_MS;
+};
+
 export const FeedScreen: React.FC = () => {
   const navigate = useNavigate();
   const loc = useLocation();
@@ -47,12 +59,8 @@ export const FeedScreen: React.FC = () => {
       if (cached) {
         const parsed = JSON.parse(cached);
         if (Array.isArray(parsed) && parsed.length > 0) {
-          const now = Date.now();
-          return parsed.filter((c: any) => {
-            if (!c?.created_at) return true;
-            const t = new Date(c.created_at).getTime();
-            return !isNaN(t) && (now - t) <= 24 * 60 * 60 * 1000;
-          });
+          const valid = parsed.filter(isClippingWithin24Hours);
+          if (valid.length > 0) return valid;
         }
       }
     } catch {}
@@ -233,8 +241,7 @@ export const FeedScreen: React.FC = () => {
     try {
       const FEED_COLUMNS = 'id, headline, article_content, png_url, mp4_url, image_url, image_urls, likes_count, views_count, comments_count, created_at, district, state, user_id, status, is_posted, custom_layout';
 
-      // 24-hour feed lifespan: clippings older than 24 hours disappear from the feed
-      const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+      const cutoff24hIso = new Date(Date.now() - TWENTY_FOUR_HOURS_MS).toISOString();
 
       const client = publicClient || supabase;
       let query = client
@@ -242,7 +249,7 @@ export const FeedScreen: React.FC = () => {
         .select(FEED_COLUMNS)
         .eq('is_posted', true)
         .neq('status', 'rejected')
-        .gte('created_at', twentyFourHoursAgo)
+        .gte('created_at', cutoff24hIso)
         .order('created_at', { ascending: false })
         .limit(40);
 
@@ -266,16 +273,10 @@ export const FeedScreen: React.FC = () => {
       const { data, error } = await query;
       if (error) throw error;
 
-      const isWithin24Hours = (c: any) => {
-        if (!c?.created_at) return true;
-        const createdMs = new Date(c.created_at).getTime();
-        return !isNaN(createdMs) && (Date.now() - createdMs) <= 24 * 60 * 60 * 1000;
-      };
-
       const isApprovedFeedClip = (c: any) =>
         (c.is_posted === true || ['approved', 'auto_approved', 'published', 'completed'].includes(c.status)) &&
         c.status !== 'rejected' &&
-        isWithin24Hours(c);
+        isClippingWithin24Hours(c);
 
       let postedClippings = (data || []).filter(isApprovedFeedClip);
 
