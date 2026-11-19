@@ -42,7 +42,8 @@ export interface OTPResponse {
 export const OTP_API_URL = (
   import.meta.env.VITE_OTP_API_URL ||
   import.meta.env.VITE_AUTH_API_URL ||
-  'https://news-backend-sjw6.onrender.com'
+  import.meta.env.VITE_API_URL ||
+  'https://spotnewsv2-ew09.onrender.com'
 ).replace(/\/+$/, '');
 
 const otpApi = axios.create({
