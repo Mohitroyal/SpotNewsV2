@@ -101,6 +101,87 @@ export const LocalAdsAdminSection: React.FC<LocalAdsAdminSectionProps> = ({ isSu
   const [directSubmitting, setDirectSubmitting] = useState(false);
   const [directError, setDirectError] = useState('');
 
+  // Global Duration config state
+  const [globalDurationType, setGlobalDurationType] = useState<'auto' | 'manual'>('auto');
+  const [globalStartDate, setGlobalStartDate] = useState(() => new Date().toISOString().split('T')[0]);
+  const [globalEndDate, setGlobalEndDate] = useState(() => {
+    const d = new Date();
+    d.setDate(d.getDate() + 14);
+    return d.toISOString().split('T')[0];
+  });
+  const [globalDurationLoading, setGlobalDurationLoading] = useState(false);
+
+  // Edit individual ad schedule state
+  const [scheduleEditingAd, setScheduleEditingAd] = useState<LocalAd | null>(null);
+  const [schedDurationType, setSchedDurationType] = useState<'auto' | 'manual'>('auto');
+  const [schedStartDate, setSchedStartDate] = useState(() => new Date().toISOString().split('T')[0]);
+  const [schedEndDate, setSchedEndDate] = useState(() => {
+    const d = new Date();
+    d.setDate(d.getDate() + 14);
+    return d.toISOString().split('T')[0];
+  });
+  const [schedSubmitting, setSchedSubmitting] = useState(false);
+
+  useEffect(() => {
+    localAdsService.getAdDurationConfig().then((cfg) => {
+      setGlobalDurationType(cfg.durationType);
+      if (cfg.startDate) setGlobalStartDate(cfg.startDate);
+      if (cfg.endDate) setGlobalEndDate(cfg.endDate);
+    });
+  }, []);
+
+  const handleSaveGlobalDuration = async (type: 'auto' | 'manual', start?: string, end?: string) => {
+    setGlobalDurationType(type);
+    setGlobalDurationLoading(true);
+    try {
+      await localAdsService.setAdDurationConfig(
+        type,
+        start || globalStartDate,
+        end || globalEndDate
+      );
+    } finally {
+      setGlobalDurationLoading(false);
+    }
+  };
+
+  const openScheduleModal = (ad: LocalAd) => {
+    setScheduleEditingAd(ad);
+    setSchedDurationType(ad.duration_type || 'auto');
+    const start = ad.starts_at ? new Date(ad.starts_at).toISOString().split('T')[0] : new Date().toISOString().split('T')[0];
+    const end = ad.expires_at ? new Date(ad.expires_at).toISOString().split('T')[0] : (() => {
+      const d = new Date();
+      d.setDate(d.getDate() + 14);
+      return d.toISOString().split('T')[0];
+    })();
+    setSchedStartDate(start);
+    setSchedEndDate(end);
+  };
+
+  const handleSaveAdSchedule = async () => {
+    if (!scheduleEditingAd) return;
+    setSchedSubmitting(true);
+    let startIso: string | undefined = undefined;
+    let endIso: string | undefined = undefined;
+    if (schedDurationType === 'manual') {
+      if (new Date(schedEndDate).getTime() < new Date(schedStartDate).getTime()) {
+        alert('End date must be on or after start date.');
+        setSchedSubmitting(false);
+        return;
+      }
+      startIso = new Date(schedStartDate + 'T00:00:00').toISOString();
+      endIso = new Date(schedEndDate + 'T23:59:59.999').toISOString();
+    }
+    const res = await localAdsService.updateAdSchedule(scheduleEditingAd.id, schedDurationType, startIso, endIso);
+    setSchedSubmitting(false);
+    if (res.success) {
+      alert(`🎉 Updated schedule for "${scheduleEditingAd.title}"`);
+      setScheduleEditingAd(null);
+      loadAds();
+    } else {
+      alert(res.error || 'Failed to update ad schedule.');
+    }
+  };
+
   const loadAds = async () => {
     setLoading(true);
     const safetyTimer = setTimeout(() => setLoading(false), 3000);
@@ -330,6 +411,110 @@ export const LocalAdsAdminSection: React.FC<LocalAdsAdminSectionProps> = ({ isSu
               }`}
             />
           </button>
+        </div>
+      )}
+
+      {/* ⏰ Local Ads Duration / Schedule Setting (Superadmin) ⏰ */}
+      {isSuperAdmin && (
+        <div className="bg-[#F8FAFC] border border-[#CBD5E1] rounded-2xl p-4 space-y-3">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 border-b border-gray-200 pb-3">
+            <div className="flex items-center gap-2.5">
+              <div className="w-9 h-9 rounded-xl bg-[#015BB3] text-white flex items-center justify-center shrink-0 shadow-xs">
+                <Clock className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="text-sm font-extrabold text-[#0A2540] m-0 flex items-center gap-2">
+                  <span>Ad Duration Setting</span>
+                  <span className="text-[11px] font-semibold text-gray-500">· ప్రకటన కాలపరిమితి</span>
+                </h3>
+                <p className="text-[11px] text-gray-500 m-0">
+                  Set whether local ads run automatically for 2 weeks or choose custom dates from calendar.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-1.5 bg-white p-1 rounded-xl border border-gray-300 w-full sm:w-auto">
+              <button
+                type="button"
+                disabled={globalDurationLoading}
+                onClick={() => handleSaveGlobalDuration('auto')}
+                className={`flex-1 sm:flex-initial px-3.5 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                  globalDurationType === 'auto'
+                    ? 'bg-[#015BB3] text-white shadow-xs'
+                    : 'text-gray-600 hover:text-gray-900 bg-transparent'
+                } ${globalDurationLoading ? 'opacity-50' : ''}`}
+              >
+                ⚡ Automatic (2 Weeks)
+              </button>
+              <button
+                type="button"
+                disabled={globalDurationLoading}
+                onClick={() => handleSaveGlobalDuration('manual')}
+                className={`flex-1 sm:flex-initial px-3.5 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                  globalDurationType === 'manual'
+                    ? 'bg-[#015BB3] text-white shadow-xs'
+                    : 'text-gray-600 hover:text-gray-900 bg-transparent'
+                } ${globalDurationLoading ? 'opacity-50' : ''}`}
+              >
+                📅 Manual (Calendar)
+              </button>
+            </div>
+          </div>
+
+          {globalDurationType === 'auto' ? (
+            <div className="flex items-center justify-between text-xs text-emerald-800 bg-emerald-50 border border-emerald-200 rounded-xl px-3.5 py-2.5">
+              <div className="flex items-center gap-2">
+                <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                <span>
+                  <strong>Automatic 2 Weeks:</strong> Every new advertisement runs actively for exactly <strong>14 days (2 weeks)</strong> from date of activation.
+                </span>
+              </div>
+              <span className="text-[11px] font-bold bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-full shrink-0">
+                Active Default
+              </span>
+            </div>
+          ) : (
+            <div className="space-y-3 bg-white border border-gray-200 rounded-xl p-3.5">
+              <p className="text-xs font-bold text-gray-700 m-0 flex items-center gap-1.5">
+                <span>Choose Start Date and End Date from Calendar:</span>
+              </p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <label className="text-[11px] font-bold text-gray-600 block">
+                    ప్రారంభ తేదీ · Start Date
+                  </label>
+                  <input
+                    type="date"
+                    value={globalStartDate}
+                    min={new Date().toISOString().split('T')[0]}
+                    onChange={(e) => {
+                      setGlobalStartDate(e.target.value);
+                      handleSaveGlobalDuration('manual', e.target.value, globalEndDate);
+                    }}
+                    className="w-full px-3 py-2 rounded-lg border border-gray-300 text-xs text-gray-800 bg-white"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[11px] font-bold text-gray-600 block">
+                    ముగింపు తేదీ · End Date
+                  </label>
+                  <input
+                    type="date"
+                    value={globalEndDate}
+                    min={globalStartDate || new Date().toISOString().split('T')[0]}
+                    onChange={(e) => {
+                      setGlobalEndDate(e.target.value);
+                      handleSaveGlobalDuration('manual', globalStartDate, e.target.value);
+                    }}
+                    className="w-full px-3 py-2 rounded-lg border border-gray-300 text-xs text-gray-800 bg-white"
+                  />
+                </div>
+              </div>
+              <p className="text-[11.5px] text-gray-600 m-0">
+                Ads will run actively from <strong>{globalStartDate}</strong> to <strong>{globalEndDate}</strong>.
+              </p>
+            </div>
+          )}
         </div>
       )}
 
@@ -608,6 +793,15 @@ export const LocalAdsAdminSection: React.FC<LocalAdsAdminSectionProps> = ({ isSu
                       <span>Re-activate</span>
                     </button>
                   )}
+
+                  <button
+                    onClick={() => openScheduleModal(ad)}
+                    className="px-3 py-1.5 bg-blue-50 hover:bg-blue-100 text-[#015BB3] rounded-xl text-xs font-bold flex items-center gap-1.5 active:scale-95 transition-all cursor-pointer"
+                    title="Change ad duration / validity"
+                  >
+                    <Clock className="w-3.5 h-3.5" />
+                    <span>Set / Edit Time</span>
+                  </button>
                 </div>
 
                 <div className="flex items-center gap-2">
@@ -950,6 +1144,110 @@ export const LocalAdsAdminSection: React.FC<LocalAdsAdminSectionProps> = ({ isSu
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* ── Edit Individual Ad Schedule Modal ────────────────────────────── */}
+      {scheduleEditingAd && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl max-w-md w-full p-6 space-y-4 shadow-2xl animate-in zoom-in-95">
+            <div className="flex items-center justify-between border-b pb-3">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-xl bg-[#015BB3] text-white flex items-center justify-center">
+                  <Clock className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="font-extrabold text-sm text-[#0A2540] m-0">Set / Edit Ad Schedule</h3>
+                  <p className="text-[11px] text-gray-500 m-0 line-clamp-1">{scheduleEditingAd.title}</p>
+                </div>
+              </div>
+              <button onClick={() => setScheduleEditingAd(null)} className="p-1 text-gray-400 hover:text-gray-600">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="space-y-3">
+              <label className="text-xs font-bold text-gray-700 block">
+                Select Schedule Mode:
+              </label>
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => setSchedDurationType('auto')}
+                  className={`py-2.5 px-3 rounded-xl border text-xs font-bold cursor-pointer text-center ${
+                    schedDurationType === 'auto'
+                      ? 'border-[#015BB3] bg-blue-50 text-[#015BB3]'
+                      : 'border-gray-200 text-gray-600 bg-white'
+                  }`}
+                >
+                  ⚡ Automatic (2 Weeks)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSchedDurationType('manual')}
+                  className={`py-2.5 px-3 rounded-xl border text-xs font-bold cursor-pointer text-center ${
+                    schedDurationType === 'manual'
+                      ? 'border-[#015BB3] bg-blue-50 text-[#015BB3]'
+                      : 'border-gray-200 text-gray-600 bg-white'
+                  }`}
+                >
+                  📅 Manual (Calendar)
+                </button>
+              </div>
+
+              {schedDurationType === 'auto' ? (
+                <div className="text-xs text-emerald-800 bg-emerald-50 border border-emerald-200 rounded-xl p-3">
+                  Ad will run for <strong>2 weeks (14 days)</strong> from now.
+                </div>
+              ) : (
+                <div className="space-y-2.5 bg-gray-50 border border-gray-200 rounded-xl p-3">
+                  <div className="grid grid-cols-2 gap-2.5">
+                    <div className="space-y-1">
+                      <label className="text-[11px] font-bold text-gray-600 block">Start Date</label>
+                      <input
+                        type="date"
+                        value={schedStartDate}
+                        onChange={(e) => setSchedStartDate(e.target.value)}
+                        className="w-full px-2.5 py-1.5 rounded-lg border border-gray-300 text-xs bg-white"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-[11px] font-bold text-gray-600 block">End Date</label>
+                      <input
+                        type="date"
+                        value={schedEndDate}
+                        min={schedStartDate}
+                        onChange={(e) => setSchedEndDate(e.target.value)}
+                        className="w-full px-2.5 py-1.5 rounded-lg border border-gray-300 text-xs bg-white"
+                      />
+                    </div>
+                  </div>
+                  <p className="text-[11px] text-gray-500 m-0">
+                    Active from <strong>{schedStartDate}</strong> to <strong>{schedEndDate}</strong>.
+                  </p>
+                </div>
+              )}
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-3 border-t">
+              <button
+                type="button"
+                onClick={() => setScheduleEditingAd(null)}
+                className="px-4 py-2 rounded-xl text-gray-600 text-xs font-bold"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleSaveAdSchedule}
+                disabled={schedSubmitting}
+                className="px-4 py-2 bg-[#015BB3] text-white rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer"
+              >
+                {schedSubmitting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <CheckCircle2 className="w-3.5 h-3.5" />}
+                <span>Save Ad Schedule</span>
+              </button>
+            </div>
           </div>
         </div>
       )}

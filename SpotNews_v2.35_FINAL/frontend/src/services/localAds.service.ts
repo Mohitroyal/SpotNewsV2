@@ -851,6 +851,97 @@ export const localAdsService = {
   },
 
   /**
+   * Update an ad's schedule directly (by admin)
+   */
+  async updateAdSchedule(adId: string, durationType: 'auto' | 'manual', startsAt?: string, expiresAt?: string): Promise<{ success: boolean; error?: string }> {
+    try {
+      const client = publicClient || supabase;
+      const now = new Date();
+      const nowIso = now.toISOString();
+      let newStartsAt = startsAt || nowIso;
+      let newExpiresAt = expiresAt;
+
+      if (durationType === 'auto' || !newExpiresAt) {
+        newStartsAt = nowIso;
+        newExpiresAt = new Date(now.getTime() + 14 * 24 * 60 * 60 * 1000).toISOString();
+      }
+
+      const { error } = await client
+        .from('local_ads')
+        .update({
+          duration_type: durationType,
+          starts_at: newStartsAt,
+          expires_at: newExpiresAt,
+        })
+        .eq('id', adId);
+
+      if (error) throw error;
+      return { success: true };
+    } catch (e: any) {
+      console.error('[LocalAds] Error updating ad schedule:', e);
+      return { success: false, error: e.message || 'Failed to update ad schedule' };
+    }
+  },
+
+  /**
+   * Get global default ad duration config
+   */
+  async getAdDurationConfig(): Promise<{ durationType: 'auto' | 'manual'; startDate?: string; endDate?: string }> {
+    try {
+      const storedType = localStorage.getItem('spotnews_ad_duration_type') as 'auto' | 'manual' | null;
+      const storedStart = localStorage.getItem('spotnews_ad_default_start') || undefined;
+      const storedEnd = localStorage.getItem('spotnews_ad_default_end') || undefined;
+      if (storedType) {
+        return { durationType: storedType, startDate: storedStart, endDate: storedEnd };
+      }
+    } catch {}
+
+    try {
+      const { data } = await supabase
+        .from('app_config')
+        .select('config_key, config_value')
+        .in('config_key', ['ad_duration_type', 'ad_default_start', 'ad_default_end']);
+
+      if (data && data.length > 0) {
+        const typeRow = data.find((r) => r.config_key === 'ad_duration_type');
+        const startRow = data.find((r) => r.config_key === 'ad_default_start');
+        const endRow = data.find((r) => r.config_key === 'ad_default_end');
+        const type = (typeRow?.config_value === 'manual' ? 'manual' : 'auto') as 'auto' | 'manual';
+        return {
+          durationType: type,
+          startDate: startRow?.config_value,
+          endDate: endRow?.config_value,
+        };
+      }
+    } catch {}
+
+    return { durationType: 'auto' };
+  },
+
+  /**
+   * Set global default ad duration config
+   */
+  async setAdDurationConfig(durationType: 'auto' | 'manual', startDate?: string, endDate?: string): Promise<boolean> {
+    try {
+      localStorage.setItem('spotnews_ad_duration_type', durationType);
+      if (startDate) localStorage.setItem('spotnews_ad_default_start', startDate);
+      if (endDate) localStorage.setItem('spotnews_ad_default_end', endDate);
+    } catch {}
+
+    try {
+      await supabase.from('app_config').upsert([
+        { config_key: 'ad_duration_type', config_value: durationType },
+        ...(startDate ? [{ config_key: 'ad_default_start', config_value: startDate }] : []),
+        ...(endDate ? [{ config_key: 'ad_default_end', config_value: endDate }] : []),
+      ]);
+      return true;
+    } catch (err) {
+      console.warn('[LocalAds] Error saving duration config to app_config:', err);
+      return false;
+    }
+  },
+
+  /**
    * Increment view counter for a local advertisement
    */
   async incrementAdView(adId: string): Promise<number | null> {
