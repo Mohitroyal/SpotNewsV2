@@ -131,6 +131,37 @@ def _render_article_images(imgs: List[str], is_lead: bool = False, max_h: int = 
 
 HEADLINE_COLORS = ["#C8102E", "#111827", "#8B0000", "#111827", "#C8102E"]
 
+REPORTER_CARDS = [
+    """
+    <div class="reporter-card" style="border: 1.5px solid #C8102E; background: #FFF9F9; border-radius: 3px; padding: 4px 6px; text-align: center; margin-top: auto; margin-bottom: 2px; flex: 0 0 auto;">
+      <div style="font-size: 11px; font-weight: 900; color: #C8102E; letter-spacing: 0.5px;">★ వాంటెడ్ రిపోర్టర్స్ ★</div>
+      <div style="font-size: 9.5px; color: #333; line-height: 1.35; margin-top: 2px;">మీ ప్రాంతంలో RTI Express రిపోర్టర్‌గా పనిచేయుటకు సంప్రదించండి</div>
+      <div style="font-size: 11.5px; font-weight: 900; color: #000; margin-top: 2px;">ఫోన్: 7668886666</div>
+    </div>
+    """,
+    """
+    <div class="reporter-card" style="border: 1.5px solid #0284c7; background: #F0F9FF; border-radius: 3px; padding: 4px 6px; text-align: center; margin-top: auto; margin-bottom: 2px; flex: 0 0 auto;">
+      <div style="font-size: 11px; font-weight: 900; color: #0284c7; letter-spacing: 0.5px;">★ డిజిటల్ ఎడిషన్ • SPOT NEWS 24x7 ★</div>
+      <div style="font-size: 9.5px; color: #333; line-height: 1.35; margin-top: 2px;">తాజా వార్తలు, ఈ-పేపర్ పీడీఎఫ్ కోసం ప్లే స్టోర్ లో డౌన్‌లోడ్ చేసుకోండి</div>
+      <div style="font-size: 11px; font-weight: 900; color: #0369a1; margin-top: 2px;">ప్లే స్టోర్ లో లభ్యం</div>
+    </div>
+    """,
+    """
+    <div class="reporter-card" style="border: 1.5px solid #854d0e; background: #FEFCE8; border-radius: 3px; padding: 4px 6px; text-align: center; margin-top: auto; margin-bottom: 2px; flex: 0 0 auto;">
+      <div style="font-size: 11px; font-weight: 900; color: #854d0e; letter-spacing: 0.5px;">★ వాణిజ్య & ప్రకటనలకు ★</div>
+      <div style="font-size: 9.5px; color: #333; line-height: 1.35; margin-top: 2px;">మీ వ్యాపార ప్రకటనలు పత్రిక మరియు యాప్ లో ప్రచురించబడును</div>
+      <div style="font-size: 11.5px; font-weight: 900; color: #000; margin-top: 2px;">ఫోన్: 7668886666</div>
+    </div>
+    """,
+    """
+    <div class="reporter-card" style="border: 1.5px solid #047857; background: #F0FDF4; border-radius: 3px; padding: 4px 6px; text-align: center; margin-top: auto; margin-bottom: 2px; flex: 0 0 auto;">
+      <div style="font-size: 11px; font-weight: 900; color: #047857; letter-spacing: 0.5px;">★ విలేకరులు కావలెను ★</div>
+      <div style="font-size: 9.5px; color: #333; line-height: 1.35; margin-top: 2px;">ఆంధ్రప్రదేశ్ & తెలంగాణ వ్యాప్తంగా మండల, నియోజకవర్గ విలేకరులు కావలెను</div>
+      <div style="font-size: 11.5px; font-weight: 900; color: #000; margin-top: 2px;">సంప్రదించండి: 7668886666</div>
+    </div>
+    """
+]
+
 
 def _font_css() -> str:
     return (
@@ -339,8 +370,7 @@ def build_newspaper_html(
                     s_byline_html = f'<div style="font-size: 10px; font-weight: bold; color: #6b7280; margin-bottom: 2px;">{s_loc}</div>' if s_loc else ""
                     s_img_html = _render_article_images(s_imgs, False, max_img_h)
 
-                    is_last_item = (item_idx == len(col_articles) - 1)
-                    item_border = "" if is_last_item else "border-bottom: 1.5px solid #222; padding-bottom: 6px; margin-bottom: 6px;"
+                    item_border = "border-bottom: 1.5px solid #222; padding-bottom: 6px; margin-bottom: 6px;"
 
                     items_html.append(f"""
                     <div class="news-item" style="{item_border} flex: 1 1 0; min-height: 0; display: flex; flex-direction: column; justify-content: flex-start;">
@@ -355,9 +385,12 @@ def build_newspaper_html(
                     </div>
                     """)
 
+                card_snippet = REPORTER_CARDS[col_idx % len(REPORTER_CARDS)]
+
                 cols_html.append(f"""
                 <div class="news-column" style="flex: 1 1 0; min-width: 0; padding: 0 6px; display: flex; flex-direction: column; justify-content: space-between; height: 100%; {border_style}">
                   {''.join(items_html)}
+                  {card_snippet}
                 </div>
                 """)
 
@@ -425,7 +458,7 @@ def build_newspaper_html(
                         """
 
                     is_last_item = (item_idx == len(col_articles) - 1)
-                    item_border = "" if is_last_item else "border-bottom: 1.5px solid #222; padding-bottom: 6px; margin-bottom: 6px;"
+                    item_border = "border-bottom: 1.5px solid #222; padding-bottom: 6px; margin-bottom: 6px;"
 
                     items_html.append(f"""
                     <div class="news-item" style="{item_border} flex: 1 1 0; min-height: 0; display: flex; flex-direction: column; justify-content: flex-start;">
@@ -438,10 +471,13 @@ def build_newspaper_html(
                     </div>
                     """)
 
+                card_snippet = REPORTER_CARDS[col_idx % len(REPORTER_CARDS)]
+
                 cols_html.append(f"""
                 <div class="news-column" style="flex: 1 1 0; min-width: 0; padding: 0 6px; display: flex; flex-direction: column; justify-content: space-between; height: 100%; {border_style}">
                   {col_top_header_html}
                   {''.join(items_html)}
+                  {card_snippet}
                 </div>
                 """)
 
