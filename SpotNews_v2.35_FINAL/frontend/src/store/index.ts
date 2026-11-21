@@ -403,7 +403,15 @@ export const useUIStore = create<UIStore>()(
         set((state) => ({ showInnerBorders: !(state.showInnerBorders ?? true) })),
       setLogoMode: (val) => set({ logoMode: val }),
       setSidebarOpen: (open) => set({ sidebarOpen: open }),
-      setLanguage: (lang) => set({ language: lang }),
+      setLanguage: (lang) => {
+        set({ language: lang });
+        try {
+          if (typeof window !== 'undefined' && window.localStorage) {
+            localStorage.setItem('spotnews_selected_lang', lang === 'te' ? 'te' : 'en');
+            window.dispatchEvent(new Event('spotnews-lang'));
+          }
+        } catch { /* ignore */ }
+      },
       pendingCropImageSrc: null,
       setPendingCropImageSrc: (src) => set({ pendingCropImageSrc: src }),
       setIsFullScreenFeed: (val) => set({ isFullScreenFeed: val }),

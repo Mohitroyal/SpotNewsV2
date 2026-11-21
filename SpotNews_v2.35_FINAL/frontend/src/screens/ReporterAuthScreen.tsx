@@ -10,6 +10,7 @@ import { generationService } from '@/services/generation.service';
 import { prepareImage } from '@/utils/prepareImage';
 import { useAuthStore, saveReporterName, saveReporterPhoto } from '@/store';
 import { supabase } from '@/lib/supabase';
+import { useLang } from '@/lib/lang';
 import { DISTRICTS } from '@/features/daily/dailyContentEngine';
 
 /**
@@ -24,6 +25,7 @@ type Step = 'phone' | 'otp' | 'photo' | 'docs';
 
 
 export const ReporterAuthScreen: React.FC = () => {
+  const [lang] = useLang();
   const navigate = useNavigate();
   const location = useLocation();
   const login = useAuthStore((s) => s.login);
@@ -241,19 +243,19 @@ export const ReporterAuthScreen: React.FC = () => {
           style={{ borderTopLeftRadius: 40, borderTopRightRadius: 40 }}>
           <button type="button" onClick={() => (onPhoneStep ? navigate(-1) : setStep(step === 'docs' ? 'photo' : 'phone'))}
             className="inline-flex items-center gap-2 rounded-full bg-[#EAF2FB] text-[#0B4EA2] text-[16px] font-bold px-4 py-2 border-0 shadow-sm cursor-pointer">
-            ← వెనుకకు (Back)
+            ← {lang === 'en' ? 'Back' : 'వెనుకకు (Back)'}
           </button>
           <div>
             <PortalSwitch active="reporters" />
             <h1 className="mt-3 mb-0 text-[30px] font-bold text-[#0A2A5C] leading-tight" style={{ fontFamily: "Georgia, 'Noto Serif Telugu', serif" }}>
-              {tabMode === 'login' ? 'Reporter Login' : 'రిపోర్టర్‌గా చేరండి'}
+              {tabMode === 'login' ? (lang === 'en' ? 'Reporter Login' : 'రిపోర్టర్ లాగిన్') : (lang === 'en' ? 'Join as a Reporter' : 'రిపోర్టర్‌గా చేరండి')}
             </h1>
-            <p className="m-0 text-[20px] font-extrabold text-[#0A2A5C]">{tabMode === 'login' ? 'వార్తా ప్రతినిధి లాగిన్' : 'Join as a Reporter'}</p>
+            <p className="m-0 text-[20px] font-extrabold text-[#0A2A5C]">{tabMode === 'login' ? (lang === 'en' ? 'వార్తా ప్రతినిధి లాగిన్' : 'Reporter Login') : (lang === 'en' ? 'రిపోర్టర్‌గా చేరండి' : 'Join as a Reporter')}</p>
             <div className="mt-2 h-[5px] w-16 rounded-full bg-[#E11D2E]" />
             {tabMode === 'login' && onPhoneStep && (
               <p className="mt-3 mb-0 text-[15px] text-[#334155] leading-relaxed">
-                వార్తలు పంపడానికి, ఫోటోలు అప్‌లోడ్ చేయడానికి మరియు మీ వార్తల స్థితి చూడటానికి లాగిన్ అవ్వండి.
-                <span className="block text-[13.5px] text-[#64748B] mt-0.5">Login to report news, upload photos and track your news.</span>
+                {lang === 'en' ? 'Login to report news, upload photos and track your news.' : 'వార్తలు పంపడానికి, ఫోటోలు అప్‌లోడ్ చేయడానికి మరియు మీ వార్తల స్థితి చూడటానికి లాగిన్ అవ్వండి.'}
+                <span className="block text-[13.5px] text-[#64748B] mt-0.5">{lang === 'en' ? 'వార్తలు పంపడానికి, ఫోటోలు అప్‌లోడ్ చేయడానికి లాగిన్ అవ్వండి.' : 'Login to report news, upload photos and track your news.'}</span>
               </p>
             )}
           </div>
@@ -263,12 +265,12 @@ export const ReporterAuthScreen: React.FC = () => {
               <button type="button" onClick={() => reset('login')}
                 className={`rounded-xl py-3 text-[17px] font-extrabold border-0 cursor-pointer ${tabMode === 'login' ? 'text-white shadow-md' : 'text-[#0A2A5C] bg-transparent'}`}
                 style={tabMode === 'login' ? { background: 'linear-gradient(180deg,#1565D8,#0B3F8F)' } : undefined}>
-                లాగిన్ · Login
+                {lang === 'en' ? 'Login · లాగిన్' : 'లాగిన్ · Login'}
               </button>
               <button type="button" onClick={() => reset('register')}
                 className={`rounded-xl py-3 text-[17px] font-extrabold border-0 cursor-pointer ${tabMode === 'register' ? 'text-white shadow-md' : 'text-[#0A2A5C] bg-transparent'}`}
                 style={tabMode === 'register' ? { background: 'linear-gradient(180deg,#1565D8,#0B3F8F)' } : undefined}>
-                రిపోర్టర్‌గా చేరండి
+                {lang === 'en' ? 'Join · చేరండి' : 'రిపోర్టర్‌గా చేరండి'}
               </button>
             </div>
           )}
@@ -310,7 +312,7 @@ export const ReporterAuthScreen: React.FC = () => {
                 <div className="flex items-center gap-3 rounded-2xl border-2 border-[#D6E4F5] bg-white px-4 py-3.5 shadow-sm">
                   <UserIcon className="w-6 h-6 text-[#0B4EA2] shrink-0" />
                   <input className="flex-1 min-w-0 text-[19px] font-semibold outline-none bg-transparent" value={name} disabled={step === 'otp'}
-                    onChange={(e) => setName(e.target.value)} placeholder="మీ పేరు · Your name" />
+                    onChange={(e) => setName(e.target.value)} placeholder={lang === 'en' ? "Your name" : "మీ పేరు · Your name"} />
                 </div>
               )}
 
@@ -320,7 +322,7 @@ export const ReporterAuthScreen: React.FC = () => {
                 <span className="w-px h-7 bg-[#CBD9EA]" />
                 <input className="flex-1 min-w-0 text-[19px] font-semibold outline-none bg-transparent" inputMode="numeric" maxLength={10}
                   value={phone} disabled={step === 'otp'}
-                  onChange={(e) => setPhone(e.target.value.replace(/\D/g, '').slice(0, 10))} placeholder="మొబైల్ నంబర్ · Mobile" />
+                  onChange={(e) => setPhone(e.target.value.replace(/\D/g, '').slice(0, 10))} placeholder={lang === 'en' ? "Mobile" : "మొబైల్ నంబర్ · Mobile"} />
               </div>
 
               <div className="flex items-center gap-3 rounded-2xl border-2 border-[#D6E4F5] bg-white pl-4 pr-2 py-2 shadow-sm">
@@ -331,12 +333,12 @@ export const ReporterAuthScreen: React.FC = () => {
                 <span className="w-px h-7 bg-[#CBD9EA]" />
                 <button type="button" onClick={sendOtp} disabled={busy || cooldown > 0}
                   className="px-3 py-2 text-[17px] font-extrabold text-[#0B4EA2] bg-transparent border-0 cursor-pointer disabled:opacity-50">
-                  {step === 'otp' ? (cooldown > 0 ? `${cooldown}s` : 'మళ్ళీ') : 'Get OTP'}
+                  {step === 'otp' ? (cooldown > 0 ? `${cooldown}s` : (lang === 'en' ? 'Resend' : 'మళ్ళీ')) : 'Get OTP'}
                 </button>
               </div>
               {step === 'otp' && (
                 <div className="flex justify-between text-[15.5px] font-bold -mt-1">
-                  <button className="text-[#0B4EA2] bg-transparent border-0 p-0 cursor-pointer" onClick={() => { setStep('phone'); setOtp(''); }}>నంబర్ మార్చండి</button>
+                  <button className="text-[#0B4EA2] bg-transparent border-0 p-0 cursor-pointer" onClick={() => { setStep('phone'); setOtp(''); }}>{lang === 'en' ? 'Change Number' : 'నంబర్ మార్చండి'}</button>
                   <button className="text-[#E11D2E] bg-transparent border-0 p-0 cursor-pointer disabled:opacity-50" disabled={cooldown > 0 || busy} onClick={sendOtp}>Resend OTP</button>
                 </div>
               )}
@@ -345,7 +347,7 @@ export const ReporterAuthScreen: React.FC = () => {
                 style={{ background: 'linear-gradient(180deg,#F0202F,#B30F1C)', fontFamily: "Georgia, 'Noto Serif Telugu', serif" }}
                 disabled={busy} onClick={step === 'phone' ? sendOtp : verifyOtp}>
                 {busy && <Loader2 className="w-6 h-6 animate-spin" />}
-                {step === 'phone' ? 'OTP పంపండి · Send OTP' : tabMode === 'register' ? 'ధృవీకరించండి · Verify' : 'లాగిన్ · Login'}
+                {step === 'phone' ? (lang === 'en' ? 'Send OTP · OTP పంపండి' : 'OTP పంపండి · Send OTP') : tabMode === 'register' ? (lang === 'en' ? 'Verify · ధృవీకరించండి' : 'ధృవీకరించండి · Verify') : (lang === 'en' ? 'Login · లాగిన్' : 'లాగిన్ · Login')}
               </button>
 
               <div className="flex items-center gap-3">
@@ -355,20 +357,20 @@ export const ReporterAuthScreen: React.FC = () => {
               </div>
               {tabMode === 'login' ? (
                 <p className="text-center text-[17px] text-[#334155] m-0">
-                  కొత్త రిపోర్టరా? <button className="text-[#0B4EA2] font-extrabold bg-transparent border-0 p-0 cursor-pointer" onClick={() => reset('register')}>నమోదు · Sign Up</button>
+                  {lang === 'en' ? 'New reporter? ' : 'కొత్త రిపోర్టరా? '} <button className="text-[#0B4EA2] font-extrabold bg-transparent border-0 p-0 cursor-pointer" onClick={() => reset('register')}>{lang === 'en' ? 'Sign Up · నమోదు' : 'నమోదు · Sign Up'}</button>
                 </p>
               ) : (
                 <p className="text-center text-[17px] text-[#334155] m-0">
-                  ఇప్పటికే నమోదయ్యారా? <button className="text-[#0B4EA2] font-extrabold bg-transparent border-0 p-0 cursor-pointer" onClick={() => reset('login')}>లాగిన్ · Login</button>
+                  {lang === 'en' ? 'Already registered? ' : 'ఇప్పటికే నమోదయ్యారా? '} <button className="text-[#0B4EA2] font-extrabold bg-transparent border-0 p-0 cursor-pointer" onClick={() => reset('login')}>{lang === 'en' ? 'Login · లాగిన్' : 'లాగిన్ · Login'}</button>
                 </p>
               )}
               {tabMode === 'login' && (
                 <button type="button" onClick={() => navigate('/login/email')}
                   className="w-full rounded-2xl py-3 text-[16px] font-extrabold text-[#0B4EA2] bg-white border-2 border-[#D6E4F5] cursor-pointer flex items-center justify-center gap-2">
-                  <Mail className="w-5 h-5" /> ఈమెయిల్ లాగిన్ (అడ్మిన్) · Email login
+                  <Mail className="w-5 h-5" /> {lang === 'en' ? 'Email login (Admin) · ఈమెయిల్ లాగిన్' : 'ఈమెయిల్ లాగిన్ (అడ్మిన్) · Email login'}
                 </button>
               )}
-              <p className="text-center text-[14.5px] text-[#64748B] m-0">వార్తలు చదవడానికి లాగిన్ అవసరం లేదు · Readers need no login</p>
+              <p className="text-center text-[14.5px] text-[#64748B] m-0">{lang === 'en' ? 'Readers need no login · వార్తలు చదవడానికి లాగిన్ అవసరం లేదు' : 'వార్తలు చదవడానికి లాగిన్ అవసరం లేదు · Readers need no login'}</p>
             </>
           )}
 

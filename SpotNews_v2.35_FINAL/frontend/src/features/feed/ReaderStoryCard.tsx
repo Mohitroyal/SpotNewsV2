@@ -1,5 +1,6 @@
 import React, { useRef, useState, useEffect } from 'react';
 import { Newspaper, Share2, MessageCircle, ThumbsUp, Megaphone, ChevronRight, FileImage, MapPin, Play, Volume2, VolumeX } from 'lucide-react';
+import { useLang } from '@/lib/lang';
 import { limitWordsForDisplay, MAX_HEADLINE_WORDS, MAX_ARTICLE_WORDS } from '@/utils/wordLimit';
 import { TwoImageGallery, getClipPhotos } from '@/components/TwoImageGallery';
 
@@ -190,18 +191,19 @@ export function clipPhoto(clip: any): string {
   return first || cl.imageUrl || cl.image_url || clip?.png_url || clip?.image_url || '';
 }
 
-function timeAgo(iso?: string) {
+function timeAgo(iso?: string, lang: 'te' | 'en' = 'te') {
   if (!iso) return '';
   const diff = Math.max(0, Date.now() - new Date(iso).getTime());
   const m = Math.floor(diff / 60000);
-  if (m < 1) return 'ఇప్పుడే';
-  if (m < 60) return `${m} నిమి. క్రితం`;
+  if (m < 1) return lang === 'en' ? 'Just now' : 'ఇప్పుడే';
+  if (m < 60) return lang === 'en' ? `${m}m ago` : `${m} నిమి. క్రితం`;
   const h = Math.floor(m / 60);
-  if (h < 24) return `${h} గం. క్రితం`;
-  return new Date(iso).toLocaleDateString('te-IN', { day: 'numeric', month: 'short' });
+  if (h < 24) return lang === 'en' ? `${h}h ago` : `${h} గం. క్రితం`;
+  return new Date(iso).toLocaleDateString(lang === 'en' ? 'en-IN' : 'te-IN', { day: 'numeric', month: 'short' });
 }
 
 export const ReaderStoryCard: React.FC<Props> = ({ clip, liked, onLike, onComment, onShare, onOpenClipping, sponsored, isActive = true }) => {
+  const [lang] = useLang();
   const cl = clip?.custom_layout || {};
   // Text view must ONLY bind to the original uploaded news video, NOT the composed clipping video
   const originalVideo = cl.video_url || cl.videoUrl || clip.video_url || clip.videoUrl || '';
@@ -273,7 +275,7 @@ export const ReaderStoryCard: React.FC<Props> = ({ clip, liked, onLike, onCommen
           }}
           className="absolute z-20 left-3 bottom-3 inline-flex items-center gap-1.5 bg-black/65 hover:bg-black/80 text-white text-[13px] font-bold px-3 py-1.5 rounded-full border-0 cursor-pointer shadow-sm transition"
         >
-          <FileImage className="w-4 h-4" /> క్లిప్పింగ్ చూడండి
+          <FileImage className="w-4 h-4" /> {lang === 'en' ? 'View Clipping' : 'క్లిప్పింగ్ చూడండి'}
         </button>
       </div>
 
@@ -301,7 +303,7 @@ export const ReaderStoryCard: React.FC<Props> = ({ clip, liked, onLike, onCommen
         <div className="mt-3 flex items-center gap-2 text-[14px] text-[#64748B] font-semibold">
           <span className="truncate">{reporter}</span>
           {place && (<><span>·</span><span className="inline-flex items-center gap-0.5"><MapPin className="w-3.5 h-3.5" />{place}</span></>)}
-          <span>·</span><span className="shrink-0">{timeAgo(clip.created_at)}</span>
+          <span>·</span><span className="shrink-0">{timeAgo(clip.created_at, lang)}</span>
         </div>
 
         {sponsored && (
@@ -309,7 +311,7 @@ export const ReaderStoryCard: React.FC<Props> = ({ clip, liked, onLike, onCommen
             className="mt-4 w-full flex items-center gap-3 rounded-2xl border border-[#F4D58D] bg-[#FFF9E8] px-3.5 py-3 cursor-pointer text-left">
             <span className="w-10 h-10 rounded-full bg-[#F59E0B] flex items-center justify-center shrink-0"><Megaphone className="w-5 h-5 text-white" /></span>
             <span className="flex-1 min-w-0">
-              <span className="block text-[12px] font-extrabold text-[#B45309] uppercase tracking-wide">ప్రకటన · Sponsored · {sponsored.label}</span>
+              <span className="block text-[12px] font-extrabold text-[#B45309] uppercase tracking-wide">{lang === 'en' ? `Sponsored · ${sponsored.label}` : `ప్రకటన · Sponsored · ${sponsored.label}`}</span>
               <span className="block text-[15.5px] font-bold text-[#3A2400] truncate">{sponsored.title}</span>
             </span>
             <ChevronRight className="w-5 h-5 text-[#B45309] shrink-0" />
@@ -326,7 +328,7 @@ export const ReaderStoryCard: React.FC<Props> = ({ clip, liked, onLike, onCommen
           <MessageCircle className="w-6 h-6" /> {clip.comments_count || 0}
         </button>
         <button type="button" onClick={onShare} className="py-3.5 flex items-center justify-center gap-2 text-[16px] font-extrabold text-white bg-[#015BB3] border-0 cursor-pointer">
-          <Share2 className="w-6 h-6" /> షేర్
+          <Share2 className="w-6 h-6" /> {lang === 'en' ? 'Share' : 'షేర్'}
         </button>
       </div>
     </div>

@@ -18,6 +18,7 @@ import { DailyPostCard } from '@/features/daily/DailyPostCard';
 import { useDailyPosts, useCategoryPosts } from '@/features/daily/useDailyPosts';
 import { CATEGORY_LABELS, findDistrict, type PostKind } from '@/features/daily/dailyContentEngine';
 import { ReaderStoryCard, type SponsoredTeaser } from '@/features/feed/ReaderStoryCard';
+import { useLang } from '@/lib/lang';
 import { DistrictPickerSheet } from '@/components/DistrictPickerSheet';
 import { expandId } from '@/features/share/shortId';
 
@@ -43,6 +44,7 @@ export const isClippingWithin24Hours = (c: any): boolean => {
 };
 
 export const FeedScreen: React.FC = () => {
+  const [lang] = useLang();
   const navigate = useNavigate();
   const loc = useLocation();
   const [searchParams] = useSearchParams();
@@ -436,7 +438,7 @@ export const FeedScreen: React.FC = () => {
     const isGuest = !accountName || accountName === 'Guest Reader';
     const userName = (isGuest ? commentName.trim() : accountName).slice(0, 60);
     if (!userName) {
-      setCommentError('మీ పేరు ఇవ్వండి / Please enter your name');
+      setCommentError(lang === 'en' ? 'Please enter your name' : 'మీ పేరు ఇవ్వండి / Please enter your name');
       setSubmitting(false);
       return;
     }
@@ -488,7 +490,7 @@ export const FeedScreen: React.FC = () => {
       setCommentText('');
     } catch (err: any) {
       console.error('Comment failed', err);
-      setCommentError('కామెంట్ పంపలేకపోయాం, మళ్ళీ ప్రయత్నించండి / Could not post the comment');
+      setCommentError(lang === 'en' ? 'Could not post the comment' : 'కామెంట్ పంపలేకపోయాం, మళ్ళీ ప్రయత్నించండి / Could not post the comment');
     } finally {
       setSubmitting(false);
     }
@@ -707,9 +709,9 @@ export const FeedScreen: React.FC = () => {
               <img src={locationMapPinIcon} alt="" className="w-8 h-8 rounded-lg object-cover shrink-0" />
               <span className="min-w-0">
                 <span className="block text-[17px] font-extrabold text-[#0F172A] truncate leading-tight">
-                  {district && district !== 'All' && district !== 'All districts' ? district : userState && userState !== 'All' ? userState : 'AP & తెలంగాణ'}
+                  {district && district !== 'All' && district !== 'All districts' ? district : userState && userState !== 'All' ? userState : (lang === 'en' ? 'AP & Telangana' : 'AP & తెలంగాణ')}
                 </span>
-                <span className="block text-[13px] text-[#64748B] font-semibold leading-tight">ప్రాంతం మార్చండి · Change</span>
+                <span className="block text-[13px] text-[#64748B] font-semibold leading-tight">{lang === 'en' ? 'Change Area' : 'ప్రాంతం మార్చండి · Change'}</span>
               </span>
               <ChevronDown className="w-5 h-5 text-[#64748B] shrink-0" />
             </button>
@@ -730,17 +732,17 @@ export const FeedScreen: React.FC = () => {
           <div className="flex gap-2 overflow-x-auto no-scrollbar -mx-0.5 px-0.5 pb-0.5">
             <button type="button" onClick={() => setCategory(null)}
               className={`shrink-0 rounded-full px-4 py-2 text-[15px] font-extrabold border cursor-pointer ${category === null ? 'bg-[#015BB3] text-white border-[#015BB3]' : 'bg-white text-[#0F487F] border-[#D0E2F7]'}`}>
-              📰 వార్తలు
+              {lang === 'en' ? '📰 News' : '📰 వార్తలు'}
             </button>
             {CATEGORY_LABELS.map((c) => (
               <button key={c.kind} type="button" onClick={() => setCategory(c.kind)}
                 className={`shrink-0 rounded-full px-4 py-2 text-[15px] font-extrabold border cursor-pointer ${category === c.kind ? 'bg-[#015BB3] text-white border-[#015BB3]' : 'bg-white text-[#0F487F] border-[#D0E2F7]'}`}>
-                {c.emoji} {c.te}
+                {c.emoji} {lang === 'en' ? c.en : c.te}
               </button>
             ))}
             <button type="button" onClick={() => navigate('/post-ad')}
               className="shrink-0 rounded-full px-4 py-2 text-[15px] font-extrabold border cursor-pointer bg-[#FFF4D6] text-[#9A5B00] border-[#F4D58D]">
-              📣 ప్రకటన ఇవ్వండి
+              {lang === 'en' ? '📣 Post Ad' : '📣 ప్రకటన ఇవ్వండి'}
             </button>
           </div>
         </div>
@@ -750,7 +752,7 @@ export const FeedScreen: React.FC = () => {
         {category !== null ? (
           <div className="h-full w-full overflow-y-auto snap-y snap-mandatory no-scrollbar relative bg-black">
             {categoryPosts.length === 0 ? (
-              <div className="p-12 text-center text-white/70 text-[16px] font-bold">లోడ్ అవుతోంది…</div>
+              <div className="p-12 text-center text-white/70 text-[16px] font-bold">{lang === 'en' ? 'Loading…' : 'లోడ్ అవుతోంది…'}</div>
             ) : categoryPosts.map((p, pIdx) => (
               <React.Fragment key={`cat-wrap-${p.kind}-${p.publish_at}-${pIdx}`}>
                 <DailyPostCard key={`cat-${p.kind}-${p.publish_at}`} post={p} />
@@ -760,12 +762,12 @@ export const FeedScreen: React.FC = () => {
         ) : loading && clippings.length === 0 ? (
           <div className="p-12 text-center">
             <div className="w-8 h-8 rounded-full border-2 border-[#145AB1] border-t-transparent animate-spin mx-auto mb-2" />
-            <p className="text-[15px] text-white/80 font-bold">వార్తలు లోడ్ అవుతున్నాయి…</p>
+            <p className="text-[15px] text-white/80 font-bold">{lang === 'en' ? 'Loading news…' : 'వార్తలు లోడ్ అవుతున్నాయి…'}</p>
           </div>
         ) : clippings.length === 0 ? (
           <div className="bg-[#E8F2FC] border border-[#D0E2F7] rounded-2xl p-8 text-center my-6 mx-4 flex flex-col items-center justify-center shadow-sm">
             <Newspaper className="w-10 h-10 text-[#0d4a8f] mb-3" />
-            <h3 className="text-[19px] font-bold text-[#0A2540] mb-2">ఈ జిల్లాలో ఇంకా వార్తలు లేవు</h3>
+            <h3 className="text-[19px] font-bold text-[#0A2540] mb-2">{lang === 'en' ? 'No news found in this district yet' : 'ఈ జిల్లాలో ఇంకా వార్తలు లేవు'}</h3>
             <button
               onClick={() => {
                 useAuthStore.getState().setDistrict('All');
@@ -774,7 +776,7 @@ export const FeedScreen: React.FC = () => {
               }}
               className="px-5 py-3 bg-[#015BB3] text-white text-[16px] font-bold rounded-xl shadow-md cursor-pointer border-0"
             >
-              అన్ని జిల్లాల వార్తలు చూడండి
+              {lang === 'en' ? 'View news from all districts' : 'అన్ని జిల్లాల వార్తలు చూడండి'}
             </button>
           </div>
         ) : (
@@ -958,7 +960,7 @@ export const FeedScreen: React.FC = () => {
                   type="text"
                   value={commentName}
                   onChange={(e) => setCommentName(e.target.value.slice(0, 60))}
-                  placeholder="మీ పేరు · Your name"
+                  placeholder={lang === 'en' ? "Your name" : "మీ పేరు · Your name"}
                   className="w-full bg-gray-50 border border-gray-200 rounded-full px-4 py-2.5 text-[16px] outline-none focus:border-[#015BB3]"
                 />
               )}
@@ -969,7 +971,7 @@ export const FeedScreen: React.FC = () => {
                   value={commentText}
                   onChange={(e) => setCommentText(e.target.value.slice(0, 500))}
                   onKeyDown={(e) => e.key === 'Enter' && submitComment()}
-                  placeholder="మీ అభిప్రాయం రాయండి · Write a comment"
+                  placeholder={lang === 'en' ? "Write a comment..." : "మీ అభిప్రాయం రాయండి · Write a comment"}
                   className="flex-1 bg-gray-50 border border-gray-200 rounded-full px-4 py-2.5 text-[16px] outline-none focus:border-[#015BB3]"
                 />
                 <button

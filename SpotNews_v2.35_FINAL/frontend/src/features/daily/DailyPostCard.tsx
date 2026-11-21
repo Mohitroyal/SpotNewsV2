@@ -9,6 +9,7 @@ import { FitBox } from '@/components/FitBox';
 import { SkyScene } from '@/features/moments/SkyScene';
 import { cultureOf } from '@/features/moments/districtCulture';
 import { TOPIC_LABEL, type Layout, type Topic } from '@/features/moments/momentsEngine';
+import { useLang } from '@/lib/lang';
 import {
   getLiveMood, hashStr, istMinute, moodOf, MOOD_LABEL, PHASE_LABEL, skyTheme, sunTimes, type Mood,
 } from '@/features/moments/sky';
@@ -25,6 +26,12 @@ const KIND_LABEL: Record<PostKind, string> = {
   youth: 'యువత', mindcare: 'మనసు', sleep: 'నిద్ర', deals: 'షాపింగ్', quote: 'ఆలోచన',
 };
 
+const KIND_LABEL_EN: Record<PostKind, string> = {
+  morning: 'Good Morning', weather: 'Weather', agri: 'Agriculture', diet: 'Diet & Nutrition', health: 'Health', exercise: 'Fitness',
+  sustainability: 'Environment', night: 'Good Night', affirmation: 'Positive Morning', career: 'Career', tech: 'Tech & AI',
+  youth: 'Youth & Focus', mindcare: 'Mind Care', sleep: 'Sleep', deals: 'Shopping & Deals', quote: 'Quote of the Day',
+};
+
 const COND_MOOD: Record<string, Mood> = {
   storm: 'storm', heavyRain: 'rain', rain: 'rain', heat: 'heat', hot: 'heat', cold: 'cold', fog: 'fog', humid: 'cloudy', pleasant: 'clear',
 };
@@ -37,6 +44,7 @@ function defaultLayout(post: DailyPost, seed: number): Layout {
 }
 
 export const DailyPostCard: React.FC<{ post: DailyPost }> = ({ post }) => {
+  const [lang] = useLang();
   const cardRef = useRef<HTMLDivElement>(null);
   const [sharing, setSharing] = useState(false);
   const [forExport, setForExport] = useState(false);
@@ -50,14 +58,16 @@ export const DailyPostCard: React.FC<{ post: DailyPost }> = ({ post }) => {
   const theme = skyTheme({ minute, rise: sun.rise, set: sun.set, mood, seed });
   const layout: Layout = (meta.layout as Layout) || defaultLayout(post, seed);
   const topic = meta.topic as Topic | undefined;
-  const label = topic ? TOPIC_LABEL[topic][0] : KIND_LABEL[post.kind];
+  const label = topic ? TOPIC_LABEL[topic][lang === 'en' ? 1 : 0] : (lang === 'en' ? (KIND_LABEL_EN[post.kind] || post.kind) : KIND_LABEL[post.kind]);
   const isQuote = !!meta.quote || post.kind === 'quote' || layout === 'poster';
   const quoteMarks = !!meta.quote || (post.kind === 'quote' && !topic);
   const verse = !!meta.verse;
   const links = (meta.links || []) as { label: string; url: string }[];
   const { dark, ink, sub, panel, accent } = theme;
   const h = Math.floor(minute / 60), m = String(minute % 60).padStart(2, '0');
-  const timeLabel = `${h >= 12 ? 'సా' : 'ఉ'}. ${h > 12 ? h - 12 : h}:${m}`;
+  const timeLabel = lang === 'en'
+    ? `${h >= 12 ? 'PM' : 'AM'} ${h > 12 ? h - 12 : (h === 0 ? 12 : h)}:${m}`
+    : `${h >= 12 ? 'సా' : 'ఉ'}. ${h > 12 ? h - 12 : h}:${m}`;
 
   const openLink = async (url: string) => {
     try { const { Browser } = await import('@capacitor/browser'); await Browser.open({ url }); }
@@ -86,13 +96,17 @@ export const DailyPostCard: React.FC<{ post: DailyPost }> = ({ post }) => {
   };
 
   // ── pieces ──
+  const isEn = lang === 'en';
+  const mainTitleText = (isEn && post.subtitle_en) ? post.subtitle_en : post.title_te;
+  const subTitleText = (isEn && post.subtitle_en) ? post.title_te : post.subtitle_en;
+
   const title = (
     <h2 className={`m-0 font-extrabold whitespace-pre-line ${verse ? 'text-[24px] leading-[1.6]' : isQuote ? 'text-[30px] leading-[1.42]' : 'text-[26px] leading-[1.3]'}`}
       style={{ color: ink, textShadow: dark ? '0 2px 12px rgba(0,0,0,0.35)' : 'none' }}>
-      {quoteMarks && !verse ? `“${post.title_te}”` : post.title_te}
+      {quoteMarks && !verse ? `“${mainTitleText}”` : mainTitleText}
     </h2>
   );
-  const subtitle = post.subtitle_en ? <p className="text-[14.5px] font-semibold mt-1.5 mb-0" style={{ color: sub }}>{post.subtitle_en}</p> : null;
+  const subtitle = subTitleText ? <p className="text-[14.5px] font-semibold mt-1.5 mb-0" style={{ color: sub }}>{subTitleText}</p> : null;
   const body = post.body_te ? (
     <p className={`mt-3 mb-0 whitespace-pre-line font-semibold ${isQuote ? 'text-[19px] leading-[1.6]' : 'text-[19px] leading-[1.6]'}`} style={{ color: ink }}>{post.body_te}</p>
   ) : null;
@@ -208,7 +222,7 @@ export const DailyPostCard: React.FC<{ post: DailyPost }> = ({ post }) => {
           </span>
         </div>
         <div className="px-4 pt-1 text-[12px] font-bold relative z-[2] shrink-0 truncate" style={{ color: sub }}>
-          📍 {info?.te || post.district} · {timeLabel} · {PHASE_LABEL[theme.phase][0]} · {MOOD_LABEL[theme.mood][0]}
+          📍 {lang === 'en' ? (info?.en || post.district) : (info?.te || post.district)} · {timeLabel} · {PHASE_LABEL[theme.phase][lang === 'en' ? 1 : 0]} · {MOOD_LABEL[theme.mood][lang === 'en' ? 1 : 0]}
         </div>
 
         <div className="flex-1 min-h-0 flex flex-col relative z-[2]">{main}</div>
@@ -219,7 +233,7 @@ export const DailyPostCard: React.FC<{ post: DailyPost }> = ({ post }) => {
             <img src={logoUrl} alt="" className="w-7 h-7 rounded-full bg-white object-contain shrink-0" />
             <span className="leading-tight min-w-0">
               <span className="block text-[12.5px] font-extrabold truncate" style={{ color: dark ? '#fff' : '#0A2540' }}>RTI Express Spot News 24x7</span>
-              <span className="block text-[10.5px] font-bold truncate" style={{ color: sub }}>RTI Desk తో మీ జిల్లా కోసం ప్రత్యేకం</span>
+              <span className="block text-[10.5px] font-bold truncate" style={{ color: sub }}>{lang === 'en' ? 'Special edition for your district by RTI Desk' : 'RTI Desk తో మీ జిల్లా కోసం ప్రత్యేకం'}</span>
             </span>
           </span>
           {forExport ? (
@@ -233,7 +247,7 @@ export const DailyPostCard: React.FC<{ post: DailyPost }> = ({ post }) => {
             <button type="button" onClick={share}
               className="flex items-center gap-1.5 px-4 py-2 rounded-full text-[14px] font-extrabold border-0 cursor-pointer active:scale-95 transition-transform shrink-0"
               style={{ background: dark ? '#FFD166' : '#0B56A6', color: dark ? '#1A1033' : '#fff' }}>
-              {sharing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Share2 className="w-4 h-4" />} షేర్
+              {sharing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Share2 className="w-4 h-4" />} {lang === 'en' ? 'Share' : 'షేర్'}
             </button>
           )}
         </div>

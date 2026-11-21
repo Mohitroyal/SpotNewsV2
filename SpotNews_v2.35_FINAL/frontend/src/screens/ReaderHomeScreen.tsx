@@ -217,7 +217,7 @@ export const ReaderHomeScreen: React.FC = () => {
                 <span className="text-[30px] shrink-0">{nowMoment.emoji}</span>
                 <span className="flex-1 min-w-0">
                   <span className="block text-[12px] font-extrabold" style={{ color: sky.sub }}>{lang === 'en' ? 'This hour' : 'ఈ గంట'} · {TOPIC_LABEL[(nowMoment.meta as any).topic as Topic][lang === 'en' ? 1 : 0]}</span>
-                  <span className="block text-[16.5px] font-extrabold leading-snug line-clamp-2">{nowMoment.title_te.split('\n')[0]}</span>
+                  <span className="block text-[16.5px] font-extrabold leading-snug line-clamp-2">{(lang === 'en' && (nowMoment as any).subtitle_en) ? (nowMoment as any).subtitle_en : nowMoment.title_te.split('\n')[0]}</span>
                 </span>
                 <ChevronRight className="w-6 h-6 shrink-0" />
               </button>
@@ -321,7 +321,7 @@ export const ReaderHomeScreen: React.FC = () => {
                     <span className="absolute inset-x-0 bottom-0 p-2.5" style={{ background: th.dark ? 'linear-gradient(180deg,transparent,rgba(5,8,30,.75))' : 'linear-gradient(180deg,transparent,rgba(255,255,255,.92))', color: th.ink }}>
                       <span className="block text-[22px] leading-none">{m.emoji}</span>
                       <span className="block text-[11.5px] font-extrabold mt-1" style={{ color: th.sub }}>{TOPIC_LABEL[(m.meta as any).topic as Topic][lang === 'en' ? 1 : 0]}</span>
-                      <span className="block text-[14px] font-extrabold leading-snug line-clamp-3">{m.title_te.split('\n')[0]}</span>
+                      <span className="block text-[14px] font-extrabold leading-snug line-clamp-3">{(lang === 'en' && (m as any).subtitle_en) ? (m as any).subtitle_en : m.title_te.split('\n')[0]}</span>
                     </span>
                   </button>
                 );
@@ -332,17 +332,20 @@ export const ReaderHomeScreen: React.FC = () => {
 
         {/* Category tiles */}
         <div className="grid grid-cols-3 gap-3">
-          {tiles.map(({ key, icon: Icon, color, bg, t, go, sub }) => (
-            <button key={key} type="button" onClick={go}
-              className="bg-white rounded-2xl border border-[#D9E5F2] shadow-sm py-3.5 px-1 flex flex-col items-center gap-1.5 cursor-pointer active:scale-95 transition-transform">
-              <span className="w-12 h-12 rounded-2xl flex items-center justify-center relative" style={{ background: bg }}>
-                <Icon className="w-7 h-7" style={{ color }} strokeWidth={2.2} />
-                {sub && <span className="absolute -top-1.5 -right-3 bg-[#0B4EA2] text-white text-[11px] font-extrabold rounded-full px-1.5 py-0.5">{sub}</span>}
-              </span>
-              <span className="text-[15px] font-extrabold text-[#0F172A] leading-tight text-center">{t[0]}</span>
-              <span className="text-[12px] font-semibold text-[#64748B] leading-tight text-center">{t[1]}</span>
-            </button>
-          ))}
+          {tiles.map(({ key, icon: Icon, color, bg, t, go, sub }) => {
+            const [mainT, subT] = pair(lang, t[0], t[1]);
+            return (
+              <button key={key} type="button" onClick={go}
+                className="bg-white rounded-2xl border border-[#D9E5F2] shadow-sm py-3.5 px-1 flex flex-col items-center gap-1.5 cursor-pointer active:scale-95 transition-transform">
+                <span className="w-12 h-12 rounded-2xl flex items-center justify-center relative" style={{ background: bg }}>
+                  <Icon className="w-7 h-7" style={{ color }} strokeWidth={2.2} />
+                  {sub && <span className="absolute -top-1.5 -right-3 bg-[#0B4EA2] text-white text-[11px] font-extrabold rounded-full px-1.5 py-0.5">{sub}</span>}
+                </span>
+                <span className="text-[15px] font-extrabold text-[#0F172A] leading-tight text-center">{mainT}</span>
+                <span className="text-[12px] font-semibold text-[#64748B] leading-tight text-center">{subT}</span>
+              </button>
+            );
+          })}
         </div>
 
         {/* Quick news */}

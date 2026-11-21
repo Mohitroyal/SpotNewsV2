@@ -1,16 +1,24 @@
 // Reader language (Telugu first or English first). Both are always shown; this only decides which is bigger.
 import { useEffect, useState } from 'react';
+import { useUIStore } from '@/store';
 
 export type Lang = 'te' | 'en';
 const KEY = 'spotnews_selected_lang';
 const EVT = 'spotnews-lang';
 
 export function getLang(): Lang {
-  try { return localStorage.getItem(KEY) === 'en' ? 'en' : 'te'; } catch { return 'te'; }
+  try {
+    const val = localStorage.getItem(KEY);
+    if (val === 'en' || val === 'te') return val;
+    const storeLang = useUIStore.getState().language;
+    if (storeLang === 'en' || storeLang === 'te') return storeLang;
+  } catch { /* ignore */ }
+  return 'te';
 }
 
 export function setLang(l: Lang) {
   try { localStorage.setItem(KEY, l); } catch { /* ignore */ }
+  try { useUIStore.getState().setLanguage(l); } catch { /* ignore */ }
   window.dispatchEvent(new Event(EVT));
 }
 

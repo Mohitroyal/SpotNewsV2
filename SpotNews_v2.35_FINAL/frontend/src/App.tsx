@@ -37,6 +37,7 @@ import { ReporterAuthScreen } from './screens/ReporterAuthScreen';
 import { ReporterStatusScreen } from './screens/ReporterStatusScreen';
 import { IdCardApplyScreen } from './screens/IdCardApplyScreen';
 import { useAuthStore, useUIStore, getReporterPhoto, getReporterName, isSuperAdminUser, isAdminUser } from './store';
+import { useLang, pair } from './lib/lang';
 import { supabase } from './lib/supabase';
 import { App as CapacitorApp } from '@capacitor/app';
 import { Browser } from '@capacitor/browser';
@@ -45,6 +46,7 @@ import { ErrorBoundary } from './ErrorBoundary';
 
 // Bottom navigation (same look for readers and reporters)
 const BottomNav = ({ path, search, reporter }: { path: string; search: string; reporter: boolean }) => {
+  const [lang] = useLang();
   const cat = new URLSearchParams(search).get('cat');
   const items = reporter
     ? [
@@ -64,25 +66,28 @@ const BottomNav = ({ path, search, reporter }: { path: string; search: string; r
   return (
     <nav className="fixed bottom-0 left-0 right-0 w-full pb-safe z-30 border-t border-[#E2EDF8] shadow-[0_-4px_14px_rgba(11,78,162,0.08)]" style={{ background: '#FFFFFF' }}>
       <div className="flex items-stretch justify-around h-[68px] max-w-md mx-auto px-1.5 gap-1">
-        {items.map(({ to, icon: Icon, te, en, on, raised }) => (
-          <Link key={to} to={to} className="flex-1 flex items-center justify-center no-underline active:scale-95 transition-transform" style={{ textDecoration: 'none' }}>
-            {raised ? (
-              <span className="flex flex-col items-center -mt-6">
-                <span className="w-[54px] h-[54px] rounded-full flex items-center justify-center shadow-lg border-[3px] border-white" style={{ background: 'linear-gradient(180deg,#F0202F,#B30F1C)' }}>
-                  <Icon className="w-7 h-7 text-white" strokeWidth={2.8} />
+        {items.map(({ to, icon: Icon, te, en, on, raised }) => {
+          const [primaryText, secondaryText] = pair(lang, te, en);
+          return (
+            <Link key={to} to={to} className="flex-1 flex items-center justify-center no-underline active:scale-95 transition-transform" style={{ textDecoration: 'none' }}>
+              {raised ? (
+                <span className="flex flex-col items-center -mt-6">
+                  <span className="w-[54px] h-[54px] rounded-full flex items-center justify-center shadow-lg border-[3px] border-white" style={{ background: 'linear-gradient(180deg,#F0202F,#B30F1C)' }}>
+                    <Icon className="w-7 h-7 text-white" strokeWidth={2.8} />
+                  </span>
+                  <span className="text-[12.5px] font-extrabold mt-0.5 text-[#E11D2E]">{lang === 'en' ? en : te}</span>
                 </span>
-                <span className="text-[12.5px] font-extrabold mt-0.5 text-[#E11D2E]">{te}</span>
-              </span>
-            ) : (
-              <span className={`flex flex-col items-center justify-center rounded-2xl px-2.5 py-1 w-full max-w-[76px] ${on ? 'text-white' : 'text-[#0B3E8A]'}`}
-                style={on ? { background: 'linear-gradient(180deg,#F0202F,#B30F1C)', boxShadow: '0 4px 10px rgba(225,29,46,0.28)' } : undefined}>
-                <Icon className="w-6 h-6" strokeWidth={2.3} />
-                <span className="text-[12.5px] font-extrabold leading-tight mt-0.5">{te}</span>
-                <span className={`text-[10px] font-semibold leading-tight ${on ? 'text-white/85' : 'text-[#64748B]'}`}>{en}</span>
-              </span>
-            )}
-          </Link>
-        ))}
+              ) : (
+                <span className={`flex flex-col items-center justify-center rounded-2xl px-2.5 py-1 w-full max-w-[76px] ${on ? 'text-white' : 'text-[#0B3E8A]'}`}
+                  style={on ? { background: 'linear-gradient(180deg,#F0202F,#B30F1C)', boxShadow: '0 4px 10px rgba(225,29,46,0.28)' } : undefined}>
+                  <Icon className="w-6 h-6" strokeWidth={2.3} />
+                  <span className="text-[12.5px] font-extrabold leading-tight mt-0.5">{primaryText}</span>
+                  <span className={`text-[10px] font-semibold leading-tight ${on ? 'text-white/85' : 'text-[#64748B]'}`}>{secondaryText}</span>
+                </span>
+              )}
+            </Link>
+          );
+        })}
       </div>
     </nav>
   );
@@ -90,6 +95,7 @@ const BottomNav = ({ path, search, reporter }: { path: string; search: string; r
 
 // Mobile Layout with Bottom Navigation
 const MainLayout = ({ children }: { children: React.ReactNode }) => {
+  const [lang] = useLang();
   // const { t } = useTranslation();
   const { user } = useAuthStore();
   const isSuperAdmin = isSuperAdminUser(user);
@@ -161,7 +167,7 @@ const MainLayout = ({ children }: { children: React.ReactNode }) => {
                 <div className="text-white font-black text-[18px] tracking-[0.12em] uppercase">RTI EXPRESS</div>
                 <div className="text-white/90 font-extrabold text-[13px] tracking-[0.08em] uppercase">SPOT NEWS 24X7</div>
               </div>
-              <a href="tel:7668886666" className="rounded-2xl bg-[#E50914] text-white px-3 py-1 no-underline shrink-0 text-center leading-tight" style={{ textDecoration: 'none' }}><span className="block text-[12.5px] font-extrabold">రిపోర్టర్లు కావాలి</span><span className="block text-[13px] font-black">📞 7668886666</span></a>
+              <a href="tel:7668886666" className="rounded-2xl bg-[#E50914] text-white px-3 py-1 no-underline shrink-0 text-center leading-tight" style={{ textDecoration: 'none' }}><span className="block text-[12.5px] font-extrabold">{lang === 'en' ? 'Reporters Wanted' : 'రిపోర్టర్లు కావాలి'}</span><span className="block text-[13px] font-black">📞 7668886666</span></a>
             </div>
             <DoubleWave fill="#F4F8FC" height={40} />
           </header>
