@@ -44,6 +44,13 @@ export const ReporterAdRequestsScreen: React.FC = () => {
   const [targetDistrict, setTargetDistrict] = useState(() => districtOption(myDistrict));
   const [ctaType, setCtaType] = useState<LocalAdCtaType>('call');
   const [ctaValue, setCtaValue] = useState('');
+  const [durationType, setDurationType] = useState<'auto' | 'manual'>('auto');
+  const [startDate, setStartDate] = useState(() => new Date().toISOString().split('T')[0]);
+  const [endDate, setEndDate] = useState(() => {
+    const d = new Date();
+    d.setDate(d.getDate() + 14);
+    return d.toISOString().split('T')[0];
+  });
   const [submitting, setSubmitting] = useState(false);
   const [submittingStep, setSubmittingStep] = useState('');
   const [formError, setFormError] = useState('');
@@ -105,6 +112,21 @@ export const ReporterAdRequestsScreen: React.FC = () => {
       return;
     }
 
+    let startsAtIso: string | undefined = undefined;
+    let expiresAtIso: string | undefined = undefined;
+    if (durationType === 'manual') {
+      if (!startDate || !endDate) {
+        setFormError('దయచేసి ప్రారంభ మరియు ముగింపు తేదీలను ఎంచుకోండి. / Please select start and end dates.');
+        return;
+      }
+      if (new Date(endDate).getTime() < new Date(startDate).getTime()) {
+        setFormError('ముగింపు తేదీ ప్రారంభ తేదీ కంటే తర్వాతి తేదీ అయి ఉండాలి. / End date must be on or after start date.');
+        return;
+      }
+      startsAtIso = new Date(startDate + 'T00:00:00').toISOString();
+      expiresAtIso = new Date(endDate + 'T23:59:59.999').toISOString();
+    }
+
     setSubmitting(true);
     setSubmittingStep('ప్రారంభమవుతోంది… · Starting…');
     setFormError('');
@@ -132,6 +154,9 @@ export const ReporterAdRequestsScreen: React.FC = () => {
           target_state: findDistrict(targetDistrict.split(' / ')[0])?.state || 'All',
           cta_type: ctaType,
           cta_value: ctaValue.trim(),
+          duration_type: durationType,
+          starts_at: startsAtIso,
+          expires_at: expiresAtIso,
         },
         (step) => setSubmittingStep(step)
       );
@@ -165,6 +190,11 @@ export const ReporterAdRequestsScreen: React.FC = () => {
     setPreviewUrl('');
     setTargetDistrict(districtOption(myDistrict));
     setCtaValue('');
+    setDurationType('auto');
+    setStartDate(new Date().toISOString().split('T')[0]);
+    const d = new Date();
+    d.setDate(d.getDate() + 14);
+    setEndDate(d.toISOString().split('T')[0]);
     setFormError('');
     setSubmittingStep('');
   };
@@ -516,14 +546,40 @@ export const ReporterAdRequestsScreen: React.FC = () => {
                     </div>
                   )}
 
-                  {isActive && (
-                    <div className="bg-blue-50/70 border border-blue-200/80 rounded-xl px-3 py-2 text-[14px] text-blue-800 flex items-center justify-between">
-                      <span className="font-semibold">Status: Actively rotating in the district feed</span>
-                      <span className="text-[13px] font-bold bg-blue-100 text-blue-800 px-2 py-0.5 rounded-full">
-                        Paid on {new Date(ad.paid_at || ad.created_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}
-                      </span>
-                    </div>
-                  )}
+                  {isActive && (() => {
+                    const nowTime = Date.now();
+                    const isExpired = ad.expires_at ? nowTime > new Date(ad.expires_at).getTime() : false;
+                    const expiryDateStr = ad.expires_at ? new Date(ad.expires_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : null;
+
+                    return (
+                      <div className={`rounded-xl px-3 py-2 text-[13.5px] flex items-center justify-between flex-wrap gap-2 ${
+                        isExpired
+                          ? 'bg-amber-50/90 border border-amber-300 text-amber-900'
+                          : 'bg-blue-50/70 border border-blue-200/80 text-blue-800'
+                      }`}>
+                        <div className="flex items-center gap-1.5">
+                          <Clock className="w-4 h-4 shrink-0" />
+                          <span className="font-semibold">
+                            {isExpired
+                              ? 'గడువు ముగిసింది · Ad Expired'
+                              : 'ఫీడ్‌లో చురుకుగా ఉంది · Rotating in live feed'}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          {expiryDateStr && (
+                            <span className={`text-[12px] font-bold px-2 py-0.5 rounded-full ${
+                              isExpired ? 'bg-amber-200 text-amber-900' : 'bg-blue-100 text-blue-800'
+                            }`}>
+                              {isExpired ? `Expired on ${expiryDateStr}` : `Valid till ${expiryDateStr}`}
+                            </span>
+                          )}
+                          <span className="text-[12px] font-semibold text-gray-500">
+                            {ad.duration_type === 'manual' ? '📅 Manual' : '⚡ 2 Weeks'}
+                          </span>
+                        </div>
+                      </div>
+                    );
+                  })()}
                 </div>
               );
             })}
@@ -622,6 +678,82 @@ export const ReporterAdRequestsScreen: React.FC = () => {
                 <textarea rows={2} value={description} onChange={(e) => setDescription(e.target.value)}
                   placeholder="ఉదా: ఈ వారం 50% తగ్గింపు · e.g. 50% off this week"
                   className="w-full px-4 py-3 rounded-2xl border-2 border-[#D9E5F2] focus:outline-none focus:border-[#0B4EA2] text-[16px]" />
+              </div>
+
+              {/* 6. Duration: Automatic 2 weeks vs Manual Calendar dates */}
+              <div className="space-y-2">
+                <label className="block text-[17px] font-extrabold text-[#0F172A]">
+                  6. ప్రకటన కాలపరిమితి <span className="text-[14px] font-semibold text-[#64748B]">· Ad Duration</span>
+                </label>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setDurationType('auto')}
+                    className={`py-3 px-2 rounded-2xl border-2 text-[15px] font-extrabold cursor-pointer text-center transition-all ${
+                      durationType === 'auto'
+                        ? 'border-[#0B4EA2] bg-[#EAF2FB] text-[#0B4EA2] shadow-xs'
+                        : 'border-[#E2E8F0] bg-white text-[#475569]'
+                    }`}
+                  >
+                    ⚡ ఆటోమేటిక్ (2 వారాలు)
+                    <span className="block text-[12px] font-medium text-gray-500 mt-0.5">Automatic (14 Days)</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setDurationType('manual')}
+                    className={`py-3 px-2 rounded-2xl border-2 text-[15px] font-extrabold cursor-pointer text-center transition-all ${
+                      durationType === 'manual'
+                        ? 'border-[#0B4EA2] bg-[#EAF2FB] text-[#0B4EA2] shadow-xs'
+                        : 'border-[#E2E8F0] bg-white text-[#475569]'
+                    }`}
+                  >
+                    📅 క్యాలెండర్ ఎంపిక
+                    <span className="block text-[12px] font-medium text-gray-500 mt-0.5">Manual (Calendar)</span>
+                  </button>
+                </div>
+
+                {durationType === 'manual' && (
+                  <div className="bg-[#F8FAFC] border border-[#CBD5E1] rounded-2xl p-3.5 space-y-3 mt-2 animate-in fade-in duration-200">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div className="space-y-1">
+                        <label className="block text-[13px] font-bold text-[#334155]">
+                          ప్రారంభ తేదీ · Start Date
+                        </label>
+                        <input
+                          type="date"
+                          value={startDate}
+                          min={new Date().toISOString().split('T')[0]}
+                          onChange={(e) => {
+                            setStartDate(e.target.value);
+                            if (new Date(e.target.value) > new Date(endDate)) {
+                              const nextD = new Date(e.target.value);
+                              nextD.setDate(nextD.getDate() + 14);
+                              setEndDate(nextD.toISOString().split('T')[0]);
+                            }
+                          }}
+                          required={durationType === 'manual'}
+                          className="w-full px-3.5 py-2.5 rounded-xl border-2 border-[#CBD5E1] bg-white text-gray-800 text-[15px] focus:outline-none focus:border-[#0B4EA2]"
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <label className="block text-[13px] font-bold text-[#334155]">
+                          ముగింపు తేదీ · End Date
+                        </label>
+                        <input
+                          type="date"
+                          value={endDate}
+                          min={startDate || new Date().toISOString().split('T')[0]}
+                          onChange={(e) => setEndDate(e.target.value)}
+                          required={durationType === 'manual'}
+                          className="w-full px-3.5 py-2.5 rounded-xl border-2 border-[#CBD5E1] bg-white text-gray-800 text-[15px] focus:outline-none focus:border-[#0B4EA2]"
+                        />
+                      </div>
+                    </div>
+                    <p className="text-[12px] text-gray-500 m-0">
+                      ఈ ప్రకటన <strong>{startDate}</strong> నుండి <strong>{endDate}</strong> వరకు లైవ్‌లో కనిపిస్తుంది.
+                    </p>
+                  </div>
+                )}
               </div>
 
               {formError && (

@@ -91,6 +91,13 @@ export const LocalAdsAdminSection: React.FC<LocalAdsAdminSectionProps> = ({ isSu
   const [directDistrict, setDirectDistrict] = useState(TELANGANA_DISTRICTS[0]);
   const [directCtaType, setDirectCtaType] = useState<LocalAdCtaType>('call');
   const [directCtaValue, setDirectCtaValue] = useState('');
+  const [directDurationType, setDirectDurationType] = useState<'auto' | 'manual'>('auto');
+  const [directStartDate, setDirectStartDate] = useState(() => new Date().toISOString().split('T')[0]);
+  const [directEndDate, setDirectEndDate] = useState(() => {
+    const d = new Date();
+    d.setDate(d.getDate() + 14);
+    return d.toISOString().split('T')[0];
+  });
   const [directSubmitting, setDirectSubmitting] = useState(false);
   const [directError, setDirectError] = useState('');
 
@@ -173,6 +180,21 @@ export const LocalAdsAdminSection: React.FC<LocalAdsAdminSectionProps> = ({ isSu
       return;
     }
 
+    let startsAtIso: string | undefined = undefined;
+    let expiresAtIso: string | undefined = undefined;
+    if (directDurationType === 'manual') {
+      if (!directStartDate || !directEndDate) {
+        setDirectError('Please select both start date and end date.');
+        return;
+      }
+      if (new Date(directEndDate).getTime() < new Date(directStartDate).getTime()) {
+        setDirectError('End date must be on or after start date.');
+        return;
+      }
+      startsAtIso = new Date(directStartDate + 'T00:00:00').toISOString();
+      expiresAtIso = new Date(directEndDate + 'T23:59:59.999').toISOString();
+    }
+
     setDirectSubmitting(true);
     setDirectError('');
 
@@ -185,6 +207,9 @@ export const LocalAdsAdminSection: React.FC<LocalAdsAdminSectionProps> = ({ isSu
       target_district: directDistrict.split(' / ')[0],
       cta_type: directCtaType,
       cta_value: directCtaValue.trim(),
+      duration_type: directDurationType,
+      starts_at: startsAtIso,
+      expires_at: expiresAtIso,
     });
 
     setDirectSubmitting(false);
@@ -196,6 +221,11 @@ export const LocalAdsAdminSection: React.FC<LocalAdsAdminSectionProps> = ({ isSu
       setDirectFile(null);
       setDirectPreview('');
       setDirectCtaValue('');
+      setDirectDurationType('auto');
+      setDirectStartDate(new Date().toISOString().split('T')[0]);
+      const d = new Date();
+      d.setDate(d.getDate() + 14);
+      setDirectEndDate(d.toISOString().split('T')[0]);
       loadAds();
     } else {
       setDirectError(res.error || 'Failed to create direct ad.');
@@ -447,6 +477,20 @@ export const LocalAdsAdminSection: React.FC<LocalAdsAdminSectionProps> = ({ isSu
                       </span>
                       <span>•</span>
                       <span>Submitted: {new Date(ad.created_at).toLocaleDateString('en-IN')}</span>
+                      {ad.expires_at && (() => {
+                        const isExpired = Date.now() > new Date(ad.expires_at).getTime();
+                        return (
+                          <>
+                            <span>•</span>
+                            <span className={`inline-flex items-center gap-1 font-bold text-[10px] px-2 py-0.5 rounded-full ${
+                              isExpired ? 'bg-red-100 text-red-700' : 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                            }`}>
+                              <Clock className="w-3 h-3" />
+                              <span>{isExpired ? 'Expired' : 'Valid till'}: {new Date(ad.expires_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}</span>
+                            </span>
+                          </>
+                        );
+                      })()}
                       <span>•</span>
                       <span className="inline-flex items-center gap-1 font-bold text-gray-700 bg-gray-100 px-2 py-0.5 rounded-full" title="Total Views">
                         <Eye className="w-3.5 h-3.5 text-[#015BB3]" />
@@ -475,12 +519,19 @@ export const LocalAdsAdminSection: React.FC<LocalAdsAdminSectionProps> = ({ isSu
                       )}
                     </div>
                   )}
-                  {ad.status === 'active' && (
-                    <span className="text-[11px] font-bold text-blue-800 bg-blue-50 border border-blue-200 px-2.5 py-1 rounded-full flex items-center gap-1">
-                      <span className="w-1.5 h-1.5 rounded-full bg-blue-600 animate-pulse" />
-                      Active (Live)
-                    </span>
-                  )}
+                  {ad.status === 'active' && (() => {
+                    const isExpired = ad.expires_at ? Date.now() > new Date(ad.expires_at).getTime() : false;
+                    return isExpired ? (
+                      <span className="text-[11px] font-bold text-amber-900 bg-amber-100 border border-amber-300 px-2.5 py-1 rounded-full flex items-center gap-1">
+                        Expired (14 Days Complete)
+                      </span>
+                    ) : (
+                      <span className="text-[11px] font-bold text-blue-800 bg-blue-50 border border-blue-200 px-2.5 py-1 rounded-full flex items-center gap-1">
+                        <span className="w-1.5 h-1.5 rounded-full bg-blue-600 animate-pulse" />
+                        Active (Live)
+                      </span>
+                    );
+                  })()}
                   {ad.status === 'rejected' && (
                     <span className="text-[11px] font-bold text-red-800 bg-red-50 border border-red-200 px-2.5 py-1 rounded-full">
                       Rejected
@@ -809,6 +860,76 @@ export const LocalAdsAdminSection: React.FC<LocalAdsAdminSectionProps> = ({ isSu
                     required
                   />
                 </div>
+              </div>
+
+              {/* Duration Setting (Auto 2 Weeks vs Manual Calendar) */}
+              <div className="space-y-2 pt-1 border-t border-gray-100">
+                <label className="font-bold text-gray-700 text-xs block">
+                  Ad Duration / కాలపరిమితి
+                </label>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setDirectDurationType('auto')}
+                    className={`py-2 px-3 rounded-xl border text-xs font-bold cursor-pointer text-center ${
+                      directDurationType === 'auto'
+                        ? 'border-[#015BB3] bg-blue-50 text-[#015BB3]'
+                        : 'border-gray-200 text-gray-600 bg-white'
+                    }`}
+                  >
+                    ⚡ Automatic (2 Weeks)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setDirectDurationType('manual')}
+                    className={`py-2 px-3 rounded-xl border text-xs font-bold cursor-pointer text-center ${
+                      directDurationType === 'manual'
+                        ? 'border-[#015BB3] bg-blue-50 text-[#015BB3]'
+                        : 'border-gray-200 text-gray-600 bg-white'
+                    }`}
+                  >
+                    📅 Custom Calendar
+                  </button>
+                </div>
+
+                {directDurationType === 'manual' && (
+                  <div className="bg-gray-50 border border-gray-200 rounded-xl p-3 space-y-2.5 mt-2">
+                    <div className="grid grid-cols-2 gap-2.5">
+                      <div className="space-y-1">
+                        <label className="block text-[11px] font-bold text-gray-600">Start Date</label>
+                        <input
+                          type="date"
+                          value={directStartDate}
+                          min={new Date().toISOString().split('T')[0]}
+                          onChange={(e) => {
+                            setDirectStartDate(e.target.value);
+                            if (new Date(e.target.value) > new Date(directEndDate)) {
+                              const nextD = new Date(e.target.value);
+                              nextD.setDate(nextD.getDate() + 14);
+                              setDirectEndDate(nextD.toISOString().split('T')[0]);
+                            }
+                          }}
+                          required={directDurationType === 'manual'}
+                          className="w-full px-2.5 py-1.5 rounded-lg border border-gray-300 text-xs bg-white"
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <label className="block text-[11px] font-bold text-gray-600">End Date</label>
+                        <input
+                          type="date"
+                          value={directEndDate}
+                          min={directStartDate || new Date().toISOString().split('T')[0]}
+                          onChange={(e) => setDirectEndDate(e.target.value)}
+                          required={directDurationType === 'manual'}
+                          className="w-full px-2.5 py-1.5 rounded-lg border border-gray-300 text-xs bg-white"
+                        />
+                      </div>
+                    </div>
+                    <p className="text-[11px] text-gray-500 m-0">
+                      Ad will run actively from <strong>{directStartDate}</strong> until <strong>{directEndDate}</strong>.
+                    </p>
+                  </div>
+                )}
               </div>
 
               <div className="pt-3 border-t border-gray-200 flex items-center justify-end gap-2.5">

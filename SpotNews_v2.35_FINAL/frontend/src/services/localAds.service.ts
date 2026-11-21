@@ -245,6 +245,7 @@ export const localAdsService = {
   /**
    * Fetch all active local ads for in-feed rotation.
    * If district is provided, prioritizes or matches ads for that district or 'All'.
+   * Filters out ads that have expired or haven't reached their scheduled start date.
    */
   async fetchActiveLocalAds(district?: string): Promise<LocalAd[]> {
     try {
@@ -260,7 +261,7 @@ export const localAdsService = {
         query = query.or(`target_district.eq."${cleanDist}",target_district.eq.All,target_district.is.null`);
       }
 
-      const { data, error } = await query;
+      let { data, error } = await query;
       if (error || !data || data.length === 0) {
         // Fallback: fetch all active ads so ads always show in feed
         const fallback = await client
@@ -269,12 +270,32 @@ export const localAdsService = {
           .eq('status', 'active')
           .order('created_at', { ascending: false });
         if (fallback.data && fallback.data.length > 0) {
-          console.log(`[LocalAds] Loaded ${fallback.data.length} active ads (all active fallback)`);
-          return fallback.data as LocalAd[];
+          data = fallback.data;
         }
       }
-      console.log(`[LocalAds] Loaded ${data?.length || 0} active ads`);
-      return (data || []) as LocalAd[];
+
+      const nowTime = Date.now();
+      const activeAds = ((data || []) as LocalAd[]).filter((ad) => {
+        if (ad.status !== 'active') return false;
+        // Schedule start check
+        if (ad.starts_at) {
+          const startTime = new Date(ad.starts_at).getTime();
+          if (!isNaN(startTime) && nowTime < startTime) return false;
+        }
+        // Expiry check: if expires_at is set, verify now <= expires_at
+        if (ad.expires_at) {
+          const expiryTime = new Date(ad.expires_at).getTime();
+          if (!isNaN(expiryTime) && nowTime > expiryTime) return false;
+        } else {
+          // Default automatic duration for legacy ads: 2 weeks (14 days)
+          const baseTime = new Date(ad.paid_at || ad.created_at).getTime();
+          if (!isNaN(baseTime) && nowTime - baseTime > 14 * 24 * 60 * 60 * 1000) return false;
+        }
+        return true;
+      });
+
+      console.log(`[LocalAds] Loaded ${activeAds.length} active valid ads (out of ${data?.length || 0})`);
+      return activeAds;
     } catch (e) {
       console.error('[LocalAds] Unexpected error fetching active ads:', e);
       return [];
@@ -370,7 +391,21 @@ export const localAdsService = {
 
       // Check if auto-approve ads is enabled in Superadmin config
       const isAutoApprove = await localAdsService.getAutoApproveAdsConfig();
-      const nowIso = new Date().toISOString();
+      const now = new Date();
+      const nowIso = now.toISOString();
+
+      // Duration: Automatic is 2 weeks (14 days); Manual uses user-chosen start/end dates
+      const durationType = payload.duration_type || 'auto';
+      let startsAt = payload.starts_at || nowIso;
+      let expiresAt = payload.expires_at;
+
+      if (durationType === 'manual' && payload.expires_at) {
+        expiresAt = payload.expires_at;
+        startsAt = payload.starts_at || nowIso;
+      } else {
+        startsAt = nowIso;
+        expiresAt = new Date(now.getTime() + 14 * 24 * 60 * 60 * 1000).toISOString();
+      }
 
       const insertData = {
         reporter_id: validReporterId,
@@ -390,6 +425,9 @@ export const localAdsService = {
         approval_type: isAutoApprove ? 'auto' : 'manual',
         approved_at: isAutoApprove ? nowIso : null,
         paid_at: isAutoApprove ? nowIso : null,
+        duration_type: durationType,
+        starts_at: startsAt,
+        expires_at: expiresAt,
       };
 
       const insertPromise = publicClient
@@ -418,11 +456,26 @@ export const localAdsService = {
   /**
    * Publish an ad directly to the live feed (for Superadmin or Reporter).
    * Sets status to 'active', updates approval timestamp, and marks as live.
+   * Ensures start and expiration dates are set (default 2 weeks if not set).
    */
   async publishAdToFeed(adId: string): Promise<{ success: boolean; error?: string }> {
     try {
       const client = publicClient || supabase;
-      const nowIso = new Date().toISOString();
+      const now = new Date();
+      const nowIso = now.toISOString();
+      const defaultExpiryIso = new Date(now.getTime() + 14 * 24 * 60 * 60 * 1000).toISOString();
+
+      // Check existing ad to preserve custom dates if valid
+      let startsAt = nowIso;
+      let expiresAt = defaultExpiryIso;
+      try {
+        const { data: existingAd } = await client.from('local_ads').select('starts_at, expires_at').eq('id', adId).maybeSingle();
+        if (existingAd?.starts_at) startsAt = existingAd.starts_at;
+        if (existingAd?.expires_at && new Date(existingAd.expires_at).getTime() > now.getTime()) {
+          expiresAt = existingAd.expires_at;
+        }
+      } catch {}
+
       const updatePromise = client
         .from('local_ads')
         .update({
@@ -431,6 +484,8 @@ export const localAdsService = {
           approved_at: nowIso,
           amount_inr: 0,
           rejection_reason: null,
+          starts_at: startsAt,
+          expires_at: expiresAt,
         })
         .eq('id', adId);
 
@@ -462,7 +517,21 @@ export const localAdsService = {
       }
 
       const client = publicClient || supabase;
-      const nowIso = new Date().toISOString();
+      const now = new Date();
+      const nowIso = now.toISOString();
+
+      const durationType = payload.duration_type || 'auto';
+      let startsAt = payload.starts_at || nowIso;
+      let expiresAt = payload.expires_at;
+
+      if (durationType === 'manual' && payload.expires_at) {
+        expiresAt = payload.expires_at;
+        startsAt = payload.starts_at || nowIso;
+      } else {
+        startsAt = nowIso;
+        expiresAt = new Date(now.getTime() + 14 * 24 * 60 * 60 * 1000).toISOString();
+      }
+
       const insertData = {
         reporter_name: payload.reporter_name || 'SpotNews Superadmin',
         title: payload.title,
@@ -478,6 +547,9 @@ export const localAdsService = {
         paid_at: nowIso,
         approved_at: nowIso,
         approval_type: 'manual',
+        duration_type: durationType,
+        starts_at: startsAt,
+        expires_at: expiresAt,
       };
 
       const { data, error } = await client
@@ -516,23 +588,32 @@ export const localAdsService = {
    * Superadmin accepts an ad request and assigns a price to pay.
    * If price is ₹0 (free), immediately marks active so it appears in the feed.
    */
-  async acceptAdRequest(adId: string, amountInr: number): Promise<{ success: boolean; error?: string }> {
+  async acceptAdRequest(adId: string, amountInr: number, customExpiryIso?: string): Promise<{ success: boolean; error?: string }> {
     try {
       const client = publicClient || supabase;
       const cleanAmount = typeof amountInr === 'number' && !isNaN(amountInr) ? Math.max(0, amountInr) : 0;
-      const nowIso = new Date().toISOString();
+      const now = new Date();
+      const nowIso = now.toISOString();
+      const defaultExpiryIso = customExpiryIso || new Date(now.getTime() + 14 * 24 * 60 * 60 * 1000).toISOString();
       const status = cleanAmount === 0 ? 'active' : 'accepted_payment_pending';
+
+      const updatePayload: Record<string, any> = {
+        status,
+        amount_inr: cleanAmount,
+        rejection_reason: null,
+        approval_type: 'manual',
+        approved_at: nowIso,
+      };
+
+      if (cleanAmount === 0) {
+        updatePayload.paid_at = nowIso;
+        updatePayload.starts_at = nowIso;
+        updatePayload.expires_at = defaultExpiryIso;
+      }
 
       const { error } = await client
         .from('local_ads')
-        .update({
-          status,
-          amount_inr: cleanAmount,
-          rejection_reason: null,
-          approval_type: 'manual',
-          approved_at: nowIso,
-          ...(cleanAmount === 0 ? { paid_at: nowIso } : {}),
-        })
+        .update(updatePayload)
         .eq('id', adId);
 
       if (error) throw error;
@@ -622,7 +703,20 @@ export const localAdsService = {
     try {
       const client = publicClient || supabase;
       const paymentId = paymentRef || `upi_pay_${Date.now()}`;
-      const nowIso = new Date().toISOString();
+      const now = new Date();
+      const nowIso = now.toISOString();
+      const defaultExpiryIso = new Date(now.getTime() + 14 * 24 * 60 * 60 * 1000).toISOString();
+
+      let startsAt = nowIso;
+      let expiresAt = defaultExpiryIso;
+      try {
+        const { data: existingAd } = await client.from('local_ads').select('starts_at, expires_at').eq('id', adId).maybeSingle();
+        if (existingAd?.starts_at) startsAt = existingAd.starts_at;
+        if (existingAd?.expires_at && new Date(existingAd.expires_at).getTime() > now.getTime()) {
+          expiresAt = existingAd.expires_at;
+        }
+      } catch {}
+
       const { error: updateError } = await client
         .from('local_ads')
         .update({
@@ -630,6 +724,8 @@ export const localAdsService = {
           razorpay_payment_id: paymentId,
           paid_at: nowIso,
           approved_at: nowIso,
+          starts_at: startsAt,
+          expires_at: expiresAt,
         })
         .eq('id', adId);
 
@@ -663,12 +759,28 @@ export const localAdsService = {
     try {
       const cleanUtr = utrNumber.trim();
       const paymentId = `upi_utr_${cleanUtr}`;
+      const now = new Date();
+      const nowIso = now.toISOString();
+      const defaultExpiryIso = new Date(now.getTime() + 14 * 24 * 60 * 60 * 1000).toISOString();
+
+      let startsAt = nowIso;
+      let expiresAt = defaultExpiryIso;
+      try {
+        const { data: existingAd } = await supabase.from('local_ads').select('starts_at, expires_at').eq('id', adId).maybeSingle();
+        if (existingAd?.starts_at) startsAt = existingAd.starts_at;
+        if (existingAd?.expires_at && new Date(existingAd.expires_at).getTime() > now.getTime()) {
+          expiresAt = existingAd.expires_at;
+        }
+      } catch {}
+
       const { error: updateError } = await supabase
         .from('local_ads')
         .update({
           status: 'active',
           razorpay_payment_id: paymentId,
-          paid_at: new Date().toISOString(),
+          paid_at: nowIso,
+          starts_at: startsAt,
+          expires_at: expiresAt,
         })
         .eq('id', adId);
 

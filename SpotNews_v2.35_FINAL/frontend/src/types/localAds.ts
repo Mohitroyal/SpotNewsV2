@@ -31,7 +31,9 @@ export interface LocalAd {
   razorpay_payment_id?: string;
   created_at: string;
   paid_at?: string;
+  starts_at?: string;
   expires_at?: string;
+  duration_type?: 'auto' | 'manual';
 }
 
 export interface CreateAdRequestPayload {
@@ -47,4 +49,7 @@ export interface CreateAdRequestPayload {
   target_district?: string;
   cta_type?: LocalAdCtaType;
   cta_value?: string;
+  duration_type?: 'auto' | 'manual';
+  starts_at?: string;
+  expires_at?: string;
 }
