@@ -1,5 +1,7 @@
 from django.urls import path
 from .views import (
+    clipping_share_view, reporter_follow_view, reporter_stats_view, clipping_comments_view,
+
     health_check, health_msg91, admin_stats, admin_auth_users,
     send_notification_view, device_tokens_stats_view, story_share_view,
     send_approval_sms_view, process_notification_events_view
@@ -24,6 +26,16 @@ from .reporter_payment_views import (
 )
 
 urlpatterns = [
+    # Social Actions: Share, Follow, Stats, Comments
+    path('v1/clippings/<str:clip_id>/share', clipping_share_view, name='clipping_share'),
+    path('v1/clippings/<str:clip_id>/share/', clipping_share_view),
+    path('v1/reporter/follow', reporter_follow_view, name='reporter_follow'),
+    path('v1/reporter/follow/', reporter_follow_view),
+    path('v1/reporter/<str:reporter_id>/stats', reporter_stats_view, name='reporter_stats'),
+    path('v1/reporter/<str:reporter_id>/stats/', reporter_stats_view),
+    path('v1/clippings/<str:clip_id>/comments', clipping_comments_view, name='clipping_comments'),
+    path('v1/clippings/<str:clip_id>/comments/', clipping_comments_view),
+
     # Rich Link Preview & Deep Link Share endpoint (Way2News style)
     path('n/<str:clip_id>', story_share_view, name='story_share'),
     path('n/<str:clip_id>/', story_share_view),

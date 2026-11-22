@@ -521,3 +521,171 @@ def process_notification_events_view(request):
     except Exception as e:
         logger.error("Error processing notification events: %s", e)
         return JsonResponse({"error": str(e)}, status=500)
+
+
+@csrf_exempt
+def clipping_share_view(request, clip_id):
+    clean_id = str(clip_id).strip()
+    new_shares = 1
+    try:
+        with connection.cursor() as cursor:
+            cursor.execute('''
+                UPDATE public.clippings
+                SET shares_count = COALESCE(shares_count, 0) + 1
+                WHERE id::text = %s
+                RETURNING COALESCE(shares_count, 1);
+            ''', [clean_id])
+            row = cursor.fetchone()
+            if row:
+                new_shares = row[0]
+        return JsonResponse({"status": "ok", "clipping_id": clean_id, "shares_count": new_shares})
+    except Exception as e:
+        return JsonResponse({"status": "ok", "clipping_id": clean_id, "shares_count": new_shares, "warning": str(e)})
+
+@csrf_exempt
+def reporter_follow_view(request):
+    if request.method != 'POST':
+        return JsonResponse({"error": "POST required"}, status=405)
+    try:
+        data = json.loads(request.body.decode('utf-8')) if request.body else {}
+        reader_id = str(data.get('reader_id', '')).strip()
+        reporter_id = str(data.get('reporter_id', '')).strip()
+        action = str(data.get('action', 'follow')).lower().strip()
+
+        if not reader_id or not reporter_id:
+            return JsonResponse({"error": "reader_id and reporter_id are required"}, status=400)
+
+        with connection.cursor() as cursor:
+            if action == 'unfollow':
+                cursor.execute('''
+                    DELETE FROM public.reporter_follows
+                    WHERE reader_id = %s AND reporter_id = %s;
+                ''', [reader_id, reporter_id])
+            else:
+                cursor.execute('''
+                    INSERT INTO public.reporter_follows (reader_id, reporter_id)
+                    VALUES (%s, %s)
+                    ON CONFLICT (reader_id, reporter_id) DO NOTHING;
+                ''', [reader_id, reporter_id])
+
+            cursor.execute('''
+                SELECT COUNT(*) FROM public.reporter_follows
+                WHERE reporter_id = %s;
+            ''', [reporter_id])
+            cnt_row = cursor.fetchone()
+            followers_count = cnt_row[0] if cnt_row else 0
+
+        return JsonResponse({
+            "status": "ok",
+            "reporter_id": reporter_id,
+            "is_following": action != 'unfollow',
+            "followers_count": followers_count
+        })
+    except Exception as e:
+        return JsonResponse({"error": str(e)}, status=500)
+
+@csrf_exempt
+def reporter_stats_view(request, reporter_id):
+    rep_key = str(reporter_id).strip()
+    try:
+        with connection.cursor() as cursor:
+            cursor.execute('''
+                SELECT COUNT(*) FROM public.reporter_follows
+                WHERE reporter_id = %s;
+            ''', [rep_key])
+            f_row = cursor.fetchone()
+            followers = f_row[0] if f_row else 0
+
+            cursor.execute('''
+                SELECT 
+                    COALESCE(SUM(views_count), 0),
+                    COALESCE(SUM(likes_count), 0),
+                    COALESCE(SUM(comments_count), 0),
+                    COALESCE(SUM(shares_count), 0)
+                FROM public.clippings
+                WHERE (user_id::text = %s OR reporter_name = %s)
+                  AND is_posted = true
+                  AND status != 'rejected';
+            ''', [rep_key, rep_key])
+            stats_row = cursor.fetchone()
+            views = stats_row[0] if stats_row else 0
+            likes = stats_row[1] if stats_row else 0
+            comments = stats_row[2] if stats_row else 0
+            shares = stats_row[3] if stats_row else 0
+
+        return JsonResponse({
+            "status": "ok",
+            "reporter_id": rep_key,
+            "followers_count": followers,
+            "total_views": views,
+            "total_likes": likes,
+            "total_comments": comments,
+            "total_shares": shares
+        })
+    except Exception as e:
+        return JsonResponse({"error": str(e)}, status=500)
+
+@csrf_exempt
+def clipping_comments_view(request, clip_id):
+    clean_id = str(clip_id).strip()
+    if request.method == 'GET':
+        try:
+            with connection.cursor() as cursor:
+                cursor.execute('''
+                    SELECT id, clipping_id, user_id, user_name, text, created_at
+                    FROM public.clipping_comments
+                    WHERE clipping_id::text = %s
+                    ORDER BY created_at ASC;
+                ''', [clean_id])
+                rows = cursor.fetchall()
+                comments = []
+                for r in rows:
+                    comments.append({
+                        "id": str(r[0]),
+                        "clipping_id": str(r[1]),
+                        "user_id": str(r[2]) if r[2] else None,
+                        "user_name": r[3] or "Anonymous",
+                        "text": r[4] or "",
+                        "created_at": r[5].isoformat() if hasattr(r[5], 'isoformat') else str(r[5])
+                    })
+            return JsonResponse({"status": "ok", "comments": comments})
+        except Exception as e:
+            return JsonResponse({"error": str(e), "comments": []}, status=200)
+
+    elif request.method == 'POST':
+        try:
+            data = json.loads(request.body.decode('utf-8')) if request.body else {}
+            user_name = str(data.get('user_name', 'Reader')).strip()[:60]
+            text = str(data.get('text', '')).strip()[:500]
+            user_id = data.get('user_id')
+
+            if not text:
+                return JsonResponse({"error": "Comment text is required"}, status=400)
+
+            with connection.cursor() as cursor:
+                cursor.execute('''
+                    INSERT INTO public.clipping_comments (clipping_id, user_id, user_name, text)
+                    VALUES (%s, %s, %s, %s)
+                    RETURNING id, clipping_id, user_id, user_name, text, created_at;
+                ''', [clean_id, str(user_id) if user_id else None, user_name, text])
+                r = cursor.fetchone()
+
+                cursor.execute('''
+                    UPDATE public.clippings
+                    SET comments_count = COALESCE(comments_count, 0) + 1
+                    WHERE id::text = %s;
+                ''', [clean_id])
+
+            new_comment = {
+                "id": str(r[0]),
+                "clipping_id": str(r[1]),
+                "user_id": str(r[2]) if r[2] else None,
+                "user_name": r[3],
+                "text": r[4],
+                "created_at": r[5].isoformat() if hasattr(r[5], 'isoformat') else str(r[5])
+            }
+            return JsonResponse({"status": "ok", "comment": new_comment})
+        except Exception as e:
+            return JsonResponse({"error": str(e)}, status=500)
+
+    return JsonResponse({"error": "Method not allowed"}, status=405)
