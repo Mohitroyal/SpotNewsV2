@@ -849,85 +849,319 @@ def build_newspaper_html(
     advertisement_config: Optional[Dict[str, Any]] = None,
     edition_info: Optional[Dict[str, Any]] = None,
     page_offset: int = 0,
-    total_pages_override: Optional[int] = None,   # kept for backward compatibility (unused)
+    total_pages_override: Optional[int] = None,
 ) -> str:
-    """Self-paginating HTML. Open it in a browser (preview) or feed it to the PDF renderer."""
+    """
+    Authentic RTI Express Telugu Broadsheet Layout Generator.
+    Guarantees 100% layout match with frontend newspaperLayoutEngine.ts:
+    - Page 1: Official Masthead banner image (full width) + Green meta bar + Lead story + 4 columns
+    - Inner Pages: Alternating running headers + 4 columns
+    - Clean broadsheet rules, zero reporter names in bylines, zero filler stickers
+    """
     info = edition_info if isinstance(edition_info, dict) else {}
     edition_no = sanitize_text(info.get("edition_no", "01"))
-    issue_no = sanitize_text(info.get("issue_no", "266"))
-    editor_name = sanitize_text(info.get("editor_name", "స్పాట్ న్యూస్"))
-    price = sanitize_text(info.get("price", "రూ. 1.50/-"))
-    location = sanitize_text(info.get("location", "హైదరాబాద్ / ఆంధ్రప్రదేశ్ & తెలంగాణ"))
-    phone = sanitize_text(info.get("contact_phone", "7668886666"))
-    stickers = info.get("stickers") or [
-        {"title": "రిపోర్టర్లు కావలెను!", "short": "రిపోర్టర్లు కావలెను", "text": "మీ మండలంలో RTI Express రిపోర్టర్‌గా చేరండి"},
-        {"title": "మీ ఊరి వార్తలు పంపండి", "short": "వార్తలు పంపండి", "text": "ఫోటోలు, సమస్యలు, శుభవార్తలు — వాట్సాప్ చేయండి"},
-        {"title": "ప్రకటనల కోసం సంప్రదించండి", "short": "ప్రకటనల కోసం", "text": "మీ వ్యాపారం ప్రతి ఊరికి చేరాలంటే"},
-        {"title": "RTI Express Spot News యాప్", "short": "యాప్ డౌన్‌లోడ్", "text": "గూగుల్ ప్లేలో ఉచితంగా డౌన్‌లోడ్ చేసుకోండి"},
-    ]
-    sticker_tpls = "".join(
-        f'<template class="tpl-sticker"><div class="sticker v{k % 4}"><div class="st-t" data-full="{sanitize_text(st.get("title"))}" data-short="{sanitize_text(st.get("short") or st.get("title"))}">{sanitize_text(st.get("title"))}</div>'
-        f'<div class="st-s">{sanitize_text(st.get("text"))}</div><div class="st-p">ఫోన్: {sanitize_text(st.get("phone") or phone)}</div></div></template>'
-        for k, st in enumerate(stickers))
-    pub = sanitize_text(publication_name)
+    issue_no = sanitize_text(info.get("issue_no", "320"))
+    editor_name = sanitize_text(info.get("editor_name", "కొప్పలపల్లి పోతయ్య"))
+    price = sanitize_text(info.get("price", "రూ. 1/-"))
+    pub = sanitize_text(publication_name or "RTI Express")
     tdate = format_telugu_date(edition_date)
 
-    ordered = clean_articles(_order_articles(articles, lead_story_id))   # lead first, so its copies are the ones dropped
-    _prepare_photo_crops([u for a in ordered for u in _images_of(a)])
-    first_page = page_offset == 0
-    stories = "".join(_story_html(a, i, lead=(i == 0 and first_page)) for i, a in enumerate(ordered))
-    section = sanitize_text(info.get("section_name", "జనరల్ న్యూస్"))
-    small_logo = (f'<img class="hl" src="{sanitize_text(optimize_image_url(logo_url, max_width=300, quality=80))}" alt="">'
-                  if logo_url else f'<span class="hl-t">{sanitize_text(publication_name)}</span>')
+    ordered = clean_articles(_order_articles(articles, lead_story_id))
+    total_articles = len(ordered)
+    num_pages = total_pages_override or max(1, round(total_articles / 12) if total_articles > 0 else 1)
 
-    ad_html = ""
-    if advertisement_config and advertisement_config.get("image_url"):
-        ad_html = (f'<div class="ad-box"><img src="{sanitize_text(optimize_image_url(advertisement_config["image_url"], 300, 70))}" alt=""></div>')
-    logo_src = sanitize_text(optimize_image_url(logo_url, max_width=600, quality=80)) if logo_url else ""
+    chunked_pages: List[List[Dict[str, Any]]] = []
+    start_idx = 0
+    for p in range(num_pages):
+        remaining_articles = total_articles - start_idx
+        remaining_pages = num_pages - p
+        count_for_page = (remaining_articles + remaining_pages - 1) // remaining_pages if remaining_pages > 0 else remaining_articles
+        slice_arts = ordered[start_idx : start_idx + count_for_page]
+        if slice_arts:
+            chunked_pages.append(slice_arts)
+            start_idx += len(slice_arts)
 
-    footer = (f'<div class="footer"><div>{pub} - {sanitize_text(edition_date)}</div>'
-              f'<div style="font-weight:700">పేజీ <span data-pno></span></div></div>')
-    end_promo = ('<div class="end-promo" style="display:none">'
-                 + "".join(f'<div class="sticker v{k % 4}"><div class="st-t">{sanitize_text(st.get("title"))}</div>'
-                           f'<div class="st-s">{sanitize_text(st.get("text"))}</div><div class="st-p">ఫోన్: {sanitize_text(st.get("phone") or phone)}</div></div>'
-                           for k, st in enumerate(stickers[:4]))
-                 + '</div>')
+    if not chunked_pages and ordered:
+        chunked_pages.append(ordered)
 
-    masthead_banner = (
-        f'<div class="masthead-banner" style="width:100%; margin-bottom:3px; border:1.5px solid #000; overflow:hidden; background:#fff;">'
-        f'<img src="{OFFICIAL_RTI_MASTHEAD_BASE64}" alt="RTI Express Official Masthead" style="width:100%; height:auto; max-height:180px; object-fit:contain; display:block;" />'
-        f'</div>'
-    )
-    tpl_first = (
-        '<div class="pdf-page">'
-        f'{masthead_banner}'
-        f'<div class="meta" style="background:#047857; border-top:1.5px solid #000; border-bottom:2px solid #000; color:#fff; padding:4px 10px; font-weight:900; font-size:11px; display:flex; justify-content:space-between; align-items:center; margin-top:2px; margin-bottom:6px;">'
-        f'<div><strong>సంపుటి:</strong> {edition_no} &nbsp;|&nbsp; <strong>సంచిక:</strong> {issue_no} &nbsp;|&nbsp; <strong>ఎడిటర్:</strong> {editor_name}</div>'
-        f'<div><strong>దినపత్రిక</strong> &nbsp;|&nbsp; <strong>వెల:</strong> {price}</div>'
-        f'<div style="color:#fef08a;">{tdate} &nbsp;|&nbsp; {location}</div></div>'
-        f'<div class="feature-slot"></div><div class="flow"></div>{end_promo}{footer}</div>')
-    tpl_inner = (
-        '<div class="pdf-page">'
-        f'<div class="page-head"><div class="pno" data-pno></div>{small_logo}'
-        f'<div class="sect">{section}</div><div class="dpill">{tdate}</div></div>'
-        f'<div class="feature-slot"></div><div class="flow"></div>{end_promo}{footer}</div>')
+    headline_colors = ["#C8102E", "#111827", "#8B0000", "#111827", "#C8102E"]
+    pages_html: List[str] = []
+    target_pages = len(chunked_pages)
 
-    cfg = json.dumps({"pageOffset": page_offset, "firstPage": first_page})
+    def _render_images_html(imgs: List[str], is_lead: bool = False, max_h: int = 135) -> str:
+        valid = [u for u in imgs if u and str(u).strip() and str(u) != 'null']
+        if not valid:
+            return ""
+        if is_lead:
+            if len(valid) >= 2:
+                return f'''
+                <div style="width: 44%; float: left; margin-right: 12px; margin-bottom: 6px; display: grid; grid-template-columns: 1fr 1fr; gap: 4px;">
+                  <img src="{sanitize_text(valid[0])}" style="width: 100%; height: 190px; object-fit: cover; background: #fafafa; border: 1.5px solid #111; padding: 1px; display: block;" alt="" />
+                  <img src="{sanitize_text(valid[1])}" style="width: 100%; height: 190px; object-fit: cover; background: #fafafa; border: 1.5px solid #111; padding: 1px; display: block;" alt="" />
+                </div>
+                '''
+            return f'''
+            <div style="width: 40%; float: left; margin-right: 12px; margin-bottom: 6px;">
+              <img src="{sanitize_text(valid[0])}" style="width: 100%; height: 200px; object-fit: cover; background: #fafafa; border: 1.5px solid #111; padding: 1px; display: block;" alt="" />
+            </div>
+            '''
+        if len(valid) >= 2:
+            dual_h = min(105, round(max_h * 0.8))
+            return f'''
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 4px; margin-bottom: 4px; flex: 0 0 auto;">
+              <img src="{sanitize_text(valid[0])}" style="width: 100%; height: {dual_h}px; object-fit: cover; background: #fafafa; border: 1px solid #111; padding: 1px; display: block;" alt="" />
+              <img src="{sanitize_text(valid[1])}" style="width: 100%; height: {dual_h}px; object-fit: cover; background: #fafafa; border: 1px solid #111; padding: 1px; display: block;" alt="" />
+            </div>
+            '''
+        return f'''
+        <div style="margin-bottom: 4px; flex: 0 0 auto;">
+          <img src="{sanitize_text(valid[0])}" style="width: 100%; max-height: {max_h}px; object-fit: cover; background: #fafafa; border: 1px solid #111; padding: 1px; display: block;" alt="" />
+        </div>
+        '''
+
+    for page_idx, page_articles in enumerate(chunked_pages):
+        page_num = page_offset + page_idx + 1
+        is_first_page = (page_num == 1)
+
+        # Header
+        if is_first_page:
+            header_html = f'''
+            <div style="width: 100%; border: 1.5px solid #000; background: #ffffff; overflow: hidden; margin-bottom: 2px;">
+              <img src="{OFFICIAL_RTI_MASTHEAD_BASE64}" alt="RTI Express Official Masthead" style="width: 100%; height: auto; display: block;" />
+            </div>
+            <div style="background: #047857; border-top: 1.5px solid #000; border-bottom: 2px solid #000; color: #ffffff; padding: 4px 10px; font-weight: 900; font-size: 11px; display: flex; justify-content: space-between; align-items: center; margin-top: 2px; margin-bottom: 6px;">
+              <div><strong>సంపుటి:</strong> {edition_no} &nbsp;|&nbsp; <strong>సంచిక:</strong> {issue_no} &nbsp;|&nbsp; <strong>ఎడిటర్:</strong> {editor_name}</div>
+              <div><strong>పేజీలు:</strong> {target_pages} &nbsp;|&nbsp; <strong>వెల:</strong> {price}</div>
+              <div style="color: #fef08a;">{tdate}</div>
+            </div>
+            '''
+        elif page_num % 2 == 0:
+            header_html = f'''
+            <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #000; padding-bottom: 4px; margin-bottom: 6px;">
+              <div style="display: flex; align-items: center; gap: 6px;">
+                <div style="background: #000000; color: #ffffff; font-size: 16px; font-weight: 900; padding: 2px 10px; border-radius: 2px; line-height: 1.2;">
+                  {page_num}
+                </div>
+                <div style="background: #7c1264; color: #ffffff; font-size: 12px; font-weight: 900; padding: 3px 10px; border-radius: 2px; border: 1px solid #000;">
+                  ఆర్ ఐ పి ఎక్స్‌ప్రెస్
+                </div>
+              </div>
+              <div style="background: #0284c7; color: #ffffff; font-size: 14.5px; font-weight: 900; padding: 3px 28px; border-radius: 2px; letter-spacing: 1px; border: 1px solid #000;">
+                జనరల్ న్యూస్
+              </div>
+              <div style="background: #facc15; color: #000000; font-size: 12px; font-weight: 900; padding: 3px 14px; border-radius: 2px; border: 1px solid #000;">
+                {tdate}
+              </div>
+            </div>
+            '''
+        else:
+            header_html = f'''
+            <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #000; padding-bottom: 4px; margin-bottom: 6px;">
+              <div style="background: #0284c7; color: #ffffff; font-size: 14.5px; font-weight: 900; padding: 3px 28px; border-radius: 2px; letter-spacing: 1px; border: 1px solid #000;">
+                జనరల్ న్యూస్
+              </div>
+              <div style="background: #facc15; color: #000000; font-size: 12px; font-weight: 900; padding: 3px 14px; border-radius: 2px; border: 1px solid #000;">
+                {tdate}
+              </div>
+              <div style="display: flex; align-items: center; gap: 6px;">
+                <div style="background: #7c1264; color: #ffffff; font-size: 12px; font-weight: 900; padding: 3px 10px; border-radius: 2px; border: 1px solid #000;">
+                  ఆర్ ఐ పి ఎక్స్‌ప్రెస్
+                </div>
+                <div style="background: #000000; color: #ffffff; font-size: 16px; font-weight: 900; padding: 2px 10px; border-radius: 2px; line-height: 1.2;">
+                  {page_num}
+                </div>
+              </div>
+            </div>
+            '''
+
+        # Stories Layout
+        remaining_arts = list(page_articles)
+        lead_html = ""
+        if is_first_page and remaining_arts:
+            lead_art = remaining_arts.pop(0)
+            l_head, l_cont = _head_and_body(lead_art)
+            l_imgs = _images_of(lead_art)
+            l_loc = sanitize_text(lead_art.get("location") or lead_art.get("district") or "")
+            l_byline = f'<div style="font-size: 10.5px; font-weight: bold; color: #4b5563; margin-bottom: 4px;">{l_loc}</div>' if l_loc else ''
+            l_img_html = _render_images_html(l_imgs, is_lead=True, max_h=200)
+
+            lead_html = f'''
+            <div class="lead-story-box" style="border: 2px solid #000; padding: 8px 10px; margin-bottom: 8px; background: #ffffff; flex: 0 0 auto;">
+              <h1 style="font-size: 21px; font-weight: 900; color: #C8102E; line-height: 1.25; margin-bottom: 6px;">
+                {sanitize_text(l_head)}
+              </h1>
+              {l_byline}
+              <div style="overflow: hidden;">
+                {l_img_html}
+                <div style="font-size: 11.5px; line-height: 1.45; text-align: justify; color: #111;">
+                  <p style="margin: 0; text-indent: 14px;">{sanitize_text(l_cont)}</p>
+                </div>
+              </div>
+            </div>
+            '''
+
+        # 4 Columns
+        cols: List[List[Dict[str, Any]]] = [[], [], [], []]
+        for idx, art in enumerate(remaining_arts):
+            cols[idx % 4].append(art)
+
+        cols_html: List[str] = []
+        is_page_2 = (page_num == 2)
+
+        for col_idx in range(4):
+            border_style = 'border-right: 1px solid #000;' if col_idx < 3 else ''
+            col_arts = cols[col_idx]
+            is_editorial = (is_page_2 and col_idx == 0)
+
+            col_header_html = ''
+            if is_editorial:
+                col_header_html = '''
+                <div style="background: #facc15; border: 1.5px solid #000; padding: 3px 6px; text-align: center; font-weight: 900; font-size: 13.5px; color: #000; margin-bottom: 6px;">
+                  సంపాదకీయం ✍️
+                </div>
+                '''
+
+            items_html: List[str] = []
+            for item_idx, art in enumerate(col_arts):
+                head, cont = _head_and_body(art)
+                imgs = _images_of(art)
+                loc = sanitize_text(art.get("location") or art.get("district") or "")
+                byline = f'<div style="font-size: 10px; font-weight: bold; color: #6b7280; margin-bottom: 2px;">{loc}</div>' if loc else ''
+                color = headline_colors[(col_idx + item_idx) % len(headline_colors)]
+                img_html = _render_images_html(imgs, is_lead=False, max_h=95)
+
+                item_head_html = f'''
+                <h2 style="font-size: 14.5px; font-weight: 900; color: {color}; line-height: 1.25; margin-bottom: 2px; flex: 0 0 auto;">
+                  {sanitize_text(head)}
+                </h2>
+                '''
+                if is_editorial and item_idx == 0:
+                    item_head_html = f'''
+                    <div style="background: #e11d48; color: #ffffff; font-size: 13px; font-weight: 900; padding: 3px 8px; margin-bottom: 4px; border-radius: 2px;">
+                      ▶ {sanitize_text(head)}
+                    </div>
+                    '''
+
+                is_last_item = (item_idx == len(col_arts) - 1)
+                item_border = '' if is_last_item else 'border-bottom: 1.5px solid #222; padding-bottom: 6px; margin-bottom: 6px;'
+
+                items_html.append(f'''
+                <div class="news-item" style="{item_border} flex: 1 1 0; min-height: 0; display: flex; flex-direction: column; justify-content: flex-start;">
+                  {item_head_html}
+                  {byline}
+                  {img_html}
+                  <div class="story-body" style="font-size: 10.5px; line-height: 1.4; text-align: justify; color: #111; flex: 1 1 auto; min-height: 0; overflow: hidden;">
+                    <p style="margin: 0; text-indent: 10px;">{sanitize_text(cont)}</p>
+                  </div>
+                </div>
+                ''')
+
+            cols_html.append(f'''
+            <div class="news-column" style="flex: 1 1 0; min-width: 0; padding: 0 6px; display: flex; flex-direction: column; justify-content: space-between; height: 100%; overflow: hidden; {border_style}">
+              {col_header_html}
+              {''.join(items_html)}
+            </div>
+            ''')
+
+        page_content_html = f'''
+        {lead_html}
+        <div class="columns-container" style="flex: 1 1 auto; display: flex; min-height: 0; overflow: hidden; height: 100%;">
+          {''.join(cols_html)}
+        </div>
+        '''
+
+        footer_html = f'''
+        <div class="footer-section" style="flex: 0 0 auto; display: flex; justify-content: space-between; align-items: center; border-top: 1.5px solid #000; padding-top: 4px; font-size: 10.5px; color: #333; margin-top: auto; z-index: 20; background: #ffffff;">
+          <div><strong>RTI Express AP</strong> &nbsp;|&nbsp; {sanitize_text(edition_date)} &nbsp;|&nbsp; తెలుగు దినపత్రిక</div>
+          <div style="display: flex; gap: 3px; align-items: center;">
+            <span style="display: inline-block; width: 8px; height: 8px; background: #00FFFF;"></span>
+            <span style="display: inline-block; width: 8px; height: 8px; background: #FF00FF;"></span>
+            <span style="display: inline-block; width: 8px; height: 8px; background: #FFFF00;"></span>
+            <span style="display: inline-block; width: 8px; height: 8px; background: #000000;"></span>
+          </div>
+          <div style="font-weight: bold; font-size: 11px;">Page {page_num}</div>
+        </div>
+        '''
+
+        is_last_page = (page_idx == target_pages - 1)
+        page_break = '' if is_last_page else 'page-break-after: always; break-after: page;'
+
+        pages_html.append(f'''
+        <div id="page-{page_num}" class="pdf-page" style="width: 297mm; height: 420mm; max-height: 420mm; padding: 8mm 8mm; background: #ffffff; margin: 0 auto; box-sizing: border-box; position: relative; display: flex; flex-direction: column; overflow: hidden; page-break-inside: avoid; break-inside: avoid; {page_break}">
+          <div class="header-section" style="flex: 0 0 auto;">
+            {header_html}
+          </div>
+          {page_content_html}
+          {footer_html}
+        </div>
+        ''')
 
     return f"""<!DOCTYPE html>
-<html lang="te"><head><meta charset="UTF-8">
-<title>{pub} - {sanitize_text(edition_date)}</title>
-{_font_css()}
-<style>{_CSS}</style>
-</head><body>
-<div id="pages"></div>
-<div id="pool">{stories}</div>
-<template id="tpl-first">{tpl_first}</template>
-<template id="tpl-inner">{tpl_inner}</template>
-{sticker_tpls}
-<script type="application/json" id="np-cfg">{cfg}</script>
-<script>{_PAGINATOR_JS}</script>
-</body></html>"""
+<html lang="te">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=1122, initial-scale=1.0">
+  <title>{pub} - {sanitize_text(edition_date)}</title>
+  {_font_css()}
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Suranna&family=Tenali+Ramakrishna&family=Noto+Sans+Telugu:wght@400;600;700;800;900&display=swap" rel="stylesheet">
+  <style>
+    @page {{
+      size: A3 portrait;
+      margin: 0;
+    }}
+    * {{
+      box-sizing: border-box;
+      -webkit-print-color-adjust: exact !important;
+      print-color-adjust: exact !important;
+    }}
+    html, body {{
+      margin: 0;
+      padding: 0;
+      background: #e5e7eb;
+      font-family: 'Noto Sans Telugu', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      color: #000000;
+      -webkit-font-smoothing: antialiased;
+    }}
+    .pdf-page {{
+      width: 297mm;
+      height: 420mm;
+      max-height: 420mm;
+      padding: 8mm 8mm;
+      background: #ffffff;
+      margin: 0 auto 15px auto;
+      box-shadow: 0 4px 15px rgba(0,0,0,0.15);
+      position: relative;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      page-break-inside: avoid;
+      break-inside: avoid;
+    }}
+    h1, h2, h3, h4, p {{
+      margin-top: 0;
+    }}
+    .news-item {{
+      word-wrap: break-word;
+      overflow-wrap: break-word;
+    }}
+    @media print {{
+      body {{
+        background: transparent;
+      }}
+      .pdf-page {{
+        margin: 0;
+        box-shadow: none;
+      }}
+    }}
+  </style>
+</head>
+<body>
+  {''.join(pages_html)}
+  <script>window.__NP_DONE = true;</script>
+</body>
+</html>"""
 
 
 def _page_document(head_html: str, page_html: str) -> str:

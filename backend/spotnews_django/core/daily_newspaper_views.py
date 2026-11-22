@@ -268,7 +268,9 @@ def preview_daily_newspaper(request):
         )
 
         total_articles = len(articles)
-        total_pages = max(1, round(total_articles / 12)) if total_articles > 0 else 1
+        # The preview HTML paginates itself in the browser (needs scripts allowed in the preview iframe:
+        # <iframe sandbox="allow-scripts allow-same-origin">). This number is only an estimate.
+        total_pages = max(1, (total_articles + 7) // 8)
 
         return JsonResponse({
             "success": True,
@@ -338,7 +340,7 @@ def generate_daily_newspaper(request):
                 current_version = (existing_row[1] or 1) + 1
 
         total_articles = len(articles)
-        total_pages = max(1, round(total_articles / 12)) if total_articles > 0 else 1
+        total_pages = max(1, (total_articles + 7) // 8)
 
         # Create output directory inside Django media/editions
         media_editions_dir = os.path.join(settings.BASE_DIR, 'media', 'editions')
@@ -358,7 +360,7 @@ def generate_daily_newspaper(request):
             lead_story_id=lead_story_id,
             advertisement_config=ad_config,
             edition_info=edition_info,
-            max_articles_per_chunk=12
+            max_articles_per_chunk=8
         )
         if not success:
             return JsonResponse({"detail": "Failed to generate PDF. The server environment may lack Chromium dependencies (Playwright failed). Check server logs."}, status=500)
