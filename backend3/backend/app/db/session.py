@@ -26,28 +26,18 @@ else:
     if not db_url:
         print("[WARNING] DATABASE_URL is empty or not set. Falling back to local SQLite.")
         db_url = "sqlite:///./newscraft.db"
-    elif "sqlite" not in db_url:
-        host = "unknown"
-        port = 5432
-        try:
-            import socket
-            from urllib.parse import urlparse
-            parsed = urlparse(db_url)
-            host = parsed.hostname or "localhost"
-            port = parsed.port or 5432
-            # Test socket connectivity with a short timeout
-            socket.create_connection((host, port), timeout=3)
-        except Exception as e:
-            print(f"[WARNING] PostgreSQL host {host}:{port} is unreachable ({e}). Falling back to local SQLite.")
-            db_url = "sqlite:///./newscraft.db"
 
+Base = declarative_base()
 
 if db_url.startswith("sqlite"):
     engine = create_engine(db_url, connect_args={"check_same_thread": False})
+    # Ensure tables exist in SQLite fallback
+    try:
+        import app.models  # noqa
+        Base.metadata.create_all(bind=engine)
+    except Exception as _e:
+        print(f"[DB] SQLite metadata create note: {_e}")
 else:
-    # Strict connection pool configuration for Supabase / PostgreSQL:
-    # Increased pool size to accommodate long-running endpoints (like image uploads).
-    # Supabase Transaction pooler (port 6543) can handle higher concurrent connections.
     engine = create_engine(
         db_url,
         pool_size=15,
@@ -57,7 +47,6 @@ else:
     )
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
-Base = declarative_base()
 
 def get_db():
     db = SessionLocal()
