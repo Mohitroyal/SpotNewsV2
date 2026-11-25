@@ -11,7 +11,7 @@ import psycopg2
 import httpx
 
 # Configuration
-DEFAULT_PRICE_INR = int(os.getenv("REPORTER_MEMBERSHIP_PRICE_INR", "999"))
+DEFAULT_PRICE_INR = int(os.getenv("REPORTER_MEMBERSHIP_PRICE_INR", "499"))
 RAZORPAY_KEY_ID = os.getenv("RAZORPAY_KEY_ID", "rzp_test_spotnews_dummy")
 RAZORPAY_KEY_SECRET = os.getenv("RAZORPAY_KEY_SECRET", "dummy_secret_spotnews_test")
 RAZORPAY_WEBHOOK_SECRET = os.getenv("RAZORPAY_WEBHOOK_SECRET", "")
@@ -327,6 +327,7 @@ def verify_payment(request):
             SET status = 'active',
                 payment_id = %s,
                 payment_status = 'paid',
+                id_card_status = 'paid',
                 reporter_id = %s,
                 valid_until = %s,
                 updated_at = NOW()
