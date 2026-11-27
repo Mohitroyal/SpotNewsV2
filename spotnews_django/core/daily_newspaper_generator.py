@@ -272,11 +272,11 @@ html, body { background:#fff; color:#111; font-family:'NP Telugu','Noto Serif Te
 .logo-box img { position:absolute; inset:0; width:100%; height:100%; object-fit:contain; background:#fff; }
 .ad-box { width:25%; height:92px; display:flex; align-items:center; justify-content:center; }
 .ad-box img { max-height:88px; max-width:100%; border:1px solid #ccc; padding:2px; }
-.meta { display:flex; justify-content:space-between; align-items:center; background:#006600; color:#fff;
-  font-size:13px; font-weight:700; padding:5px 14px; margin-bottom:7px; border-radius:2px; }
+.meta { display:flex; justify-content:space-between; align-items:center; background:#0A2540; color:#fff;
+  font-size:12.5px; font-weight:700; padding:4px 12px; margin-bottom:7px; border-radius:2px; border-top:1.5px solid #000; border-bottom:1.5px solid #000; }
 .meta .price { color:#FFEB3B; }
-.page-strip { display:flex; justify-content:space-between; align-items:center; background:#006600; color:#fff;
-  font-size:13px; font-weight:700; padding:6px 14px; margin-bottom:7px; border-radius:2px; flex:0 0 auto; }
+.page-strip { display:flex; justify-content:space-between; align-items:center; background:#0A2540; color:#fff;
+  font-size:12.5px; font-weight:700; padding:4px 12px; margin-bottom:7px; border-radius:2px; flex:0 0 auto; }
 
 /* inner page header — like a printed daily: page number, small logo, section band, date pill */
 .page-head { flex:0 0 auto; display:flex; align-items:center; gap:10px; height:50px; margin-bottom:6px;

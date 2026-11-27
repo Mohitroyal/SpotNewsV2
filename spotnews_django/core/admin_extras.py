@@ -191,29 +191,30 @@ def admin_user_role(request, user_id):
                     else:
                         target_plan = plan or 'free'
 
-                # 3. Update profiles table
+                # 3. Update using central database function
                 try:
+                    cursor.execute("""
+                        SELECT public.admin_set_user_permissions(
+                            target_user_id => %s,
+                            new_role => %s,
+                            new_plan => %s,
+                            new_phone => %s,
+                            new_district => %s,
+                            target_email => %s
+                        )
+                    """, [target_user_id, role, target_plan, phone_number, cleaned_district, target_email])
+                except Exception as pe:
+                    print("admin_set_user_permissions RPC notice in Django:", pe)
+                    # Fallback direct updates
                     cursor.execute("""
                         UPDATE profiles 
                         SET role = %s, 
                             plan = %s, 
                             district = COALESCE(%s, district),
+                            phone = COALESCE(%s, phone),
                             phone_number = COALESCE(%s, phone_number)
                         WHERE id::text = %s OR (LOWER(COALESCE(email, '')) = LOWER(%s) AND %s != '')
-                    """, [role, target_plan, cleaned_district, phone_number, target_user_id, target_email or '', target_email or ''])
-                    
-                    if cursor.rowcount == 0:
-                        cursor.execute("""
-                            INSERT INTO profiles (id, email, role, plan, district, phone_number)
-                            VALUES (%s, %s, %s, %s, %s, %s)
-                            ON CONFLICT (id) DO UPDATE 
-                            SET role = EXCLUDED.role, 
-                                plan = EXCLUDED.plan, 
-                                district = COALESCE(EXCLUDED.district, profiles.district), 
-                                phone_number = COALESCE(EXCLUDED.phone_number, profiles.phone_number)
-                        """, [target_user_id, target_email, role, target_plan, cleaned_district, phone_number])
-                except Exception as pe:
-                    print("Profiles update notice:", pe)
+                    """, [role, target_plan, cleaned_district, phone_number, phone_number, target_user_id, target_email or '', target_email or ''])
 
                 # 4. If role is reporter, activate reporter_applications
                 if role == 'reporter':
@@ -315,22 +316,16 @@ def admin_user_delete(request, user_id):
 
 @csrf_exempt
 def admin_logos(request):
-    is_active_only = request.path.rstrip('/').endswith('/active')
     try:
         with connection.cursor() as cursor:
-            if is_active_only:
-                cursor.execute("SELECT id, name, logo_url, is_active, created_at, publication_code FROM publication_logos WHERE is_active = true ORDER BY created_at ASC")
-            else:
-                cursor.execute("SELECT id, name, logo_url, is_active, created_at, publication_code FROM publication_logos ORDER BY created_at ASC")
+            cursor.execute("SELECT id, name, url, is_active, created_at FROM publication_logos ORDER BY created_at ASC")
             rows = cursor.fetchall()
             logos = []
             for r in rows:
-                code = r[5] or str(r[0])
                 logos.append({
                     "id": str(r[0]),
                     "name": r[1] or "",
-                    "logo_url": r[2] or "",
-                    "publication_code": code,
+                    "url": r[2] or "",
                     "is_active": r[3] if r[3] is not None else True,
                     "created_at": str(r[4]) if r[4] else ""
                 })
@@ -340,11 +335,9 @@ def admin_logos(request):
         pass
 
     logos = [
-        {"id": "pub_rti_express", "publication_code": "rti_express", "name": "RTI Express", "logo_url": "/static/logos/rti_express.svg", "is_active": True},
-        {"id": "pub_bharath_reporter", "publication_code": "bharath_reporter", "name": "Bharath Reporter", "logo_url": "/static/logos/bharath_reporter.svg", "is_active": True},
-        {"id": "pub_national_news", "publication_code": "national_news", "name": "National News", "logo_url": "/static/logos/national_news.svg", "is_active": True},
-        {"id": "pub_the_extra_news", "publication_code": "the_extra_news", "name": "The Extra News", "logo_url": "/static/logos/extra_news.svg", "is_active": True},
+        {"id": "rti_express", "name": "RTI Express", "url": "/static/logos/rti_express.svg", "is_active": True},
+        {"id": "bharath_reporter", "name": "Bharath Reporter", "url": "/static/logos/bharath_reporter.svg", "is_active": True},
+        {"id": "national_news", "name": "National News", "url": "/static/logos/national_news.svg", "is_active": True},
+        {"id": "extra_news", "name": "The Extra News", "url": "/static/logos/extra_news.svg", "is_active": True},
     ]
-    if is_active_only:
-        logos = [l for l in logos if l.get('is_active') is not False]
     return JsonResponse(logos, safe=False)

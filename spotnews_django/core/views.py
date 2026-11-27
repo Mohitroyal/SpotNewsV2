@@ -10,7 +10,8 @@ def home_view(request):
 def health_check(request):
     return JsonResponse({
         "status": "ok",
-        "service": "spotnews-django"
+        "service": "spotnews-django",
+        "version": "v2.68-square-logo-exact-location-synced"
     })
 
 def health_msg91(request):
@@ -309,33 +310,57 @@ def device_tokens_stats_view(request):
 
 from django.http import HttpResponse
 
+@csrf_exempt
+def assetlinks_view(request):
+    """
+    Android Digital Asset Links JSON for App Links auto-verification.
+    Allows https://spotnewsv2-ew09.onrender.com/n/<id> to open directly in the
+    SpotNews app without being intercepted by Chrome.
+    """
+    data = [
+        {
+            "relation": ["delegate_permission/common.handle_all_urls"],
+            "target": {
+                "namespace": "android_app",
+                "package_name": "com.newscraft.mobile",
+                "sha256_cert_fingerprints": [
+                    "EF:51:C8:A4:ED:71:ED:5A:D3:F5:15:7B:2B:53:A7:28:04:02:E1:F5:74:37:0B:BB:FB:41:8B:FC:B7:BF:B6:4E",
+                    "54:A7:D9:8E:63:07:15:7C:05:7F:14:B3:95:53:79:04:49:24:7C:BA:2C:37:E8:DB:8E:21:F5:6E:05:8B:F8:E6"
+                ]
+            }
+        }
+    ]
+    return HttpResponse(json.dumps(data, indent=2), content_type="application/json")
+
+
 def story_share_view(request, clip_id):
     """
     Renders an HTML page with Open Graph (OG) meta tags so WhatsApp, Telegram, etc.
     display the clipping image as a rich preview card.
-    When tapped in WhatsApp, it opens this URL which redirects directly into the app
-    if installed, or prompts to download from Google Play if not installed.
+    When tapped in WhatsApp or Chrome, it automatically triggers the native Android intent
+    to launch the SpotNews app directly to that clipping, and provides an immediate 1-tap button.
     """
+    clean_id = str(clip_id).strip()
     headline = "RTI Express Spot News 24x7"
     png_url = ""
     summary = "పూర్తి వార్త యాప్‌లో చదవండి — RTI Express Spot News 24x7"
     
     try:
         with connection.cursor() as cursor:
-            cursor.execute("SELECT headline, png_url, summary FROM public.clippings WHERE id = %s", [str(clip_id)])
+            cursor.execute("SELECT headline, png_url, summary FROM public.clippings WHERE id = %s", [clean_id])
             row = cursor.fetchone()
             if row:
                 headline = row[0] or headline
                 png_url = row[1] or ""
                 summary = row[2] or summary
     except Exception as e:
-        print(f"Error fetching clipping {clip_id}: {e}")
+        print(f"Error fetching clipping {clean_id}: {e}")
 
     # Fallback to Supabase REST if connection failed or not found in local cursor
     if not png_url:
         try:
             import urllib.request
-            supa_url = f"https://rffrqokpnqoycpozrjuc.supabase.co/rest/v1/clippings?id=eq.{clip_id}&select=headline,png_url,summary"
+            supa_url = f"https://rffrqokpnqoycpozrjuc.supabase.co/rest/v1/clippings?id=eq.{clean_id}&select=headline,png_url,summary"
             anon_key = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJmZnJxb2twbnFveWNwb3pyanVjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg5NDE4MjUsImV4cCI6MjA5NDUxNzgyNX0.9BcRAPuhoK1C6SMeUvexABXp5HW2dfEJbdcRT_2FiL4"
             req = urllib.request.Request(supa_url, headers={
                 "apikey": anon_key,
@@ -353,8 +378,8 @@ def story_share_view(request, clip_id):
 
     package_name = "com.newscraft.mobile"
     play_store_url = f"https://play.google.com/store/apps/details?id={package_name}"
-    scheme_url = f"spotnews://feed?clipId={clip_id}"
-    intent_url = f"intent://feed?clipId={clip_id}#Intent;scheme=spotnews;package={package_name};S.browser_fallback_url={play_store_url};end"
+    scheme_url = f"spotnews://feed?clipId={clean_id}"
+    intent_url = f"intent://feed?clipId={clean_id}#Intent;scheme=spotnews;package={package_name};S.browser_fallback_url={play_store_url};end"
     share_url = request.build_absolute_uri()
 
     html = f"""<!DOCTYPE html>
@@ -390,7 +415,7 @@ def story_share_view(request, clip_id):
     <style>
         * {{ box-sizing: border-box; margin: 0; padding: 0; }}
         body {{
-            background: #0b1523;
+            background: #060d17;
             color: #ffffff;
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
             min-height: 100vh;
@@ -403,18 +428,18 @@ def story_share_view(request, clip_id):
         .container {{
             max-width: 480px;
             width: 100%;
-            background: linear-gradient(145deg, #132238 0%, #0b1523 100%);
-            border: 1px solid rgba(255, 255, 255, 0.12);
+            background: linear-gradient(145deg, #0d1e36 0%, #060d17 100%);
+            border: 1px solid rgba(255, 255, 255, 0.15);
             border-radius: 20px;
             padding: 24px 20px 20px;
             text-align: center;
-            box-shadow: 0 20px 50px rgba(0,0,0,0.6);
+            box-shadow: 0 20px 50px rgba(0,0,0,0.7);
         }}
         .brand-badge {{
             display: inline-block;
-            background: rgba(20, 90, 177, 0.25);
-            border: 1px solid rgba(20, 90, 177, 0.5);
-            color: #4da3ff;
+            background: rgba(11, 61, 145, 0.4);
+            border: 1px solid rgba(59, 130, 246, 0.6);
+            color: #60a5fa;
             padding: 6px 14px;
             border-radius: 999px;
             font-size: 13px;
@@ -422,23 +447,30 @@ def story_share_view(request, clip_id):
             margin-bottom: 14px;
         }}
         .headline {{
-            font-size: 18px;
+            font-size: 19px;
             font-weight: 800;
             line-height: 1.45;
             margin-bottom: 14px;
             color: #ffffff;
             word-break: break-word;
         }}
+        .clipping-link {{
+            display: block;
+            text-decoration: none;
+            margin-bottom: 16px;
+        }}
         .clipping-img {{
             width: 100%;
-            max-height: 380px;
+            max-height: 420px;
             object-fit: contain;
             border-radius: 12px;
-            border: 1px solid rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.15);
             background: #050b14;
-            margin-bottom: 16px;
-            cursor: pointer;
             display: block;
+            transition: transform 0.2s ease;
+        }}
+        .clipping-img:active {{
+            transform: scale(0.98);
         }}
         .btn {{
             display: flex;
@@ -446,29 +478,35 @@ def story_share_view(request, clip_id):
             justify-content: center;
             gap: 8px;
             width: 100%;
-            padding: 14px;
+            padding: 15px;
             border-radius: 12px;
             text-decoration: none;
-            font-weight: 700;
-            font-size: 15px;
-            margin-bottom: 10px;
+            font-weight: 800;
+            font-size: 16px;
+            margin-bottom: 12px;
             border: none;
             cursor: pointer;
-            transition: opacity 0.2s;
+            transition: all 0.2s;
         }}
         .btn-app {{
-            background: linear-gradient(135deg, #015BB3 0%, #0284c7 100%);
+            background: linear-gradient(135deg, #0B3D91 0%, #2563EB 100%);
             color: #ffffff !important;
-            box-shadow: 0 4px 14px rgba(1, 91, 179, 0.4);
+            box-shadow: 0 6px 20px rgba(37, 99, 235, 0.5);
+            animation: pulse 2s infinite;
+        }}
+        @keyframes pulse {{
+            0% {{ transform: scale(1); box-shadow: 0 0 0 0 rgba(37, 99, 235, 0.7); }}
+            70% {{ transform: scale(1.02); box-shadow: 0 0 0 12px rgba(37, 99, 235, 0); }}
+            100% {{ transform: scale(1); box-shadow: 0 0 0 0 rgba(37, 99, 235, 0); }}
         }}
         .btn-playstore {{
-            background: linear-gradient(135deg, #00875a 0%, #006644 100%);
+            background: linear-gradient(135deg, #047857 0%, #10B981 100%);
             color: #ffffff !important;
-            box-shadow: 0 4px 14px rgba(0, 135, 90, 0.4);
+            box-shadow: 0 4px 14px rgba(16, 185, 129, 0.4);
         }}
         .footer-text {{
-            font-size: 12px;
-            color: #718096;
+            font-size: 13px;
+            color: #94a3b8;
             margin-top: 10px;
             line-height: 1.4;
         }}
@@ -478,25 +516,232 @@ def story_share_view(request, clip_id):
     <div class="container">
         <div class="brand-badge">⚡ RTI Express Spot News 24x7</div>
         <h1 class="headline">{headline}</h1>
-        {f'<img class="clipping-img" src="{png_url}" alt="News Clipping" onclick="openApp()" />' if png_url else ''}
-        <a href="{scheme_url}" class="btn btn-app" onclick="openApp(); return false;">🚀 యాప్‌లో తెరవండి (Open in App)</a>
+        {f'<a href="{intent_url}" class="clipping-link"><img class="clipping-img" src="{png_url}" alt="News Clipping" /></a>' if png_url else ''}
+        <a href="{intent_url}" class="btn btn-app" id="open-app-btn">🚀 యాప్‌లో నేరుగా తెరవండి (Open in App)</a>
         <a href="{play_store_url}" class="btn btn-playstore" target="_blank" rel="noopener">📥 Google Play నుండి డౌన్‌లోడ్ చేయండి</a>
-        <p class="footer-text">యాప్ మీ ఫోన్‌లో ఇప్పటికే ఉంటే "యాప్‌లో తెరవండి" పై క్లిక్ చేయండి.</p>
+        <p class="footer-text">యాప్‌లో వార్తను ఫుల్ స్క్రీన్‌లో చదవండి. మీ ఫోన్‌లో యాప్ ఉంటే పైన బటన్ నొక్కండి.</p>
     </div>
 
     <script>
-        function openApp() {{
-            window.location.href = "{scheme_url}";
-            setTimeout(function() {{
-                window.location.href = "{intent_url}";
-            }}, 400);
-        }}
-        // If opened on Android device, attempt auto-redirect to app
-        if (/Android/i.test(navigator.userAgent)) {{
-            openApp();
-        }}
+        (function() {{
+            var intentUrl = "{intent_url}";
+            var schemeUrl = "{scheme_url}";
+            
+            // Auto redirect to native intent on Android devices
+            if (/Android/i.test(navigator.userAgent)) {{
+                try {{
+                    window.location.replace(intentUrl);
+                }} catch(e) {{
+                    window.location.href = schemeUrl;
+                }}
+            }}
+        }})();
     </script>
 </body>
 </html>"""
     return HttpResponse(html, content_type="text/html; charset=utf-8")
 
+
+
+@csrf_exempt
+def process_notification_events_view(request):
+    """
+    API endpoint to trigger outbox worker for processing pending clipping approval notification events.
+    """
+    try:
+        from core.services.notification_service import process_notification_events
+        batch_size = int(request.GET.get('batch_size', 20)) if request.method == 'GET' else 20
+        if request.method == 'POST' and request.body:
+            try:
+                data = json.loads(request.body.decode('utf-8'))
+                batch_size = int(data.get('batch_size', batch_size))
+            except Exception:
+                pass
+        result = process_notification_events(batch_size=batch_size)
+        return JsonResponse(result)
+    except Exception as e:
+        logger.error("Error processing notification events: %s", e)
+        return JsonResponse({"error": str(e)}, status=500)
+
+
+@csrf_exempt
+def clipping_share_view(request, clip_id):
+    clean_id = str(clip_id).strip()
+    new_shares = 1
+    try:
+        with connection.cursor() as cursor:
+            cursor.execute('''
+                UPDATE public.clippings
+                SET shares_count = COALESCE(shares_count, 0) + 1
+                WHERE id::text = %s
+                RETURNING COALESCE(shares_count, 1);
+            ''', [clean_id])
+            row = cursor.fetchone()
+            if row:
+                new_shares = row[0]
+        return JsonResponse({"status": "ok", "clipping_id": clean_id, "shares_count": new_shares})
+    except Exception as e:
+        return JsonResponse({"status": "ok", "clipping_id": clean_id, "shares_count": new_shares, "warning": str(e)})
+
+@csrf_exempt
+def reporter_follow_view(request):
+    if request.method != 'POST':
+        return JsonResponse({"error": "POST required"}, status=405)
+    try:
+        data = json.loads(request.body.decode('utf-8')) if request.body else {}
+        reader_id = str(data.get('reader_id', '')).strip()
+        reporter_id = str(data.get('reporter_id', '')).strip()
+        action = str(data.get('action', 'follow')).lower().strip()
+
+        if not reader_id or not reporter_id:
+            return JsonResponse({"error": "reader_id and reporter_id are required"}, status=400)
+
+        with connection.cursor() as cursor:
+            if action == 'unfollow':
+                cursor.execute('''
+                    DELETE FROM public.reporter_follows
+                    WHERE reader_id = %s AND reporter_id = %s;
+                ''', [reader_id, reporter_id])
+            else:
+                cursor.execute('''
+                    INSERT INTO public.reporter_follows (reader_id, reporter_id)
+                    VALUES (%s, %s)
+                    ON CONFLICT (reader_id, reporter_id) DO NOTHING;
+                ''', [reader_id, reporter_id])
+
+            cursor.execute('''
+                SELECT COUNT(*) FROM public.reporter_follows
+                WHERE reporter_id = %s;
+            ''', [reporter_id])
+            cnt_row = cursor.fetchone()
+            followers_count = cnt_row[0] if cnt_row else 0
+
+        return JsonResponse({
+            "status": "ok",
+            "reporter_id": reporter_id,
+            "is_following": action != 'unfollow',
+            "followers_count": followers_count
+        })
+    except Exception as e:
+        return JsonResponse({
+            "status": "ok",
+            "reporter_id": reporter_id,
+            "is_following": action != 'unfollow',
+            "followers_count": 0,
+            "warning": str(e)
+        }, status=200)
+
+@csrf_exempt
+def reporter_stats_view(request, reporter_id):
+    rep_key = str(reporter_id).strip()
+    try:
+        with connection.cursor() as cursor:
+            cursor.execute('''
+                SELECT COUNT(*) FROM public.reporter_follows
+                WHERE reporter_id = %s;
+            ''', [rep_key])
+            f_row = cursor.fetchone()
+            followers = f_row[0] if f_row else 0
+
+            cursor.execute('''
+                SELECT 
+                    COALESCE(SUM(views_count), 0),
+                    COALESCE(SUM(likes_count), 0),
+                    COALESCE(SUM(comments_count), 0),
+                    COALESCE(SUM(shares_count), 0)
+                FROM public.clippings
+                WHERE (user_id::text = %s OR reporter_name = %s)
+                  AND is_posted = true
+                  AND status != 'rejected';
+            ''', [rep_key, rep_key])
+            stats_row = cursor.fetchone()
+            views = stats_row[0] if stats_row else 0
+            likes = stats_row[1] if stats_row else 0
+            comments = stats_row[2] if stats_row else 0
+            shares = stats_row[3] if stats_row else 0
+
+        return JsonResponse({
+            "status": "ok",
+            "reporter_id": rep_key,
+            "followers_count": followers,
+            "total_views": views,
+            "total_likes": likes,
+            "total_comments": comments,
+            "total_shares": shares
+        })
+    except Exception as e:
+        return JsonResponse({
+            "status": "ok",
+            "reporter_id": rep_key,
+            "followers_count": 0,
+            "total_views": 0,
+            "total_likes": 0,
+            "total_comments": 0,
+            "total_shares": 0,
+            "warning": str(e)
+        }, status=200)
+
+@csrf_exempt
+def clipping_comments_view(request, clip_id):
+    clean_id = str(clip_id).strip()
+    if request.method == 'GET':
+        try:
+            with connection.cursor() as cursor:
+                cursor.execute('''
+                    SELECT id, clipping_id, user_id, user_name, text, created_at
+                    FROM public.clipping_comments
+                    WHERE clipping_id::text = %s
+                    ORDER BY created_at ASC;
+                ''', [clean_id])
+                rows = cursor.fetchall()
+                comments = []
+                for r in rows:
+                    comments.append({
+                        "id": str(r[0]),
+                        "clipping_id": str(r[1]),
+                        "user_id": str(r[2]) if r[2] else None,
+                        "user_name": r[3] or "Anonymous",
+                        "text": r[4] or "",
+                        "created_at": r[5].isoformat() if hasattr(r[5], 'isoformat') else str(r[5])
+                    })
+            return JsonResponse({"status": "ok", "comments": comments})
+        except Exception as e:
+            return JsonResponse({"error": str(e), "comments": []}, status=200)
+
+    elif request.method == 'POST':
+        try:
+            data = json.loads(request.body.decode('utf-8')) if request.body else {}
+            user_name = str(data.get('user_name', 'Reader')).strip()[:60]
+            text = str(data.get('text', '')).strip()[:500]
+            user_id = data.get('user_id')
+
+            if not text:
+                return JsonResponse({"error": "Comment text is required"}, status=400)
+
+            with connection.cursor() as cursor:
+                cursor.execute('''
+                    INSERT INTO public.clipping_comments (clipping_id, user_id, user_name, text)
+                    VALUES (%s, %s, %s, %s)
+                    RETURNING id, clipping_id, user_id, user_name, text, created_at;
+                ''', [clean_id, str(user_id) if user_id else None, user_name, text])
+                r = cursor.fetchone()
+
+                cursor.execute('''
+                    UPDATE public.clippings
+                    SET comments_count = COALESCE(comments_count, 0) + 1
+                    WHERE id::text = %s;
+                ''', [clean_id])
+
+            new_comment = {
+                "id": str(r[0]),
+                "clipping_id": str(r[1]),
+                "user_id": str(r[2]) if r[2] else None,
+                "user_name": r[3],
+                "text": r[4],
+                "created_at": r[5].isoformat() if hasattr(r[5], 'isoformat') else str(r[5])
+            }
+            return JsonResponse({"status": "ok", "comment": new_comment})
+        except Exception as e:
+            return JsonResponse({"error": str(e)}, status=500)
+
+    return JsonResponse({"error": "Method not allowed"}, status=405)

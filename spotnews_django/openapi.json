@@ -1,0 +1,1577 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "SpotNews & RTI Express API",
+    "description": "Complete API Contracts for SpotNews / RTI Express backend services. Covers Authentication & OTP, Individual Clippings Generation, Social & Engagement (Shares, Comments, Reporter Follow & Stats), Daily Newspaper (EPaper) Generator, Reporter Payments & Verification, Admin Management, and FCM Push Notifications.",
+    "version": "2.0.0",
+    "contact": {
+      "name": "SpotNews Developer Team",
+      "url": "https://spotnewsv2-ew09.onrender.com"
+    }
+  },
+  "servers": [
+    {
+      "url": "http://127.0.0.1:8000",
+      "description": "Local Django Development Server"
+    },
+    {
+      "url": "https://spotnewsv2-ew09.onrender.com",
+      "description": "Production Render Cloud Backend"
+    }
+  ],
+  "tags": [
+    {
+      "name": "Authentication & OTP",
+      "description": "Phone OTP login, verification, token session, and MSG91 webhooks"
+    },
+    {
+      "name": "Clippings & Generation",
+      "description": "Fast-API style Individual Clipping generation, image upload, and status check"
+    },
+    {
+      "name": "Social & Engagement",
+      "description": "Clipping shares, comments, reporter follower tracking, stats, and Way2News rich previews"
+    },
+    {
+      "name": "Daily Newspaper (EPaper)",
+      "description": "Broadsheet RTI Express multi-page PDF generator, previews, and edition downloads"
+    },
+    {
+      "name": "Reporter Payments & Verification",
+      "description": "Razorpay order creation, payment verification, reporter approval SMS, and status"
+    },
+    {
+      "name": "Admin Operations",
+      "description": "Admin dashboard statistics, user management (role, plan, ban, delete), logos, and generation history"
+    },
+    {
+      "name": "Push Notifications",
+      "description": "FCM HTTP v1 broadcast, event processing, and device token management"
+    },
+    {
+      "name": "Health & System",
+      "description": "System health checks, MSG91 status, and Android App Links assetlinks.json"
+    }
+  ],
+  "paths": {
+    "/api/v1/auth/send-otp": {
+      "post": {
+        "tags": [
+          "Authentication & OTP"
+        ],
+        "summary": "Send Phone OTP",
+        "description": "Sends an OTP via SMS or WhatsApp to the specified phone number via MSG91.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "phone"
+                ],
+                "properties": {
+                  "phone": {
+                    "type": "string",
+                    "example": "+919876543210",
+                    "description": "Phone number with country code"
+                  },
+                  "channel": {
+                    "type": "string",
+                    "enum": [
+                      "sms",
+                      "whatsapp"
+                    ],
+                    "default": "sms",
+                    "description": "Delivery channel"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OTP sent successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "OTP sent successfully"
+                    },
+                    "channel": {
+                      "type": "string",
+                      "example": "sms"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid phone number or parameters"
+          },
+          "500": {
+            "description": "Failed to send OTP via MSG91"
+          }
+        }
+      }
+    },
+    "/api/v1/auth/verify-otp": {
+      "post": {
+        "tags": [
+          "Authentication & OTP"
+        ],
+        "summary": "Verify OTP & Authenticate",
+        "description": "Verifies the 4 or 6 digit OTP. On success, creates or returns the user profile, session token, and registers device token.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "phone",
+                  "otp"
+                ],
+                "properties": {
+                  "phone": {
+                    "type": "string",
+                    "example": "+919876543210"
+                  },
+                  "otp": {
+                    "type": "string",
+                    "example": "1234"
+                  },
+                  "device_token": {
+                    "type": "string",
+                    "description": "FCM device token for push notifications"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Authenticated successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "token": {
+                      "type": "string",
+                      "example": "jwt-or-session-token"
+                    },
+                    "user": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "example": "usr_abc123"
+                        },
+                        "phone": {
+                          "type": "string",
+                          "example": "+919876543210"
+                        },
+                        "role": {
+                          "type": "string",
+                          "example": "reporter"
+                        },
+                        "name": {
+                          "type": "string",
+                          "example": "Ravi Kumar"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid or expired OTP"
+          }
+        }
+      }
+    },
+    "/api/v1/auth/resend-otp": {
+      "post": {
+        "tags": [
+          "Authentication & OTP"
+        ],
+        "summary": "Resend OTP",
+        "description": "Triggers OTP resend for a given phone number.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "phone"
+                ],
+                "properties": {
+                  "phone": {
+                    "type": "string",
+                    "example": "+919876543210"
+                  },
+                  "retrytype": {
+                    "type": "string",
+                    "enum": [
+                      "text",
+                      "voice"
+                    ],
+                    "default": "text"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OTP resent successfully"
+          }
+        }
+      }
+    },
+    "/api/v1/auth/me": {
+      "get": {
+        "tags": [
+          "Authentication & OTP"
+        ],
+        "summary": "Get Current User Profile",
+        "description": "Returns current logged in user details, role, district, and status.",
+        "responses": {
+          "200": {
+            "description": "User profile details"
+          },
+          "401": {
+            "description": "Unauthenticated"
+          }
+        }
+      }
+    },
+    "/api/v1/auth/logout": {
+      "post": {
+        "tags": [
+          "Authentication & OTP"
+        ],
+        "summary": "Logout",
+        "description": "Terminates current session token and unregisters device token.",
+        "responses": {
+          "200": {
+            "description": "Logged out successfully"
+          }
+        }
+      }
+    },
+    "/api/v1/generate": {
+      "post": {
+        "tags": [
+          "Clippings & Generation"
+        ],
+        "summary": "Create Newspaper Clipping",
+        "description": "Generates a styled newspaper clipping graphic from article headline, content, image, district, and logo.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "headline",
+                  "content"
+                ],
+                "properties": {
+                  "headline": {
+                    "type": "string",
+                    "example": "చేగొండపల్లిలో అరుణకు జగదీశ్వరి మద్దతు"
+                  },
+                  "content": {
+                    "type": "string",
+                    "example": "పోలవరం మండలం చేగొండపల్లి గ్రామ పంచాయతీ ఎన్నికల్లో..."
+                  },
+                  "image_url": {
+                    "type": "string",
+                    "format": "uri",
+                    "example": "https://example.com/photo.jpg"
+                  },
+                  "district": {
+                    "type": "string",
+                    "example": "Sri Sathya Sai"
+                  },
+                  "category": {
+                    "type": "string",
+                    "example": "రాజకీయాలు"
+                  },
+                  "reporter_name": {
+                    "type": "string",
+                    "example": "User 3939"
+                  },
+                  "logo_id": {
+                    "type": "string",
+                    "example": "rti_express"
+                  }
+                }
+              }
+            },
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "headline",
+                  "content"
+                ],
+                "properties": {
+                  "headline": {
+                    "type": "string"
+                  },
+                  "content": {
+                    "type": "string"
+                  },
+                  "image": {
+                    "type": "string",
+                    "format": "binary"
+                  },
+                  "district": {
+                    "type": "string"
+                  },
+                  "category": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Clipping generated successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "example": "clip_abc123"
+                    },
+                    "image_url": {
+                      "type": "string",
+                      "example": "https://rffrqokpnqoycpozrjuc.supabase.co/storage/v1/object/public/newscraft/clippings/clip_abc123.jpg"
+                    },
+                    "status": {
+                      "type": "string",
+                      "example": "completed"
+                    },
+                    "created_at": {
+                      "type": "string",
+                      "format": "date-time"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid input parameters"
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "Clippings & Generation"
+        ],
+        "summary": "List Generated Clippings",
+        "description": "Retrieves recent generated clippings with pagination, district filter, and status.",
+        "parameters": [
+          {
+            "name": "district",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "description": "Filter by district"
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "default": 20
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "default": 0
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "List of clippings",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "count": {
+                      "type": "integer"
+                    },
+                    "results": {
+                      "type": "array",
+                      "items": {
+                        "type": "object"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/generate/{clipping_id}": {
+      "get": {
+        "tags": [
+          "Clippings & Generation"
+        ],
+        "summary": "Get Clipping Details & Status",
+        "parameters": [
+          {
+            "name": "clipping_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Clipping status and rendered media URL"
+          },
+          "404": {
+            "description": "Clipping not found"
+          }
+        }
+      }
+    },
+    "/api/v1/uploads/image": {
+      "post": {
+        "tags": [
+          "Clippings & Generation"
+        ],
+        "summary": "Upload Image",
+        "description": "Uploads raw photo to Supabase storage bucket and returns CDN public URL.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "file"
+                ],
+                "properties": {
+                  "file": {
+                    "type": "string",
+                    "format": "binary"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Image uploaded successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "url": {
+                      "type": "string",
+                      "example": "https://rffrqokpnqoycpozrjuc.supabase.co/storage/v1/object/public/newscraft/uploads/img_123.jpg"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/clippings/{clip_id}/share": {
+      "post": {
+        "tags": [
+          "Social & Engagement"
+        ],
+        "summary": "Increment Clipping Share Count",
+        "description": "Atomically records a share event for the clipping and increments total share metric in Supabase.",
+        "parameters": [
+          {
+            "name": "clip_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Share recorded successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "clip_id": {
+                      "type": "string"
+                    },
+                    "shares": {
+                      "type": "integer",
+                      "example": 14
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/reporter/follow": {
+      "post": {
+        "tags": [
+          "Social & Engagement"
+        ],
+        "summary": "Follow / Unfollow Reporter",
+        "description": "Toggles or updates follower relationship between the authenticated user and a news reporter.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "reporter_id",
+                  "user_id"
+                ],
+                "properties": {
+                  "reporter_id": {
+                    "type": "string",
+                    "example": "rep_789"
+                  },
+                  "user_id": {
+                    "type": "string",
+                    "example": "usr_456"
+                  },
+                  "action": {
+                    "type": "string",
+                    "enum": [
+                      "follow",
+                      "unfollow",
+                      "toggle"
+                    ],
+                    "default": "toggle"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Follower state updated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "is_following": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "followers_count": {
+                      "type": "integer",
+                      "example": 128
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/reporter/{reporter_id}/stats": {
+      "get": {
+        "tags": [
+          "Social & Engagement"
+        ],
+        "summary": "Get Reporter Statistics",
+        "description": "Fetches aggregated engagement stats for a reporter: total views, comments, likes, shares, followers, and redeem balance.",
+        "parameters": [
+          {
+            "name": "reporter_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Reporter statistics",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "reporter_id": {
+                      "type": "string"
+                    },
+                    "views": {
+                      "type": "integer",
+                      "example": 4520
+                    },
+                    "likes": {
+                      "type": "integer",
+                      "example": 320
+                    },
+                    "comments": {
+                      "type": "integer",
+                      "example": 89
+                    },
+                    "shares": {
+                      "type": "integer",
+                      "example": 142
+                    },
+                    "followers": {
+                      "type": "integer",
+                      "example": 78
+                    },
+                    "redeem_points": {
+                      "type": "number",
+                      "example": 450.0
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/clippings/{clip_id}/comments": {
+      "get": {
+        "tags": [
+          "Social & Engagement"
+        ],
+        "summary": "Get Comments on Clipping",
+        "parameters": [
+          {
+            "name": "clip_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "List of comments",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "comments": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "user_id": {
+                            "type": "string"
+                          },
+                          "user_name": {
+                            "type": "string"
+                          },
+                          "comment": {
+                            "type": "string"
+                          },
+                          "created_at": {
+                            "type": "string",
+                            "format": "date-time"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Social & Engagement"
+        ],
+        "summary": "Add Comment to Clipping",
+        "parameters": [
+          {
+            "name": "clip_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "user_id",
+                  "comment"
+                ],
+                "properties": {
+                  "user_id": {
+                    "type": "string",
+                    "example": "usr_123"
+                  },
+                  "user_name": {
+                    "type": "string",
+                    "example": "Venkatesh"
+                  },
+                  "comment": {
+                    "type": "string",
+                    "example": "చాలా మంచి వార్త!"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Comment added successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "comment_id": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/n/{clip_id}": {
+      "get": {
+        "tags": [
+          "Social & Engagement"
+        ],
+        "summary": "Rich Card Preview & App Intent Launcher",
+        "description": "Way2News-style dynamic OpenGraph HTML card that automatically triggers the SpotNews Android App intent (`spotnews://clipping/{id}`) or displays rich web preview if not installed.",
+        "parameters": [
+          {
+            "name": "clip_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "HTML page with OpenGraph metadata and Android App intent redirect",
+            "content": {
+              "text/html": {}
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/daily-newspaper/clippings": {
+      "get": {
+        "tags": [
+          "Daily Newspaper (EPaper)"
+        ],
+        "summary": "Get Eligible Clippings for Newspaper Edition",
+        "description": "Fetches verified published clippings eligible for daily broadsheet newspaper generation.",
+        "parameters": [
+          {
+            "name": "date",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "date"
+            },
+            "description": "Date YYYY-MM-DD"
+          },
+          {
+            "name": "district",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "List of clippings eligible for inclusion"
+          }
+        }
+      }
+    },
+    "/api/v1/admin/daily-newspaper/preview": {
+      "post": {
+        "tags": [
+          "Daily Newspaper (EPaper)"
+        ],
+        "summary": "Preview Daily Newspaper HTML Layout",
+        "description": "Generates a real-time HTML preview of the RTI Express multi-page broadsheet newspaper without compiling to PDF.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "edition_date": {
+                    "type": "string",
+                    "example": "2026-11-23"
+                  },
+                  "selected_clipping_ids": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Preview HTML generated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "html": {
+                      "type": "string"
+                    },
+                    "page_count": {
+                      "type": "integer"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/daily-newspaper/generate": {
+      "post": {
+        "tags": [
+          "Daily Newspaper (EPaper)"
+        ],
+        "summary": "Compile & Generate Broadsheet Newspaper PDF",
+        "description": "Compiles the immutable RTI Express broadsheet layout into a high-resolution, print-ready PDF and stores it in Supabase.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "edition_date": {
+                    "type": "string",
+                    "example": "2026-11-23"
+                  },
+                  "selected_clipping_ids": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "PDF generated successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "pdf_url": {
+                      "type": "string",
+                      "format": "uri"
+                    },
+                    "edition_id": {
+                      "type": "string"
+                    },
+                    "filename": {
+                      "type": "string"
+                    },
+                    "page_count": {
+                      "type": "integer"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/daily-newspaper/editions": {
+      "get": {
+        "tags": [
+          "Daily Newspaper (EPaper)"
+        ],
+        "summary": "List Generated Newspaper Editions",
+        "responses": {
+          "200": {
+            "description": "List of past PDF editions with dates and download links"
+          }
+        }
+      }
+    },
+    "/api/editions/{filename}": {
+      "get": {
+        "tags": [
+          "Daily Newspaper (EPaper)"
+        ],
+        "summary": "Serve Newspaper Edition PDF",
+        "parameters": [
+          {
+            "name": "filename",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Binary PDF file stream",
+            "content": {
+              "application/pdf": {}
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/reporter/payment/config": {
+      "get": {
+        "tags": [
+          "Reporter Payments & Verification"
+        ],
+        "summary": "Get Razorpay Payment Configuration",
+        "description": "Returns public Razorpay Key ID and subscription fee amount for reporter ID card & verification.",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "key_id": {
+                      "type": "string",
+                      "example": "rzp_live_abc123"
+                    },
+                    "amount": {
+                      "type": "integer",
+                      "example": 99900,
+                      "description": "Amount in paise (999.00 INR)"
+                    },
+                    "currency": {
+                      "type": "string",
+                      "example": "INR"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/reporter/payment/create-order": {
+      "post": {
+        "tags": [
+          "Reporter Payments & Verification"
+        ],
+        "summary": "Create Razorpay Order",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "user_id"
+                ],
+                "properties": {
+                  "user_id": {
+                    "type": "string"
+                  },
+                  "amount": {
+                    "type": "integer",
+                    "default": 99900
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "order_id": {
+                      "type": "string",
+                      "example": "order_EKfLwpZbfSCaqK"
+                    },
+                    "amount": {
+                      "type": "integer"
+                    },
+                    "currency": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/reporter/payment/verify": {
+      "post": {
+        "tags": [
+          "Reporter Payments & Verification"
+        ],
+        "summary": "Verify Razorpay Payment Signature",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "razorpay_order_id",
+                  "razorpay_payment_id",
+                  "razorpay_signature"
+                ],
+                "properties": {
+                  "razorpay_order_id": {
+                    "type": "string"
+                  },
+                  "razorpay_payment_id": {
+                    "type": "string"
+                  },
+                  "razorpay_signature": {
+                    "type": "string"
+                  },
+                  "user_id": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Payment verified and reporter status activated"
+          }
+        }
+      }
+    },
+    "/api/v1/reporter/payment/status": {
+      "get": {
+        "tags": [
+          "Reporter Payments & Verification"
+        ],
+        "summary": "Check Reporter Verification Status",
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "verified": {
+                      "type": "boolean"
+                    },
+                    "payment_status": {
+                      "type": "string"
+                    },
+                    "reporter_card_url": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/reporter/send-approval-sms": {
+      "post": {
+        "tags": [
+          "Reporter Payments & Verification"
+        ],
+        "summary": "Send Reporter Approval Notification SMS",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "phone"
+                ],
+                "properties": {
+                  "phone": {
+                    "type": "string"
+                  },
+                  "reporter_name": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Approval SMS dispatched via MSG91"
+          }
+        }
+      }
+    },
+    "/api/v1/admin/stats": {
+      "get": {
+        "tags": [
+          "Admin Operations"
+        ],
+        "summary": "Get Admin Overview Statistics",
+        "description": "Returns counts of users, active reporters, total clippings, today's views, shares, and pending verifications.",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "total_users": {
+                      "type": "integer"
+                    },
+                    "total_reporters": {
+                      "type": "integer"
+                    },
+                    "total_clippings": {
+                      "type": "integer"
+                    },
+                    "today_views": {
+                      "type": "integer"
+                    },
+                    "today_shares": {
+                      "type": "integer"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/auth-users": {
+      "get": {
+        "tags": [
+          "Admin Operations"
+        ],
+        "summary": "List All Registered Users",
+        "parameters": [
+          {
+            "name": "role",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "search",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "List of user accounts"
+          }
+        }
+      }
+    },
+    "/api/v1/admin/users/{user_id}/role": {
+      "post": {
+        "tags": [
+          "Admin Operations"
+        ],
+        "summary": "Change User Role",
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "role"
+                ],
+                "properties": {
+                  "role": {
+                    "type": "string",
+                    "enum": [
+                      "user",
+                      "reporter",
+                      "editor",
+                      "admin"
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Role updated successfully"
+          }
+        }
+      }
+    },
+    "/api/v1/admin/users/{user_id}/ban": {
+      "post": {
+        "tags": [
+          "Admin Operations"
+        ],
+        "summary": "Ban / Unban User",
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "User ban status toggled"
+          }
+        }
+      }
+    },
+    "/api/v1/admin/users/{user_id}": {
+      "delete": {
+        "tags": [
+          "Admin Operations"
+        ],
+        "summary": "Delete User Account",
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "User permanently deleted"
+          }
+        }
+      }
+    },
+    "/api/v1/admin/logos": {
+      "get": {
+        "tags": [
+          "Admin Operations"
+        ],
+        "summary": "List All Publication Logos",
+        "responses": {
+          "200": {
+            "description": "List of publication logos (RTI Express, etc.)"
+          }
+        }
+      }
+    },
+    "/api/v1/admin/logos/active": {
+      "get": {
+        "tags": [
+          "Admin Operations"
+        ],
+        "summary": "Get Active Publication Logo",
+        "responses": {
+          "200": {
+            "description": "Active publication logo metadata and image URL"
+          }
+        }
+      }
+    },
+    "/api/v1/admin/generations": {
+      "get": {
+        "tags": [
+          "Admin Operations"
+        ],
+        "summary": "List Admin Generation History",
+        "responses": {
+          "200": {
+            "description": "Recent image & clipping generations across all users"
+          }
+        }
+      }
+    },
+    "/api/v1/notifications/send": {
+      "post": {
+        "tags": [
+          "Push Notifications"
+        ],
+        "summary": "Send Push Notification via FCM HTTP v1",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "title",
+                  "body"
+                ],
+                "properties": {
+                  "title": {
+                    "type": "string",
+                    "example": "ముఖ్యమైన వార్త: RTI Express"
+                  },
+                  "body": {
+                    "type": "string",
+                    "example": "చేగొండపల్లి ఎన్నికల ప్రచారం వివరాలు చదవండి..."
+                  },
+                  "district": {
+                    "type": "string",
+                    "description": "Target district or broadcast to all"
+                  },
+                  "clipping_id": {
+                    "type": "string",
+                    "description": "ID to open when notification is clicked"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Notification broadcast initiated"
+          }
+        }
+      }
+    },
+    "/api/v1/notifications/process-events": {
+      "post": {
+        "tags": [
+          "Push Notifications"
+        ],
+        "summary": "Process Notification Event Queue",
+        "responses": {
+          "200": {
+            "description": "Notification events processed successfully"
+          }
+        }
+      }
+    },
+    "/api/v1/notifications/tokens": {
+      "get": {
+        "tags": [
+          "Push Notifications"
+        ],
+        "summary": "Get Registered Device Tokens Count",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "total_devices": {
+                      "type": "integer"
+                    },
+                    "active_last_24h": {
+                      "type": "integer"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/health": {
+      "get": {
+        "tags": [
+          "Health & System"
+        ],
+        "summary": "Server Health Check",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string",
+                      "example": "healthy"
+                    },
+                    "timestamp": {
+                      "type": "string",
+                      "format": "date-time"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/health/msg91": {
+      "get": {
+        "tags": [
+          "Health & System"
+        ],
+        "summary": "MSG91 SMS Gateway Health Check",
+        "responses": {
+          "200": {
+            "description": "MSG91 credentials and connectivity verified"
+          }
+        }
+      }
+    },
+    "/.well-known/assetlinks.json": {
+      "get": {
+        "tags": [
+          "Health & System"
+        ],
+        "summary": "Android App Links Digital Asset Links",
+        "description": "Serves Android App Links verification JSON for seamless deep linking into the SpotNews app without disambiguation dialogs.",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

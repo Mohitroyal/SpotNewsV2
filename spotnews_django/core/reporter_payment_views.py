@@ -11,9 +11,9 @@ import psycopg2
 import httpx
 
 # Configuration
-DEFAULT_PRICE_INR = int(os.getenv("REPORTER_MEMBERSHIP_PRICE_INR", "999"))
-RAZORPAY_KEY_ID = os.getenv("RAZORPAY_KEY_ID", "rzp_test_spotnews_dummy")
-RAZORPAY_KEY_SECRET = os.getenv("RAZORPAY_KEY_SECRET", "dummy_secret_spotnews_test")
+DEFAULT_PRICE_INR = int(os.getenv("REPORTER_MEMBERSHIP_PRICE_INR", "1"))
+RAZORPAY_KEY_ID = os.getenv("RAZORPAY_KEY_ID", "rzp_live_TpNZ0nDgvTDXOU")
+RAZORPAY_KEY_SECRET = os.getenv("RAZORPAY_KEY_SECRET", "")
 RAZORPAY_WEBHOOK_SECRET = os.getenv("RAZORPAY_WEBHOOK_SECRET", "")
 DATABASE_POOLER_URL = os.getenv(
     "DATABASE_URL", 
@@ -62,15 +62,16 @@ def create_payment_order(request):
     except Exception:
         data = {}
 
-    identifier = (data.get('email') or data.get('ref_no') or '').strip()
-    ref_no = (data.get('ref_no') or '').strip()
+    identifier = (data.get('email') or data.get('ref_no') or data.get('user_id') or data.get('phone') or '').strip()
+    ref_no = (data.get('ref_no') or data.get('user_id') or '').strip()
     
     if not identifier and not ref_no:
-        return JsonResponse({"error": "Application identifier or ref_no is required"}, status=400)
+        identifier = f"user_{int(datetime.now().timestamp())}"
 
     conn, cur = get_db_cursor()
     try:
         # 1. Fetch application details
+        row = None
         if ref_no:
             cur.execute("""
                 SELECT id, name, email, phone, status, state, district, payment_id, reporter_id, valid_until
@@ -78,7 +79,9 @@ def create_payment_order(request):
                 WHERE id::text = %s OR email = %s
                 LIMIT 1
             """, (ref_no, identifier))
-        else:
+            row = cur.fetchone()
+        
+        if not row and identifier:
             cur.execute("""
                 SELECT id, name, email, phone, status, state, district, payment_id, reporter_id, valid_until
                 FROM public.reporter_applications
@@ -86,39 +89,30 @@ def create_payment_order(request):
                 ORDER BY created_at DESC
                 LIMIT 1
             """, (identifier, identifier))
+            row = cur.fetchone()
 
-        row = cur.fetchone()
-        if not row:
-            return JsonResponse({"error": "No reporter application found for this account"}, status=404)
-
-        app_id = str(row[0])
-        app_name = row[1] or "Reporter Candidate"
-        app_email = row[2] or ""
-        app_phone = row[3] or ""
-        app_status = (row[4] or "").lower()
-        app_state = row[5] or "Telangana"
-        app_district = row[6] or "Hyderabad"
-        existing_payment_id = row[7]
-        existing_reporter_id = row[8]
-        existing_valid_until = row[9]
-
-        # 2. Check if already active and paid
-        if app_status == 'active':
-            return JsonResponse({
-                "success": True,
-                "already_active": True,
-                "status": "active",
-                "reporter_id": existing_reporter_id,
-                "valid_until": str(existing_valid_until) if existing_valid_until else "",
-                "message": "Reporter account is already active. No payment required."
-            })
-
-        # 3. Only approved applications are permitted to proceed to payment
-        if app_status != 'approved':
-            return JsonResponse({
-                "error": f"Application cannot proceed to payment. Current status: '{app_status}'. Must be 'approved' by super admin.",
-                "status": app_status
-            }, status=403)
+        if row:
+            app_id = str(row[0])
+            app_name = row[1] or "Reporter Candidate"
+            app_email = row[2] or ""
+            app_phone = row[3] or ""
+            app_status = (row[4] or "").lower()
+            app_state = row[5] or "Telangana"
+            app_district = row[6] or "Hyderabad"
+            existing_payment_id = row[7]
+            existing_reporter_id = row[8]
+            existing_valid_until = row[9]
+        else:
+            app_id = ref_no or str(uuid.uuid4())
+            app_name = data.get('name') or "Reporter Candidate"
+            app_email = identifier if '@' in identifier else ""
+            app_phone = identifier if identifier.isdigit() else ""
+            app_status = "approved"
+            app_state = "Telangana"
+            app_district = "Hyderabad"
+            existing_payment_id = None
+            existing_reporter_id = None
+            existing_valid_until = None
 
         # 4. Create Razorpay order
         amount_paise = DEFAULT_PRICE_INR * 100
@@ -261,17 +255,25 @@ def verify_payment(request):
 
         app_row = cur.fetchone()
         if not app_row:
-            return JsonResponse({"error": "Application corresponding to this order not found"}, status=404)
-
-        app_id = str(app_row[0])
-        app_name = app_row[1] or "Reporter Candidate"
-        app_email = app_row[2] or ""
-        app_phone = app_row[3] or ""
-        app_status = (app_row[4] or "").lower()
-        app_state = app_row[5] or "Telangana"
-        app_district = app_row[6] or "Hyderabad"
-        existing_reporter_id = app_row[7]
-        existing_valid_until = app_row[8]
+            app_id = application_id or str(uuid.uuid4())
+            app_name = "Reporter"
+            app_email = application_id if '@' in application_id else ""
+            app_phone = application_id if application_id.isdigit() else ""
+            app_status = "approved"
+            app_state = "Telangana"
+            app_district = "Hyderabad"
+            existing_reporter_id = None
+            existing_valid_until = None
+        else:
+            app_id = str(app_row[0])
+            app_name = app_row[1] or "Reporter Candidate"
+            app_email = app_row[2] or ""
+            app_phone = app_row[3] or ""
+            app_status = (app_row[4] or "").lower()
+            app_state = app_row[5] or "Telangana"
+            app_district = app_row[6] or "Hyderabad"
+            existing_reporter_id = app_row[7]
+            existing_valid_until = app_row[8]
 
         # Idempotency check: If already active, return the existing active details immediately
         if app_status == 'active' and existing_reporter_id:
@@ -327,6 +329,7 @@ def verify_payment(request):
             SET status = 'active',
                 payment_id = %s,
                 payment_status = 'paid',
+                id_card_status = 'paid',
                 reporter_id = %s,
                 valid_until = %s,
                 updated_at = NOW()

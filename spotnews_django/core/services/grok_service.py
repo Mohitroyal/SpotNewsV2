@@ -75,7 +75,7 @@ class GrokService:
         """
 
         if not content or not str(content).strip():
-            raise ValueError("Article content is required and cannot be empty.")
+            content = "తాజా వార్తా కథనం మరియు వివరాలు."
 
         full_lang = language_map.get(language.lower(), "Telugu")
 

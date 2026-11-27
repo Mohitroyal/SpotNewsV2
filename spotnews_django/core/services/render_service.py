@@ -441,6 +441,26 @@ class RenderService:
 
             video_url = data.get("video_url") or data.get("videoUrl")
 
+        if "exact_location" not in data or not data["exact_location"]:
+            try:
+                from ..location_helper import extract_exact_location
+                data["exact_location"] = extract_exact_location(data)
+            except Exception:
+                pass
+        if "raw_logo_data_uri" not in data or not data["raw_logo_data_uri"]:
+            try:
+                from ..location_helper import RAW_LOGO_DATA_URI
+                data["raw_logo_data_uri"] = RAW_LOGO_DATA_URI
+            except Exception:
+                pass
+        if "publication_time" not in data or not data["publication_time"]:
+            try:
+                from datetime import datetime, timedelta
+                now_ist = datetime.utcnow() + timedelta(hours=5, minutes=30)
+                data["publication_time"] = now_ist.strftime("%I:%M %p")
+            except Exception:
+                pass
+
             if video_url:
 
                 try:
@@ -744,6 +764,26 @@ class RenderService:
         data_tid = str(data.get("template_id") or "").lower().strip()
 
         video_url = data.get("video_url") or data.get("videoUrl")
+
+        if "exact_location" not in data or not data["exact_location"]:
+            try:
+                from ..location_helper import extract_exact_location
+                data["exact_location"] = extract_exact_location(data)
+            except Exception:
+                pass
+        if "raw_logo_data_uri" not in data or not data["raw_logo_data_uri"]:
+            try:
+                from ..location_helper import RAW_LOGO_DATA_URI
+                data["raw_logo_data_uri"] = RAW_LOGO_DATA_URI
+            except Exception:
+                pass
+        if "publication_time" not in data or not data["publication_time"]:
+            try:
+                from datetime import datetime, timedelta
+                now_ist = datetime.utcnow() + timedelta(hours=5, minutes=30)
+                data["publication_time"] = now_ist.strftime("%I:%M %p")
+            except Exception:
+                pass
 
         
 

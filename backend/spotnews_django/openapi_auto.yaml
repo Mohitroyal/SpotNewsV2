@@ -1,0 +1,9 @@
+openapi: 3.0.3
+info:
+  title: SpotNews & RTI Express API
+  version: 2.0.0
+  description: Complete API Contracts for SpotNews / RTI Express backend services
+    including Authentication, Clippings Generation, Social & Engagement (shares, comments,
+    reporter stats), Newspaper Generator, Reporter Verification, and Notifications.
+paths: {}
+components: {}
