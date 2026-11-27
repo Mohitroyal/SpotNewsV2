@@ -282,11 +282,8 @@ def run_clipping_generation_background(clipping_id, data, user_id):
 
 
                 if total_imgs <= 1 and not is_custom_template:
-
-                    if template_id in ["pattern_b", "hero-image", "hero_image", "classic"] or "patternb" in normalized_id:
-
+                    if template_id not in ["bharath_reporter", "national_news"]:
                         template_id = "pattern_b"
-
                         resolved_image_layout = "pattern_b"
 
 
