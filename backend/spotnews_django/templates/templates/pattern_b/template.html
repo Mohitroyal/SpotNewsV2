@@ -55,14 +55,16 @@
             bottom: 0;
             left: 0;
             right: 0;
-            min-height: 70px;
-            background: linear-gradient(to top, rgba(0,0,0,0.92) 0%, rgba(0,0,0,0.60) 65%, rgba(0,0,0,0) 100%);
+            min-height: 64px;
+            background: linear-gradient(180deg, rgba(8,16,32,0.72) 0%, rgba(4,8,18,0.92) 100%);
             display: flex;
             align-items: center;
             justify-content: space-between;
-            padding: 12px 16px;
+            padding: 8px 14px;
             box-sizing: border-box;
             z-index: 2;
+            backdrop-filter: blur(8px);
+            -webkit-backdrop-filter: blur(8px);
         }
         .reporter-badge {
             display: flex;
@@ -75,26 +77,24 @@
             width: 44px;
             height: 44px;
             border-radius: 50%;
-            border: 2px solid #FFFFFF;
+            box-shadow: 0 0 0 1.5px #FFD54A, 0 0 0 3px rgba(225,29,46,.9);
             object-fit: cover;
             display: block;
-            box-shadow: 0 2px 6px rgba(0,0,0,0.4);
-            background: #333333;
+            background: #0B4EA2;
             flex-shrink: 0;
         }
         .reporter-avatar-fallback {
             width: 44px;
             height: 44px;
             border-radius: 50%;
-            border: 2px solid #FFFFFF;
+            box-shadow: 0 0 0 1.5px #FFD54A, 0 0 0 3px rgba(225,29,46,.9);
             display: flex;
             align-items: center;
             justify-content: center;
-            background: linear-gradient(135deg, #1d70b8, #0f3d68);
+            background: #0B4EA2;
             color: #FFFFFF;
-            font-size: 18px;
-            font-weight: 700;
-            box-shadow: 0 2px 6px rgba(0,0,0,0.4);
+            font-size: 17px;
+            font-weight: 900;
             flex-shrink: 0;
         }
         .reporter-meta {
@@ -102,70 +102,105 @@
             flex-direction: column;
             justify-content: center;
             overflow: hidden;
-            gap: 2px;
+            gap: 1px;
+        }
+        .reported-by-tag {
+            font-size: 10px;
+            font-weight: 800;
+            letter-spacing: 0.6px;
+            text-transform: uppercase;
+            color: rgba(255, 255, 255, 0.92);
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            line-height: 1.1;
+        }
+        .reported-by-tag svg {
+            width: 11px;
+            height: 11px;
+            color: #FFD54A;
+            flex-shrink: 0;
+        }
+        .reporter-name-row {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            line-height: 1.2;
         }
         .reporter-name {
-            font-size: 15px;
-            font-weight: 700;
+            font-size: 16px;
+            font-weight: 900;
             color: #FFFFFF;
             font-family: 'Noto Sans Telugu', 'Inter', sans-serif;
-            line-height: 1.2;
-            text-shadow: 0 1px 3px rgba(0,0,0,0.8);
+            text-shadow: 0 1px 3px rgba(0,0,0,0.9);
             white-space: nowrap;
             overflow: hidden;
             text-overflow: ellipsis;
         }
+        .verified-badge {
+            width: 15px;
+            height: 15px;
+            flex-shrink: 0;
+            display: inline-block;
+        }
         .reporter-date-time {
             font-size: 11px;
-            font-weight: 500;
-            color: rgba(255, 255, 255, 0.88);
-            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            font-weight: 700;
+            color: rgba(255, 255, 255, 0.9);
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
             line-height: 1.2;
             text-shadow: 0 1px 2px rgba(0,0,0,0.8);
             white-space: nowrap;
             overflow: hidden;
             text-overflow: ellipsis;
-            letter-spacing: 0.2px;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+        .reporter-divider {
+            height: 38px;
+            width: 1px;
+            background: rgba(255, 255, 255, 0.25);
+            margin: 0 10px;
+            flex-shrink: 0;
         }
         .channel-logo-badge {
             display: flex;
-            align-items: center;
-            justify-content: flex-end;
-            height: 44px;
-            max-width: 160px;
+            flex-direction: column;
+            align-items: flex-end;
+            justify-content: center;
+            gap: 2px;
             flex-shrink: 0;
-            margin-left: 12px;
+            max-width: 180px;
         }
-        .channel-logo-badge svg {
-            height: 42px;
-            width: 120px;
-            max-width: 150px;
-            display: block;
-            filter: drop-shadow(0 2px 5px rgba(0,0,0,0.7));
-        }
-        .channel-logo-badge img {
-            max-height: 42px;
-            max-width: 150px;
+        .channel-logo-img {
+            height: 25px;
             width: auto;
-            height: auto;
+            max-width: 160px;
             object-fit: contain;
             display: block;
-            border-radius: 3px;
-            filter: drop-shadow(0 2px 5px rgba(0,0,0,0.7));
+            border-radius: 2px;
+            filter: drop-shadow(0 2px 4px rgba(0,0,0,0.8));
         }
-        .channel-logo-badge .overlay-logo-text {
-            font-size: 14px;
-            font-weight: 800;
-            color: #FFFFFF;
-            text-transform: uppercase;
-            letter-spacing: 0.8px;
-            padding: 5px 10px;
-            background: rgba(0, 0, 0, 0.65);
-            border: 1px solid rgba(255, 255, 255, 0.35);
-            border-radius: 5px;
-            text-shadow: 0 1px 3px rgba(0,0,0,0.8);
-            box-shadow: 0 2px 6px rgba(0,0,0,0.4);
+        .location-badge {
+            display: flex;
+            align-items: center;
+            gap: 3px;
+            font-size: 11.5px;
+            font-weight: 900;
+            color: #FFD54A;
+            font-family: 'Noto Sans Telugu', 'Inter', sans-serif;
+            line-height: 1.2;
+            text-shadow: 0 1px 3px rgba(0,0,0,0.9);
+            max-width: 170px;
             white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .location-badge .pin {
+            color: #EF4444;
+            font-size: 12px;
+            flex-shrink: 0;
         }
         .article-content {
             padding: 22px 20px 24px 20px;
@@ -266,8 +301,6 @@
             
             
             <div class="image-overlay">
-                
-
                 <!-- Bottom Left: Reporter Avatar, Name & Date/Time -->
                 <div class="reporter-badge">
                     {% if reporter_image %}
@@ -278,26 +311,48 @@
                         </div>
                     {% endif %}
                     <div class="reporter-meta">
-                        <span class="reporter-name">{{ reporter_name if reporter_name else 'Mohithroyal Pokkala' }}</span>
-                        <span class="reporter-date-time">{{ publication_date_time if publication_date_time else (publication_date if publication_date else '05 Sep 2026 | 05:45 PM') }}</span>
+                        <div class="reported-by-tag">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="#FFD54A" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/>
+                                <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
+                                <line x1="12" x2="12" y1="19" y2="22"/>
+                            </svg>
+                            <span>REPORTED BY</span>
+                        </div>
+                        <div class="reporter-name-row">
+                            <span class="reporter-name">{{ reporter_name if reporter_name else 'RTI Express Reporter' }}</span>
+                            <svg class="verified-badge" viewBox="0 0 24 24" fill="#0284C7" stroke="#FFFFFF" stroke-width="2">
+                                <path d="M12 2l2.4 2.4 3.4-.4 1.4 3.1 3.1 1.4-.4 3.4L24 14.3l-2.1 2.7.4 3.4-3.4 1-1.8 2.9-3.1-1.4-3.1 1.4-1.8-2.9-3.4-1 .4-3.4L0 14.3l2.1-2.4-.4-3.4 3.1-1.4 1.4-3.1 3.4.4L12 2z"/>
+                                <path d="m9 12 2 2 4-4" stroke="#FFFFFF" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+                            </svg>
+                        </div>
+                        <div class="reporter-date-time">
+                            <span>📅 {{ publication_date }}</span>
+                            {% if publication_time %}
+                            <span style="opacity: 0.5;">|</span>
+                            <span>🕒 {{ publication_time }}</span>
+                            {% endif %}
+                        </div>
                     </div>
                 </div>
 
+                <!-- Vertical Divider -->
+                <div class="reporter-divider"></div>
+
                 <!-- Bottom Right: User-Chosen Publication/Channel Logo -->
                 <div class="channel-logo-badge">
-                    {% set current_logo = (logo_id if logo_id else (template_id if template_id else 'rti_express'))|lower %}
-                    {% if 'bharath' in current_logo %}
-                        {% include 'bharath_reporter/logo.svg' %}
-                    {% elif 'national' in current_logo %}
-                        {% include 'national_news/logo.svg' %}
-                    {% elif 'rti' in current_logo %}
-                        {% include 'rti_express/logo.svg' %}
+                    {% if raw_logo_data_uri %}
+                        <img src="{{ raw_logo_data_uri }}" alt="RTI Express" class="channel-logo-img" />
                     {% elif logo_url and 'localhost' not in logo_url and '127.0.0.1' not in logo_url %}
-                        <img src="{{ logo_url }}" alt="Logo" class="overlay-logo-img">
-                    {% elif publication_name %}
-                        <span class="overlay-logo-text">{{ publication_name }}</span>
+                        <img src="{{ logo_url }}" alt="Logo" class="channel-logo-img">
                     {% else %}
                         {% include 'rti_express/logo.svg' %}
+                    {% endif %}
+                    {% if exact_location %}
+                    <div class="location-badge">
+                        <span class="pin">📍</span>
+                        <span class="location-text">{{ exact_location }}</span>
+                    </div>
                     {% endif %}
                 </div>
             </div>
@@ -305,47 +360,75 @@
         {% else %}
         <!-- No Image Header Bar (Single Image Feature - No Image Layout) -->
         <div class="no-image-header" style="width: 100%; min-height: 72px; background: #111827; display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; box-sizing: border-box; border-bottom: 3px solid #CC2222;">
-            <div class="reporter-badge">
-                {% if reporter_image %}
-                    <img class="reporter-avatar" src="{{ reporter_image }}" alt="Reporter" />
-                {% else %}
-                    <div class="reporter-avatar-fallback">
-                        {{ (reporter_name[0] if reporter_name else 'R')|upper }}
+                <!-- Bottom Left: Reporter Avatar, Name & Date/Time -->
+                <div class="reporter-badge">
+                    {% if reporter_image %}
+                        <img class="reporter-avatar" src="{{ reporter_image }}" alt="Reporter" />
+                    {% else %}
+                        <div class="reporter-avatar-fallback">
+                            {{ (reporter_name[0] if reporter_name else 'R')|upper }}
+                        </div>
+                    {% endif %}
+                    <div class="reporter-meta">
+                        <div class="reported-by-tag">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="#FFD54A" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/>
+                                <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
+                                <line x1="12" x2="12" y1="19" y2="22"/>
+                            </svg>
+                            <span>REPORTED BY</span>
+                        </div>
+                        <div class="reporter-name-row">
+                            <span class="reporter-name">{{ reporter_name if reporter_name else 'RTI Express Reporter' }}</span>
+                            <svg class="verified-badge" viewBox="0 0 24 24" fill="#0284C7" stroke="#FFFFFF" stroke-width="2">
+                                <path d="M12 2l2.4 2.4 3.4-.4 1.4 3.1 3.1 1.4-.4 3.4L24 14.3l-2.1 2.7.4 3.4-3.4 1-1.8 2.9-3.1-1.4-3.1 1.4-1.8-2.9-3.4-1 .4-3.4L0 14.3l2.1-2.4-.4-3.4 3.1-1.4 1.4-3.1 3.4.4L12 2z"/>
+                                <path d="m9 12 2 2 4-4" stroke="#FFFFFF" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+                            </svg>
+                        </div>
+                        <div class="reporter-date-time">
+                            <span>📅 {{ publication_date }}</span>
+                            {% if publication_time %}
+                            <span style="opacity: 0.5;">|</span>
+                            <span>🕒 {{ publication_time }}</span>
+                            {% endif %}
+                        </div>
                     </div>
-                {% endif %}
-                <div class="reporter-meta">
-                    <span class="reporter-name">{{ reporter_name if reporter_name else 'Mohithroyal Pokkala' }}</span>
-                    <span class="reporter-date-time">{{ publication_date_time if publication_date_time else (publication_date if publication_date else '05 Sep 2026 | 05:45 PM') }}</span>
                 </div>
-            </div>
 
-            <div class="channel-logo-badge">
-                {% set current_logo = (logo_id if logo_id else (template_id if template_id else 'rti_express'))|lower %}
-                {% if 'bharath' in current_logo %}
-                    {% include 'bharath_reporter/logo.svg' %}
-                {% elif 'national' in current_logo %}
-                    {% include 'national_news/logo.svg' %}
-                {% elif 'rti' in current_logo %}
-                    {% include 'rti_express/logo.svg' %}
-                {% elif logo_url and 'localhost' not in logo_url and '127.0.0.1' not in logo_url %}
-                    <img src="{{ logo_url }}" alt="Logo" class="overlay-logo-img">
-                {% elif publication_name %}
-                    <span class="overlay-logo-text">{{ publication_name }}</span>
-                {% else %}
-                    {% include 'rti_express/logo.svg' %}
-                {% endif %}
-            </div>
+                <!-- Vertical Divider -->
+                <div class="reporter-divider"></div>
+
+                <!-- Bottom Right: User-Chosen Publication/Channel Logo -->
+                <div class="channel-logo-badge">
+                    {% if raw_logo_data_uri %}
+                        <img src="{{ raw_logo_data_uri }}" alt="RTI Express" class="channel-logo-img" />
+                    {% elif logo_url and 'localhost' not in logo_url and '127.0.0.1' not in logo_url %}
+                        <img src="{{ logo_url }}" alt="Logo" class="channel-logo-img">
+                    {% else %}
+                        {% include 'rti_express/logo.svg' %}
+                    {% endif %}
+                    {% if exact_location %}
+                    <div class="location-badge">
+                        <span class="pin">📍</span>
+                        <span class="location-text">{{ exact_location }}</span>
+                    </div>
+                    {% endif %}
+                </div>
         </div>
         {% endif %}
 
         <!-- Middle Article Content Section -->
         <div class="article-content">
             <h1 class="article-headline">{{ headline }}</h1>
-            <div class="article-body"><p>{% if sections and sections|length > 0 %}{{ sections | join(' ') | replace('
+            <div class="article-body"><p>{% if sections and sections|length > 0 %}{{ sections | join(' ') | replace('
+
 ', ' ') | replace('
-', ' ') | replace('', ' ') }}{% else %}{{ (article_text if article_text else (raw_content if raw_content else '')) | replace('
 ', ' ') | replace('
-', ' ') | replace('', ' ') }}{% endif %}</p></div>
+', ' ') }}{% else %}{{ (article_text if article_text else (raw_content if raw_content else '')) | replace('
+
+', ' ') | replace('
+', ' ') | replace('
+', ' ') }}{% endif %}</p></div>
         </div>
 
         <!-- Bottom Black Ticker Bar -->

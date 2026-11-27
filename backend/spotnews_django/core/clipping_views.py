@@ -4,7 +4,8 @@ import uuid
 
 import threading
 
-from datetime import datetime
+from datetime import datetime, timedelta
+from .location_helper import extract_exact_location, RAW_LOGO_DATA_URI
 
 from django.http import JsonResponse
 
@@ -294,40 +295,33 @@ def run_clipping_generation_background(clipping_id, data, user_id):
 
 
 
+            now_dt = datetime.utcnow()
             pub_date = data.get("publication_date")
-
             if not pub_date:
+                pub_date = now_dt.strftime("%d %b %Y")
+            pub_time = data.get("publication_time")
+            if not pub_time:
+                ist_dt = now_dt + timedelta(hours=5, minutes=30)
+                pub_time = ist_dt.strftime("%I:%M %p")
 
-                pub_date = datetime.utcnow().strftime("%d %B %Y")
-
-
+            exact_loc = extract_exact_location(data)
 
             render_data = {
-
                 **formatted_data,
-
                 "id": clipping_id,
-
                 "template_id": template_id,
-
                 "show_summary": should_show_summary,
-
                 "article_text": content,
-
                 "raw_content": content,
-
                 "article_content": content,
-
                 "headline": data.get("headline") or formatted_data.get("headline"),
-
                 "subheadline": data.get("subheadline") or formatted_data.get("subheadline", ""),
-
                 "publication_name": data.get("publication_name") or "RTI EXPRESS",
-
                 "publication_date": pub_date,
-
+                "publication_time": pub_time,
+                "exact_location": exact_loc,
+                "raw_logo_data_uri": RAW_LOGO_DATA_URI,
                 "reporter_name": data.get("reporter_name") or "RTI REPORTER",
-
                 "reporter_image": data.get("reporter_image"),
 
                 "image_urls": image_urls,
@@ -826,6 +820,9 @@ def run_clipping_generation_background(clipping_id, data, user_id):
             current_cl['pdf_url'] = pdf_url
             if mp4_url:
                 current_cl['mp4_url'] = mp4_url
+            if exact_loc:
+                current_cl['exact_location'] = exact_loc
+                current_cl['pinpoint'] = exact_loc
 
             try:
                 cursor.execute(
