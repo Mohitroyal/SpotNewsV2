@@ -4267,15 +4267,24 @@ class RenderService:
                         if overlay_png_path:
 
                             try:
-
                                 overlay_loc = page.locator('.image-overlay')
-
                                 if await overlay_loc.count() > 0:
-
+                                    # Temporarily make background transparent for pure RGBA overlay capture
+                                    await page.evaluate("""() => {
+                                        document.querySelectorAll('.hero-img').forEach(el => el.style.visibility = 'hidden');
+                                        const hw = document.querySelector('.hero-image-wrapper');
+                                        if (hw) hw.style.background = 'transparent';
+                                        const nc = document.querySelector('.newspaper-container');
+                                        if (nc) nc.style.background = 'transparent';
+                                    }""")
                                     await overlay_loc.first.screenshot(path=overlay_png_path, omit_background=True)
-
+                                    # Restore visibility
+                                    await page.evaluate("""() => {
+                                        document.querySelectorAll('.hero-img').forEach(el => el.style.visibility = '');
+                                        const nc = document.querySelector('.newspaper-container');
+                                        if (nc) nc.style.background = '#FFFFFF';
+                                    }""")
                             except Exception as oe:
-
                                 print(f"[WARN] Failed to capture overlay png: {oe}")
 
 

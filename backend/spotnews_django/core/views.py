@@ -11,7 +11,7 @@ def health_check(request):
     return JsonResponse({
         "status": "ok",
         "service": "spotnews-django",
-        "version": "v2.69-full-transparent-overlay-and-logo"
+        "version": "v2.69-glassmorphic-full-transparent-overlay"
     })
 
 def health_msg91(request):
