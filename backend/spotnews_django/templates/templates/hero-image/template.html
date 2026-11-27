@@ -47,7 +47,7 @@
             width: 100%;
             height: 100%;
             object-fit: cover;
-            object-position: center 30%;
+            object-position: center center;
             display: block;
         }
         .image-overlay {
@@ -55,19 +55,19 @@
             bottom: 0;
             left: 0;
             right: 0;
-            min-height: 52px;
-            background: linear-gradient(180deg, rgba(0, 0, 0, 0) 0%, rgba(10, 25, 47, 0.45) 30%, rgba(10, 25, 47, 0.70) 100%) !important;
-            border-top: 1px solid rgba(255, 255, 255, 0.22) !important;
-            border-bottom: none !important;
-            box-shadow: 0 -2px 12px rgba(0, 0, 0, 0.15) !important;
+            min-height: 50px;
+            background: linear-gradient(180deg, rgba(0, 0, 0, 0) 0%, rgba(0, 0, 0, 0.15) 30%, rgba(0, 0, 0, 0.45) 100%) !important;
+            border: none !important;
+            border-top: none !important;
+            box-shadow: none !important;
+            backdrop-filter: none !important;
+            -webkit-backdrop-filter: none !important;
             display: flex;
             align-items: center;
             justify-content: space-between;
             padding: 6px 14px 8px 14px;
             box-sizing: border-box;
             z-index: 2;
-            backdrop-filter: blur(12px) saturate(160%);
-            -webkit-backdrop-filter: blur(12px) saturate(160%);
         }
         .reporter-badge {
             display: flex;
@@ -131,15 +131,14 @@
             line-height: 1.2;
         }
         .reporter-name {
-            font-size: 17px;
+            font-size: 16px;
             font-weight: 900;
             color: #FFD54A;
             font-family: 'Noto Sans Telugu', 'Inter', sans-serif;
-            text-shadow: 0 1px 3px rgba(0,0,0,0.8);
+            text-shadow: 0 1px 3px rgba(0,0,0,0.9);
             white-space: nowrap;
             overflow: hidden;
             text-overflow: ellipsis;
-            letter-spacing: .01em;
         }
         .verified-badge {
             width: 15px;
@@ -150,33 +149,18 @@
         .reporter-date-time {
             font-size: 11px;
             font-weight: 700;
-            color: rgba(255, 255, 255, 0.90);
+            color: rgba(255, 255, 255, 0.95);
             display: flex;
             align-items: center;
-            gap: 4px;
+            gap: 6px;
             line-height: 1.1;
             text-shadow: 0 1px 2px rgba(0,0,0,0.8);
-            margin-top: 2px;
-            letter-spacing: -0.2px;
-        }
-        .date-time-item {
-            display: inline-flex;
-            align-items: center;
-            gap: 3px;
-        }
-        .date-time-sep {
-            color: rgba(255, 255, 255, 0.4);
-            margin: 0 2px;
-        }
-        .emoji-icon {
-            font-size: 11px;
-            line-height: 1;
         }
         .reporter-divider {
             width: 1px;
-            height: 38px;
-            background: rgba(255, 255, 255, 0.35);
-            margin: 0 10px;
+            height: 32px;
+            background: rgba(255, 255, 255, 0.20);
+            margin: 0 6px;
             flex-shrink: 0;
         }
         .channel-logo-badge {
@@ -208,20 +192,13 @@
             white-space: nowrap;
             text-shadow: 0 1px 2px rgba(0,0,0,0.8);
             letter-spacing: -0.2px;
-            max-width: 170px;
         }
-        .location-pin {
-            font-size: 12px;
-            line-height: 1;
-            color: #EF4444;
+        .location-badge svg {
             flex-shrink: 0;
             filter: drop-shadow(0 1px 2px rgba(0,0,0,0.8));
         }
         .location-badge .location-text {
             line-height: 1.1;
-            overflow: hidden;
-            text-overflow: ellipsis;
-            white-space: nowrap;
         }
         .article-content {
             padding: 22px 24px 20px 24px;
@@ -307,10 +284,16 @@
                             </svg>
                         </div>
                         <div class="reporter-date-time">
-                            <span class="date-time-item"><span class="emoji-icon">📅</span> <span>{{ publication_date }}</span></span>
+                            <div style="display: inline-flex; align-items: center; gap: 3px;">
+                                <svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="#FFFFFF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="opacity:0.9; flex-shrink: 0;"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+                                <span>{{ publication_date }}</span>
+                            </div>
                             {% if publication_time %}
-                            <span class="date-time-sep">|</span>
-                            <span class="date-time-item"><span class="emoji-icon">🕒</span> <span>{{ publication_time }}</span></span>
+                            <span style="opacity: 0.4;">•</span>
+                            <div style="display: inline-flex; align-items: center; gap: 3px;">
+                                <svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="#FFFFFF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="opacity:0.9; flex-shrink: 0;"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                                <span>{{ publication_time }}</span>
+                            </div>
                             {% endif %}
                         </div>
                     </div>
@@ -329,7 +312,7 @@
                         {% include 'rti_express/logo.svg' %}
                     {% endif %}
                     <div class="location-badge">
-                        <span class="location-pin">📍</span>
+                        <svg viewBox="0 0 24 24" width="13" height="13" fill="#EF4444" stroke="#EF4444" stroke-width="1.2"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z"/><circle cx="12" cy="9" r="2.5" fill="#FFFFFF"/></svg>
                         <span class="location-text">{{ exact_location if exact_location else 'ఆంధ్రప్రదేశ్' }}</span>
                     </div>
                 </div>

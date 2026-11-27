@@ -293,26 +293,17 @@ def run_clipping_generation_background(clipping_id, data, user_id):
 
 
             pub_date = data.get("publication_date")
+
             if not pub_date:
-                now_ist = datetime.utcnow() + timedelta(hours=5, minutes=30)
-                pub_date = now_ist.strftime("%d %b %Y")
+
+                pub_date = datetime.utcnow().strftime("%d %B %Y")
 
             pub_time = data.get("publication_time") or formatted_data.get("publication_time")
             if not pub_time:
                 now_ist = datetime.utcnow() + timedelta(hours=5, minutes=30)
-                hour = str(int(now_ist.strftime("%I")))
-                pub_time = f"{hour}:{now_ist.strftime('%M %p')}"
+                pub_time = now_ist.strftime("%I:%M %p")
 
-            exact_loc = (
-                data.get("exact_location") or 
-                data.get("pinpoint") or 
-                data.get("mandal") or 
-                data.get("location") or 
-                extract_exact_location(data) or 
-                extract_exact_location(formatted_data)
-            )
-            if not exact_loc or str(exact_loc).strip().lower() in ["all", "all districts", "all mandals", "andhra pradesh", "telangana", "అన్ని", "అన్ని జిల్లాలు", "అన్ని మండలాలు"]:
-                exact_loc = extract_exact_location(data) or extract_exact_location(formatted_data)
+            exact_loc = extract_exact_location(data) or extract_exact_location(formatted_data)
             if not exact_loc:
                 exact_loc = data.get("district") or data.get("state") or "ఆంధ్రప్రదేశ్"
 
